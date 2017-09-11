@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClCompile Include="base.cpp" />
     <ClCompile Include="containers.cpp" />
+    <ClCompile Include="disassembler.cpp" />
     <ClCompile Include="entity.cpp" />
     <ClCompile Include="foundation.cpp" />
     <ClCompile Include="main.cpp" />
@@ -29,6 +30,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base.h" />
+    <ClInclude Include="disassembler.h" />
     <ClInclude Include="foundation.h" />
     <ClInclude Include="containers.h" />
     <ClInclude Include="entity.h" />

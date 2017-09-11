@@ -36,6 +36,9 @@
     <ClCompile Include="foundation.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="disassembler.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="entity.h">
@@ -57,6 +60,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="base.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="disassembler.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
