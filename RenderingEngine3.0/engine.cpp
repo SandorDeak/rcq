@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "base.h"
+#include "disassembler.h"
 
 using namespace rcq;
 
@@ -8,6 +9,7 @@ engine* engine::m_instance = nullptr;
 
 engine::engine()
 {
+	m_package.reset(new command_package);
 	containers::init();
 
 	//init base
@@ -59,4 +61,10 @@ void engine::destroy()
 	}
 
 	delete m_instance;
+}
+
+void engine::cmd_dispatch()
+{
+	disassembler::instance()->push_package(std::move(m_package));
+	m_package.reset(new command_package);
 }

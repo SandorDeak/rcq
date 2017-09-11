@@ -8,12 +8,7 @@ namespace rcq
 	class containers
 	{
 	public:
-		static const size_t POOL_MAT_STATIC_SIZE = 64;
-		static const size_t POOL_MAT_DYNAMIC_SIZE = 64;
-		static const size_t POOL_TR_STATIC_SIZE = 64;
-		static const size_t POOL_TR_DYNAMIC_SIZE = 64;
-
-
+		
 		containers(const containers&) = delete;
 		containers(containers&&) = delete;
 		~containers();

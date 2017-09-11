@@ -14,10 +14,14 @@
 #include <vector>
 #include <stack>
 #include <map>
+#include <queue>
 #include <stdexcept>
 #include <chrono>
 #include <array>
 #include <set>
+#include <mutex>
+#include <memory>
+#include <thread>
 
 
 
@@ -118,6 +122,13 @@ namespace rcq
 	//engine related
 	extern const VkAllocationCallbacks* host_memory_manager;
 
+	extern const size_t POOL_MAT_STATIC_SIZE;
+	extern const size_t POOL_MAT_DYNAMIC_SIZE;
+	extern const size_t POOL_TR_STATIC_SIZE;
+	extern const size_t POOL_TR_DYNAMIC_SIZE;
+
+	extern const size_t DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE;
+
 	struct base_create_info
 	{
 		std::vector<const char*> validation_layers;
@@ -160,5 +171,26 @@ namespace rcq
 		VkQueue graphics_queue;
 		VkQueue present_queue;
 		GLFWwindow* window;
+	};
+
+	struct command_package
+	{
+		std::vector<build_mat_info> build_mat_s;
+		std::vector<unique_id> destroy_mat_s;
+		std::vector<build_mesh_info> build_mesh;
+		std::vector<unique_id> destroy_mesh;
+		std::vector<build_renderable_info> build_renderable;
+		std::vector<unique_id> destroy_renderable;
+		std::pair<std::vector<char>, bool> copy_pool_tr_dynamic;
+		std::pair<camera_data, bool> update_camera;
+		bool render;
+
+		command_package()
+		{
+			copy_pool_tr_dynamic.second = false;
+			copy_pool_tr_dynamic.first.resize(POOL_TR_DYNAMIC_SIZE);
+			update_camera.second = false;
+			render = false;
+		}
 	};
 }
