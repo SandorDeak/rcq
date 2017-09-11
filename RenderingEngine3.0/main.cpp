@@ -7,6 +7,8 @@
 
 int main()
 {
+	int k;
+	std::cout << "changes for git tutorial" << std::endl;
 	try
 	{ 
 		rcq::engine::init();
