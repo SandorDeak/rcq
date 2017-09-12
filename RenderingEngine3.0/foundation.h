@@ -24,6 +24,7 @@
 #include <thread>
 #include <future>
 #include <optional>
+#include <tuple>
 
 
 
@@ -61,6 +62,12 @@ namespace rcq
 	{
 		LIFE_EXPECTANCY_LONG,
 		LIFE_EXPECTANCY_SHORT
+	};
+
+	enum RENDER_PASS
+	{
+		RENDER_PASS_BASIC,
+		RENDER_PASS_COUNT
 	};
 
 	struct material_data;
@@ -145,12 +152,42 @@ namespace rcq
 
 
 	//engine related
+	std::vector<char> read_file(const std::string& filename);
+
+	VkShaderModule create_shader_module(VkDevice device, const std::vector<char>& code);
+
+	VkFormat find_support_format(VkPhysicalDevice device, const std::vector<VkFormat>& candidates,
+		VkImageTiling tiling, VkFormatFeatureFlags features);
+
+	uint32_t find_memory_type(VkPhysicalDevice device, uint32_t type_filter, VkMemoryPropertyFlags properties);
+
+	inline VkFormat find_depth_format(VkPhysicalDevice device)
+	{
+		return find_support_format(device, { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
+			VK_IMAGE_TILING_OPTIMAL,
+			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+	}
+
+	template<size_t... indices, typename Callable, typename... Ts>
+	inline constexpr void for_each_impl(Callable&& f, const std::tuple<Ts...>& tuple, std::index_sequence<indices...>)
+	{
+		auto l = { (f(std::get<indices>(tuple)), 0)... };
+	}
+
+
+	template<typename Callable, typename... Ts>
+	inline constexpr void for_each(Callable&& f, const std::tuple<Ts...>& tuple)
+	{
+		for_each_impl(std::forward<Callable>(f), tuple, std::make_index_sequence<sizeof...(Ts)>());
+	}
+
+
 	extern const VkAllocationCallbacks* host_memory_manager;
 
-	extern const size_t POOL_MAT_STATIC_SIZE;
-	extern const size_t POOL_MAT_DYNAMIC_SIZE;
-	extern const size_t POOL_TR_STATIC_SIZE;
-	extern const size_t POOL_TR_DYNAMIC_SIZE;
+	extern const size_t POOL_MAT_STATIC_SIZE; //deprecated
+	extern const size_t POOL_MAT_DYNAMIC_SIZE; //deprecated
+	extern const size_t POOL_TR_STATIC_SIZE; //deprecated
+	extern const size_t POOL_TR_DYNAMIC_SIZE; //deprecated
 
 	extern const size_t DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE;
 
@@ -198,7 +235,7 @@ namespace rcq
 		GLFWwindow* window;
 	};
 
-	struct command_package
+	/*struct command_package
 	{
 		std::vector<build_mat_info> build_mat;
 		std::vector<unique_id> destroy_mat;
@@ -212,7 +249,7 @@ namespace rcq
 
 		std::optional<camera_data> update_camera;
 		bool render = false;
-	};
+	};*/
 
 	struct texture
 	{
@@ -226,7 +263,7 @@ namespace rcq
 	struct material
 	{
 		mat_texs texs;
-		USAGE usage;
+		MAT_TYPE type;
 		VkDescriptorSet ds;
 	};
 
@@ -238,6 +275,11 @@ namespace rcq
 		VkBuffer veb; //vertex ext
 		VkDeviceMemory memory;
 		VkDeviceSize size;
+	};
+
+	struct transform
+	{
+		VkDescriptorSet ds;
 	};
 
 	struct renderable
@@ -256,13 +298,135 @@ namespace rcq
 		std::vector<unique_id> destroy_renderable;
 		std::vector<update_tr_info> update_tr;
 		std::optional<camera_data> update_cam;
-
-		core_package(std::vector<build_renderable_info>&& arg1, std::vector<unique_id> && arg2,
-			std::vector<update_tr_info>&& arg3, std::optional<camera_data> arg4):
-			build_renderable(std::move(arg1)),
-			destroy_renderable(std::move(arg2)),
-			update_tr(std::move(arg3)),
-			update_cam(std::move(arg4)) {}
-
+		bool render = false;
 	};
+
+	struct resource_manager_package
+	{
+		std::vector<build_mat_info> build_mat;
+		std::vector<unique_id> destroy_mat;
+		std::vector<build_mesh_info> build_mesh;
+		std::vector<unique_id> destroy_mesh;
+		std::vector<build_tr_info> build_tr;
+		std::vector<std::pair<unique_id, USAGE>> destroy_tr;
+	};
+
+	typedef std::packaged_task<mesh()> build_mesh_task;
+	typedef std::packaged_task<material()> build_mat_task;
+	typedef std::packaged_task<transform()> build_tr_task;
+
+	typedef std::packaged_task<void()> destroy_mesh_task;
+	typedef std::packaged_task<void()> destroy_mat_task;
+	typedef std::packaged_task<void()> destroy_tr_task;
+
+	typedef std::packaged_task<texture()> create_depth_task;
+	typedef std::packaged_task<void()> destroy_depth_task;
+
+	struct resource_manager_task_package
+	{
+		std::vector<build_mesh_task> build_mesh_tasks;
+		std::vector<build_mat_task> build_mat_tasks;
+		std::vector<build_tr_task> build_tr_tasks;
+		std::vector<destroy_mesh_task> destroy_mesh_tasks;
+		std::vector<destroy_mat_task> destroy_mat_tasks;
+		std::vector<destroy_tr_task> destroy_tr_tasks;
+	};
+
+	struct command_package
+	{
+		core_package core_p;
+		resource_manager_package resource_manager_p;
+	};
+
+	struct vertex
+	{
+		glm::vec3 pos;
+		glm::vec3 normal;
+		glm::vec2 tex_coord;
+
+		constexpr static VkVertexInputBindingDescription get_binding_description()
+		{
+			VkVertexInputBindingDescription binding_description = {};
+			binding_description.binding = 0;
+			binding_description.stride = sizeof(vertex);
+			binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			return binding_description;
+		}
+
+		constexpr static std::array<VkVertexInputAttributeDescription, 3> get_attribute_descriptions()
+		{
+			std::array<VkVertexInputAttributeDescription, 3> attribute_description = {};
+			attribute_description[0].binding = 0;
+			attribute_description[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attribute_description[0].location = 0;
+			attribute_description[0].offset = offsetof(vertex, pos);
+
+			attribute_description[1].binding = 0;
+			attribute_description[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attribute_description[1].location = 1;
+			attribute_description[1].offset = offsetof(vertex, normal);
+
+			attribute_description[2].binding = 0;
+			attribute_description[2].format = VK_FORMAT_R32G32_SFLOAT;
+			attribute_description[2].location = 2;
+			attribute_description[2].offset = offsetof(vertex, tex_coord);
+
+			return attribute_description;
+		}
+
+		bool operator==(const vertex& other) const
+		{
+			return pos == other.pos && normal == other.normal && tex_coord == other.tex_coord;
+		}
+	};
+
+	struct vertex_ext
+	{
+		glm::vec3 tangent;
+		glm::vec3 bitangent;
+
+		constexpr static VkVertexInputBindingDescription get_binding_description()
+		{
+			VkVertexInputBindingDescription binding_description = {};
+			binding_description.binding = 1;
+			binding_description.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+			binding_description.stride = sizeof(vertex_ext);
+			return binding_description;
+		}
+
+		constexpr static std::array<VkVertexInputAttributeDescription, 2> get_attribute_descriptions()
+		{
+			std::array<VkVertexInputAttributeDescription, 2> attribute_description = {};
+			attribute_description[0].binding = 1;
+			attribute_description[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attribute_description[0].location = 3;
+			attribute_description[0].offset = offsetof(vertex_ext, tangent);
+
+			attribute_description[1].binding = 1;
+			attribute_description[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+			attribute_description[1].location = 4;
+			attribute_description[1].offset = offsetof(vertex_ext, bitangent);
+
+			return attribute_description;
+		}
+	};
+
+	constexpr decltype(auto) get_vertex_input_binding_descriptions()
+	{
+		auto vertex_binding = vertex::get_binding_description();
+		auto vertex_ext_binding = vertex_ext::get_binding_description();
+		return std::array<VkVertexInputBindingDescription, 2>{vertex_binding, vertex_ext_binding};
+	}
+
+	constexpr decltype(auto) get_vetex_input_attribute_descriptions()
+	{
+		auto vertex_attribs = vertex::get_attribute_descriptions();
+		auto vertex_ext_attribs = vertex_ext::get_attribute_descriptions();
+		std::array<VkVertexInputAttributeDescription, vertex_attribs.size() + vertex_ext_attribs.size()> attribs = {};
+		for (size_t i = 0; i < vertex_attribs.size(); ++i)
+			attribs[i] = vertex_attribs[i];
+		for (size_t i = 0; i < vertex_ext_attribs.size(); ++i)
+			attribs[i + vertex_attribs.size()] = vertex_ext_attribs[i];
+		return attribs;
+	}
 }

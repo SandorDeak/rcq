@@ -1,8 +1,9 @@
 #include "engine.h"
 #include "base.h"
 #include "disassembler.h"
+#include "core.h"
 #include "resource_manager.h"
-#include "disassembler.h"
+#include "basic_pass.h"
 
 using namespace rcq;
 
@@ -11,7 +12,7 @@ engine* engine::m_instance = nullptr;
 
 engine::engine()
 {
-	m_package.reset(new command_package);
+	m_command_p.reset(new command_package);
 
 	//init base
 	base_create_info base_info = {};
@@ -35,16 +36,17 @@ engine::engine()
 	base_info.device_features.geometryShader = VK_TRUE;
 
 	base::init(base_info);
-	basei = base::instance()->get_info();
+	m_base = base::instance()->get_info();
 
-	//init resource manager
-	resource_manager::init();
-	
-	//init disassembler
+
+	resource_manager::init(m_base);
+	disassembler::init();
+	basic_pass::init(m_base);
 }
 
 engine::~engine()
 {
+	basic_pass::destroy();
 	disassembler::destroy();
 	resource_manager::destroy();
 	base::destroy();
@@ -71,6 +73,6 @@ void engine::destroy()
 
 void engine::cmd_dispatch()
 {
-	disassembler::instance()->push_package(std::move(m_package));
-	m_package.reset(new command_package);
+	disassembler::instance()->push_package(std::move(m_command_p));
+	m_command_p.reset(new command_package);
 }
