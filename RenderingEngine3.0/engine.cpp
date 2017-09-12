@@ -1,6 +1,8 @@
 #include "engine.h"
 #include "base.h"
 #include "disassembler.h"
+#include "resource_manager.h"
+#include "disassembler.h"
 
 using namespace rcq;
 
@@ -10,7 +12,6 @@ engine* engine::m_instance = nullptr;
 engine::engine()
 {
 	m_package.reset(new command_package);
-	containers::init();
 
 	//init base
 	base_create_info base_info = {};
@@ -35,13 +36,18 @@ engine::engine()
 
 	base::init(base_info);
 	basei = base::instance()->get_info();
+
+	//init resource manager
+	resource_manager::init();
 	
+	//init disassembler
 }
 
 engine::~engine()
 {
+	disassembler::destroy();
+	resource_manager::destroy();
 	base::destroy();
-	containers::destroy();
 }
 
 void engine::init()

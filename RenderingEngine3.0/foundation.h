@@ -22,6 +22,9 @@
 #include <mutex>
 #include <memory>
 #include <thread>
+#include <future>
+#include <optional>
+
 
 
 
@@ -40,6 +43,14 @@ namespace rcq
 		TEX_TYPE_COUNT
 	};
 
+	enum MAT_TYPE
+	{
+		MAT_TYPE_OPAQUE,
+		MAT_TYPE_REFLECTIVE_EM,
+		MAT_TYPE_REFRACTIVE_EM
+		//and more and more e.g. water, fire...
+	};
+
 	enum USAGE
 	{
 		USAGE_STATIC,
@@ -56,20 +67,19 @@ namespace rcq
 	struct transform_data;
 	struct camera_data;
 
-	typedef std::array<std::string, TEX_TYPE_COUNT> texinfos;
-	typedef std::string filename;
+	typedef std::array<std::string, TEX_TYPE_COUNT> texfiles;
 	typedef size_t unique_id;
 
-	typedef std::tuple<unique_id, const material_data*, texinfos, USAGE> build_mat_info;
+	typedef std::tuple<unique_id, material_data, texfiles, MAT_TYPE> build_mat_info;
 	enum 
 	{
 		BUILD_MAT_INFO_MAT_ID,
-		BUILD_MAT_INFO_MAT_DATA_POINTER,
+		BUILD_MAT_INFO_MAT_DATA,
 		BUILD_MAT_INFO_TEXINFOS,
-		BUILD_MAT_INFO_USAGE
+		BUILD_MAT_INFO_MAT_TYPE
 	};
 
-	typedef std::tuple<unique_id, filename, bool> build_mesh_info;
+	typedef std::tuple<unique_id, std::string, bool> build_mesh_info;
 	enum
 	{
 		BUILD_MESH_INFO_MESH_ID,
@@ -78,14 +88,29 @@ namespace rcq
 
 	};
 
-	typedef std::tuple<unique_id, const transform_data*, unique_id, unique_id, LIFE_EXPECTANCY> build_renderable_info;
+	typedef std::tuple<unique_id, transform_data, USAGE> build_tr_info;
+	enum
+	{
+		BUILD_TR_INFO_TR_ID,
+		BUILD_TR_INFO_TR_DATA,
+		BUILD_TR_INFO_USAGE
+	};
+
+	typedef std::tuple<unique_id, unique_id, unique_id, unique_id, LIFE_EXPECTANCY> build_renderable_info;
 	enum
 	{
 		BUILD_RENDERABLE_INFO_RENDERABLE_ID,
-		BUILD_RENDERABLE_INFO_TRANSFORM_DATA_POINTER,
+		BUILD_RENDERABLE_INFO_TR_ID,
 		BUILD_RENDERABLE_INFO_MESH_ID,
 		BUILD_RENDERABLE_INFO_MAT_ID,
 		BUILD_RENDERABLE_INFO_LIFE_EXPECTANCY
+	};
+
+	typedef std::tuple<unique_id, transform_data> update_tr_info;
+	enum
+	{
+		UPDATE_TR_INFO_TR_ID,
+		UPDATE_TR_INFO_TR_DATA
 	};
 
 
@@ -175,22 +200,69 @@ namespace rcq
 
 	struct command_package
 	{
-		std::vector<build_mat_info> build_mat_s;
-		std::vector<unique_id> destroy_mat_s;
+		std::vector<build_mat_info> build_mat;
+		std::vector<unique_id> destroy_mat;
 		std::vector<build_mesh_info> build_mesh;
 		std::vector<unique_id> destroy_mesh;
+		std::vector<build_tr_info> build_tr;
+		std::vector<std::pair<unique_id, USAGE>> destroy_tr;
 		std::vector<build_renderable_info> build_renderable;
 		std::vector<unique_id> destroy_renderable;
-		std::pair<std::vector<char>, bool> copy_pool_tr_dynamic;
-		std::pair<camera_data, bool> update_camera;
-		bool render;
+		std::vector<update_tr_info> update_tr;
 
-		command_package()
-		{
-			copy_pool_tr_dynamic.second = false;
-			copy_pool_tr_dynamic.first.resize(POOL_TR_DYNAMIC_SIZE);
-			update_camera.second = false;
-			render = false;
-		}
+		std::optional<camera_data> update_camera;
+		bool render = false;
+	};
+
+	struct texture
+	{
+		VkImage image;
+		VkImageView view;
+		VkDeviceMemory memory;
+	};
+
+	typedef std::array<texture, TEX_TYPE_COUNT> mat_texs;
+
+	struct material
+	{
+		mat_texs texs;
+		USAGE usage;
+		VkDescriptorSet ds;
+	};
+
+
+	struct mesh
+	{
+		VkBuffer vb; //vertex
+		VkBuffer ib; //index
+		VkBuffer veb; //vertex ext
+		VkDeviceMemory memory;
+		VkDeviceSize size;
+	};
+
+	struct renderable
+	{
+		VkDescriptorSet mat_ds;
+		VkDescriptorSet tr_ds;
+		VkBuffer ib;
+		VkBuffer vb;
+		VkBuffer veb;
+		VkDeviceSize size;
+	};
+
+	struct core_package
+	{
+		std::vector<build_renderable_info> build_renderable;
+		std::vector<unique_id> destroy_renderable;
+		std::vector<update_tr_info> update_tr;
+		std::optional<camera_data> update_cam;
+
+		core_package(std::vector<build_renderable_info>&& arg1, std::vector<unique_id> && arg2,
+			std::vector<update_tr_info>&& arg3, std::optional<camera_data> arg4):
+			build_renderable(std::move(arg1)),
+			destroy_renderable(std::move(arg2)),
+			update_tr(std::move(arg3)),
+			update_cam(std::move(arg4)) {}
+
 	};
 }

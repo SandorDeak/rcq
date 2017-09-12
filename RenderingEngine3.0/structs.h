@@ -6,13 +6,13 @@
 
 struct material
 {
-	material(rcq::USAGE u) : usage(u), data(rcq::containers::instance()->new_mat(u)) {}
-	~material() { rcq::containers::instance()->delete_mat(data, usage); }
+	material() : data(rcq::containers::instance()->new_mat(rcq::USAGE_STATIC)) {}
+	~material() { rcq::containers::instance()->delete_mat(data, rcq::USAGE_STATIC); }
 
 	rcq::material_data* const data;
 	uint32_t type;
 	std::string tex_resources[rcq::TEX_TYPE_COUNT];
-	const rcq::USAGE usage;
+	//const rcq::USAGE usage;
 };
 
 struct transform

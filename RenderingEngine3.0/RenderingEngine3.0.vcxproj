@@ -24,6 +24,7 @@
     <ClCompile Include="disassembler.cpp" />
     <ClCompile Include="entity.cpp" />
     <ClCompile Include="foundation.cpp" />
+    <ClCompile Include="resource_manager.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="engine.cpp" />
     <ClCompile Include="scene.cpp" />
@@ -35,6 +36,7 @@
     <ClInclude Include="containers.h" />
     <ClInclude Include="entity.h" />
     <ClInclude Include="engine.h" />
+    <ClInclude Include="resource_manager.h" />
     <ClInclude Include="structs.h" />
     <ClInclude Include="scene.h" />
   </ItemGroup>
