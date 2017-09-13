@@ -43,11 +43,6 @@ namespace rcq
 			m_command_p->resource_manager_p.build_tr.emplace_back(id, data, usage);
 		}
 
-		void cmd_destroy_transform(unique_id id, USAGE usage)
-		{
-			m_command_p->resource_manager_p.destroy_tr.emplace_back(id, usage);
-		}
-
 		void cmd_build_renderable(unique_id id, unique_id tr_id, unique_id mesh_id, unique_id mat_id, LIFE_EXPECTANCY life_exp)
 		{
 			m_command_p->core_p.build_renderable.emplace_back(id, tr_id, mesh_id, mat_id, life_exp);
@@ -58,9 +53,9 @@ namespace rcq
 			m_command_p->core_p.destroy_renderable.push_back(uid);
 		}
 
-		void cmd_destroy_transform(unique_id id, USAGE usage)
+		void cmd_destroy_transform(unique_id uid)
 		{
-			m_resource_manager_p->destroy_tr.emplace_back(id, usage);
+			m_command_p->resource_manager_p.destroy_tr.push_back(uid);
 		}
 
 		void cmd_update_camera(const camera_data& cam)

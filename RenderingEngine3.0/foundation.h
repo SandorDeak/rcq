@@ -308,7 +308,7 @@ namespace rcq
 		std::vector<build_mesh_info> build_mesh;
 		std::vector<unique_id> destroy_mesh;
 		std::vector<build_tr_info> build_tr;
-		std::vector<std::pair<unique_id, USAGE>> destroy_tr;
+		std::vector<unique_id> destroy_tr;
 	};
 
 	typedef std::packaged_task<mesh()> build_mesh_task;

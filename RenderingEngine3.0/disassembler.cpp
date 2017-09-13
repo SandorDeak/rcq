@@ -49,8 +49,7 @@ void disassembler::loop()
 				package = std::move(m_command_queue.front());
 				m_command_queue.pop();
 			}
-			//disassemble package
-			resource_manager::instance()->;
+			resource_manager::instance()->process_package_async(std::move(package->resource_manager_p));
 			core::instance()->push_package(std::make_unique<core_package>(std::move(package->core_p)));
 		}
 	}
