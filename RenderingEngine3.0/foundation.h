@@ -25,8 +25,7 @@
 #include <future>
 #include <optional>
 #include <tuple>
-
-
+#include <bitset>
 
 
 namespace rcq
@@ -44,14 +43,6 @@ namespace rcq
 		TEX_TYPE_COUNT
 	};
 
-	enum MAT_TYPE
-	{
-		MAT_TYPE_OPAQUE,
-		MAT_TYPE_REFLECTIVE_EM,
-		MAT_TYPE_REFRACTIVE_EM
-		//and more and more e.g. water, fire...
-	};
-
 	enum USAGE
 	{
 		USAGE_STATIC,
@@ -61,13 +52,32 @@ namespace rcq
 	enum LIFE_EXPECTANCY
 	{
 		LIFE_EXPECTANCY_LONG,
-		LIFE_EXPECTANCY_SHORT
+		LIFE_EXPECTANCY_SHORT,
+		LIFE_EXPECTANCY_COUNT
+	};
+
+	enum MAT_TYPE
+	{
+		/*MAT_TYPE_OPAQUE,
+		MAT_TYPE_REFLECTIVE_EM,
+		MAT_TYPE_REFRACTIVE_EM*/
+		MAT_TYPE_BASIC,
+		MAT_TYPE_COUNT
+		//and more and more e.g. water, fire...
 	};
 
 	enum RENDER_PASS
 	{
 		RENDER_PASS_BASIC,
 		RENDER_PASS_COUNT
+	};
+
+	enum RESOURCE_TYPE
+	{
+		RESOURCE_TYPE_MAT,
+		RESOURCE_TYPE_MESH,
+		RESOURCE_TYPE_TR,
+		RESOURCE_TYPE_COUNT
 	};
 
 	struct material_data;
@@ -168,17 +178,16 @@ namespace rcq
 			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 	}
 
-	template<size_t... indices, typename Callable, typename... Ts>
-	inline constexpr void for_each_impl(Callable&& f, const std::tuple<Ts...>& tuple, std::index_sequence<indices...>)
+	template<size_t... indices, typename Callable, typename Tuple>
+	inline constexpr void for_each_impl(Callable&& f, Tuple&& tuple, std::index_sequence<indices...>)
 	{
-		auto l = { (f(std::get<indices>(tuple)), 0)... };
+		auto l = { (f.operator()<indices>(std::get<indices>(tuple)), 0)... };
 	}
 
-
-	template<typename Callable, typename... Ts>
-	inline constexpr void for_each(Callable&& f, const std::tuple<Ts...>& tuple)
+	template<typename Callable, typename Tuple>
+	inline constexpr void for_each(Callable&& f, Tuple&& tuple)
 	{
-		for_each_impl(std::forward<Callable>(f), tuple, std::make_index_sequence<sizeof...(Ts)>());
+		for_each_impl(std::forward<Callable>(f), std::forward<Tuple>(tuple), std::make_index_sequence<std::tuple_size<Tuple>::value>());
 	}
 
 
@@ -235,22 +244,6 @@ namespace rcq
 		GLFWwindow* window;
 	};
 
-	/*struct command_package
-	{
-		std::vector<build_mat_info> build_mat;
-		std::vector<unique_id> destroy_mat;
-		std::vector<build_mesh_info> build_mesh;
-		std::vector<unique_id> destroy_mesh;
-		std::vector<build_tr_info> build_tr;
-		std::vector<std::pair<unique_id, USAGE>> destroy_tr;
-		std::vector<build_renderable_info> build_renderable;
-		std::vector<unique_id> destroy_renderable;
-		std::vector<update_tr_info> update_tr;
-
-		std::optional<camera_data> update_camera;
-		bool render = false;
-	};*/
-
 	struct texture
 	{
 		VkImage image;
@@ -284,12 +277,14 @@ namespace rcq
 
 	struct renderable
 	{
-		VkDescriptorSet mat_ds;
-		VkDescriptorSet tr_ds;
-		VkBuffer ib;
+		VkDescriptorSet mat_ds;	
 		VkBuffer vb;
 		VkBuffer veb;
+		VkBuffer ib;
 		VkDeviceSize size;
+		VkDescriptorSet tr_ds;
+		uint32_t type;
+		bool destroy;
 	};
 
 	struct core_package
@@ -301,41 +296,50 @@ namespace rcq
 		bool render = false;
 	};
 
+	typedef std::tuple<std::vector<build_mat_info>, std::vector<build_mesh_info>, std::vector<build_tr_info>> build_package;
+	typedef std::array<std::vector<unique_id>, RESOURCE_TYPE_COUNT> destroy_package;
 	struct resource_manager_package
 	{
-		std::vector<build_mat_info> build_mat;
-		std::vector<unique_id> destroy_mat;
-		std::vector<build_mesh_info> build_mesh;
-		std::vector<unique_id> destroy_mesh;
-		std::vector<build_tr_info> build_tr;
-		std::vector<unique_id> destroy_tr;
+		build_package build_p;
+		destroy_package destroy_p;
 	};
 
 	typedef std::packaged_task<mesh()> build_mesh_task;
 	typedef std::packaged_task<material()> build_mat_task;
 	typedef std::packaged_task<transform()> build_tr_task;
 
-	typedef std::packaged_task<void()> destroy_mesh_task;
-	typedef std::packaged_task<void()> destroy_mat_task;
-	typedef std::packaged_task<void()> destroy_tr_task;
+	typedef std::packaged_task<void()> destroy_task;
 
 	typedef std::packaged_task<texture()> create_depth_task;
 	typedef std::packaged_task<void()> destroy_depth_task;
 
+	typedef std::tuple<std::vector<build_mat_task>, std::vector<build_mesh_task>, std::vector<build_tr_task>> build_task_package;
+	typedef std::array<std::vector<destroy_task>, RESOURCE_TYPE_COUNT> destroy_task_package;
+
 	struct resource_manager_task_package
 	{
-		std::vector<build_mesh_task> build_mesh_tasks;
-		std::vector<build_mat_task> build_mat_tasks;
-		std::vector<build_tr_task> build_tr_tasks;
-		std::vector<destroy_mesh_task> destroy_mesh_tasks;
-		std::vector<destroy_mat_task> destroy_mat_tasks;
-		std::vector<destroy_tr_task> destroy_tr_tasks;
+		build_task_package build_task_p;
+		destroy_task_package destroy_task_p;
 	};
+
+	template<size_t res_type>
+	struct resource_typename { typedef int type; };
+
+	template<> struct resource_typename<RESOURCE_TYPE_MAT> { typedef material type; };
+	template<> struct resource_typename<RESOURCE_TYPE_MESH> { typedef mesh type; };
+	template<> struct resource_typename<RESOURCE_TYPE_TR>{ typedef transform type; };
+	
 
 	struct command_package
 	{
 		core_package core_p;
 		resource_manager_package resource_manager_p;
+	};
+
+	struct render_target
+	{
+		VkFramebuffer framebuffer;
+		texture tex;
 	};
 
 	struct vertex
@@ -429,4 +433,6 @@ namespace rcq
 			attribs[i + vertex_attribs.size()] = vertex_ext_attribs[i];
 		return attribs;
 	}
+
+	
 }

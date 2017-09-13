@@ -18,29 +18,16 @@ namespace rcq
 
 		GLFWwindow* get_window() { return m_base.window; }
 
-		void cmd_build_material(unique_id id, const material_data& mat_data,  const texfiles& texs, MAT_TYPE type)
+		template<RESOURCE_TYPE type, typename... Ts>
+		void cmd_build(Ts&&... args)
 		{
-			m_command_p->resource_manager_p.build_mat.emplace_back(id, mat_data, texs, type);
+			std::get<type>(m_command_p->resource_manager_p.build_p).emplace_back(std::forward<Ts>(args)...);
 		}
 
-		void cmd_destroy_material(unique_id uid)
+		template<RESOURCE_TYPE type>
+		void cmd_destroy(unique_id id)
 		{
-			m_command_p->resource_manager_p.destroy_mat.push_back(uid);
-		}
-
-		void cmd_build_mesh(unique_id id, const std::string& filename, bool calc_tb)
-		{
-			m_command_p->resource_manager_p.build_mesh.emplace_back(id, filename, calc_tb);
-		}
-
-		void cmd_destroy_mesh(unique_id uid)
-		{
-			m_command_p->resource_manager_p.destroy_mesh.push_back(uid);
-		}
-
-		void cmd_build_transform(unique_id id, const transform_data& data, USAGE usage)
-		{
-			m_command_p->resource_manager_p.build_tr.emplace_back(id, data, usage);
+			std::get<type>(m_command_p->resource_manager_p.destroy_p).push_back(id);
 		}
 
 		void cmd_build_renderable(unique_id id, unique_id tr_id, unique_id mesh_id, unique_id mat_id, LIFE_EXPECTANCY life_exp)
@@ -51,11 +38,6 @@ namespace rcq
 		void cmd_destroy_renderable(unique_id uid)
 		{
 			m_command_p->core_p.destroy_renderable.push_back(uid);
-		}
-
-		void cmd_destroy_transform(unique_id uid)
-		{
-			m_command_p->resource_manager_p.destroy_tr.push_back(uid);
 		}
 
 		void cmd_update_camera(const camera_data& cam)

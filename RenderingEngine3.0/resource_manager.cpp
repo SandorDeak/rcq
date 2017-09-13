@@ -7,6 +7,7 @@ resource_manager* resource_manager::m_instance = nullptr;
 resource_manager::resource_manager(const base_info& info) : m_base(info)
 {
 	//should init something?
+	m_current_task_p.reset(new resource_manager_task_package);
 	m_should_end = false;
 	m_working_thread = std::thread(std::bind(&resource_manager::work, this));
 }
@@ -54,95 +55,66 @@ void resource_manager::work()
 
 void rcq::resource_manager::do_tasks(resource_manager_task_package & package)
 {
-	for (auto& build_mat_t : package.build_mat_tasks)
-		build_mat_t();
-	for (auto& build_mesh_t : package.build_mesh_tasks)
-		build_mesh_t();
-	for (auto& build_tr_t : package.build_tr_tasks)
-		build_tr_t();
-	for (auto& destroy_mat_t : package.destroy_mat_tasks)
-		destroy_mat_t();
-	for (auto& destroy_mesh_t : package.destroy_mesh_tasks)
-		destroy_mesh_t();
-	for (auto& destroy_tr_t : package.destroy_tr_tasks)
-		destroy_tr_t();
+	do_tasks_impl(package.build_task_p, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
+	do_tasks_impl(package.destroy_task_p, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
+
 }
 
 void rcq::resource_manager::process_package_async(resource_manager_package && package)
 {
-	auto task_p = std::make_unique<resource_manager_task_package>();
-	for (auto& build_mat : package.build_mat)
-	{
-		build_mat_task task(std::bind(&resource_manager::build_material, this,
-			std::move(std::get<BUILD_MAT_INFO_MAT_DATA>(build_mat)), std::move(std::get<BUILD_MAT_INFO_TEXINFOS>(build_mat)),
-			std::move(std::get<BUILD_MAT_INFO_MAT_TYPE>(build_mat))));
 
-		if (!m_mats_proc.insert_or_assign(std::get<BUILD_MAT_INFO_MAT_ID>(build_mat), task.get_future()).second)
-			throw std::runtime_error("unique id conflict!");
-
-		task_p->build_mat_tasks.push_back(std::move(task));
-
-	}
-	for (auto& build_mesh : package.build_mesh)
-	{
-		build_mesh_task task(std::bind(&resource_manager::build_mesh, this,
-			std::move(std::get<BUILD_MESH_INFO_FILENAME>(build_mesh)), std::get<BUILD_MESH_INFO_CALC_TB>(build_mesh)));
-		if (!m_meshes_proc.insert_or_assign(std::get<BUILD_MESH_INFO_MESH_ID>(build_mesh), task.get_future()).second)
-			throw std::runtime_error("unique id conflict!");
-
-		task_p->build_mesh_tasks.push_back(std::move(task));
-	}
-	for (auto& build_tr : package.build_tr)
-	{
-		build_tr_task task(std::bind(&resource_manager::build_transform, this,
-			std::move(std::get<BUILD_TR_INFO_TR_DATA>(build_tr)), std::get<BUILD_TR_INFO_USAGE>(build_tr)));
-		if (!m_tr_proc.insert_or_assign(std::get<BUILD_TR_INFO_TR_ID>(build_tr), task.get_future()).second)
-			throw std::runtime_error("unique id conflict!");
-
-		task_p->build_tr_tasks.push_back(std::move(task));
-	}
-	for (auto& destroy_mat : package.destroy_mat)
-	{
-		task_p->destroy_mat_tasks.emplace_back(std::bind(&resource_manager::destroy_material, this, destroy_mat));
-	}
-	for (auto& destroy_mesh : package.destroy_mesh)
-	{
-		task_p->destroy_mesh_tasks.emplace_back(std::bind(&resource_manager::destroy_mesh, this, destroy_mesh));
-	}
-	for (auto& destroy_tr : package.destroy_tr)
-	{
-		task_p->destroy_tr_tasks.emplace_back(std::bind(&resource_manager::destroy_tr, this, destroy_tr));
-	}
+	create_build_tasks(package.build_p, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
+	create_destroy_tasks(package.destroy_p, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 
 	std::lock_guard<std::mutex> lock(m_task_p_queue_mutex);
-	m_task_p_queue.push(std::move(task_p));
+	m_task_p_queue.push(std::move(m_current_task_p));
+
+	m_current_task_p.reset(new resource_manager_task_package);
 }
 
-mesh resource_manager::build_mesh(std::string filename, bool calc_tb)
+template<>
+mesh resource_manager::build<RESOURCE_TYPE_MESH>(std::string filename, bool calc_tb)
 {
 	return mesh();
 }
-material resource_manager::build_material(material_data data, texfiles files, MAT_TYPE type)
+template<>
+material resource_manager::build<RESOURCE_TYPE_MAT>(material_data data, texfiles files, MAT_TYPE type)
 {
 	return material();
 }
-transform resource_manager::build_transform(transform_data data, USAGE usage)
+template<>
+transform resource_manager::build<RESOURCE_TYPE_TR>(transform_data data, USAGE usage)
 {
 	return transform();
 }
 
-void resource_manager::destroy_mesh(unique_id id)
+template<size_t res_type>
+void resource_manager::destroy(unique_id id)
+{
+	if constexpr (res_type == RESOURCE_TYPE_MAT)
+	{
+
+	}
+	if constexpr (res_type == RESOURCE_TYPE_MESH)
+	{
+
+	}
+	if constexpr (res_type == RESOURCE_TYPE_TR)
+	{
+
+	}
+}
+
+/*template<>
+void resource_manager::destroy<RESOURCE_TYPE_MESH>(unique_id id)
 {
 
 }
-void resource_manager::destroy_material(unique_id id)
-{
-
-}
+template<>
 void resource_manager::destroy_tr(unique_id id)
 {
 
-}
+}*/
 
 /*
 texture rcq::resource_manager::create_depth( int width, int height, int layer_count)
