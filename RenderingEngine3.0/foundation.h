@@ -293,34 +293,34 @@ namespace rcq
 		std::vector<unique_id> destroy_renderable;
 		std::vector<update_tr_info> update_tr;
 		std::optional<camera_data> update_cam;
+		std::optional<std::promise<void>> confirm_destroy;
 		bool render = false;
 	};
 
 	typedef std::tuple<std::vector<build_mat_info>, std::vector<build_mesh_info>, std::vector<build_tr_info>> build_package;
-	typedef std::array<std::vector<unique_id>, RESOURCE_TYPE_COUNT> destroy_package;
-	struct resource_manager_package
+	typedef std::array<std::vector<unique_id>, RESOURCE_TYPE_COUNT> destroy_ids;
+
+	struct destroy_package
 	{
-		build_package build_p;
-		destroy_package destroy_p;
+		destroy_ids ids;
+		std::optional<std::future<void>> destroy_confirmation;
+	};
+
+	struct command_package
+	{
+		std::optional<core_package> core_p;
+		std::optional<build_package> resource_manager_build_p;
+		std::optional<destroy_package> resource_mananger_destroy_p;
 	};
 
 	typedef std::packaged_task<mesh()> build_mesh_task;
 	typedef std::packaged_task<material()> build_mat_task;
 	typedef std::packaged_task<transform()> build_tr_task;
 
-	typedef std::packaged_task<void()> destroy_task;
-
 	typedef std::packaged_task<texture()> create_depth_task;
-	typedef std::packaged_task<void()> destroy_depth_task;
 
 	typedef std::tuple<std::vector<build_mat_task>, std::vector<build_mesh_task>, std::vector<build_tr_task>> build_task_package;
-	typedef std::array<std::vector<destroy_task>, RESOURCE_TYPE_COUNT> destroy_task_package;
 
-	struct resource_manager_task_package
-	{
-		build_task_package build_task_p;
-		destroy_task_package destroy_task_p;
-	};
 
 	template<size_t res_type>
 	struct resource_typename { typedef int type; };
@@ -330,11 +330,6 @@ namespace rcq
 	template<> struct resource_typename<RESOURCE_TYPE_TR>{ typedef transform type; };
 	
 
-	struct command_package
-	{
-		core_package core_p;
-		resource_manager_package resource_manager_p;
-	};
 
 	struct render_target
 	{

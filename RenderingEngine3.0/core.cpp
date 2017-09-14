@@ -15,6 +15,8 @@ core::core()
 
 core::~core()
 {
+	m_should_end = true;
+	m_looping_thread.join();
 }
 
 void core::init()
@@ -38,7 +40,7 @@ void core::destroy()
 
 void core::loop()
 {
-	while (!m_should_end)
+	while (!m_should_end || !m_package_queue.empty())
 	{
 		if (!m_package_queue.empty())
 		{
@@ -48,6 +50,9 @@ void core::loop()
 				package = std::move(m_package_queue.front());
 				m_package_queue.pop();
 			}
+
+			if (package->confirm_destroy)
+				package->confirm_destroy->set_value();
 
 			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> rerecord_command_buffers(false);
 			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_renderables(false);
@@ -100,7 +105,11 @@ void core::loop()
 				{
 					throw std::runtime_error("id conflict!");
 				}
+
+
 			}
+
+			
 		}
 	}
 }

@@ -17,6 +17,7 @@ namespace rcq
 
 		void push_package(std::unique_ptr<core_package>&& package)
 		{
+			std::lock_guard<std::mutex> lock(m_package_queue_mutex);
 			m_package_queue.push(std::move(package));
 		}
 

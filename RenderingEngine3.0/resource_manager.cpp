@@ -6,15 +6,23 @@ resource_manager* resource_manager::m_instance = nullptr;
 
 resource_manager::resource_manager(const base_info& info) : m_base(info)
 {
-	//should init something?
-	m_current_task_p.reset(new resource_manager_task_package);
-	m_should_end = false;
-	m_working_thread = std::thread(std::bind(&resource_manager::work, this));
+	m_current_build_task_p.reset(new build_task_package);
+	m_should_end_build = false;
+	m_should_end_destroy = false;
+	m_build_thread = std::thread(std::bind(&resource_manager::build_loop, this));
+	m_destroy_thread = std::thread(std::bind(&resource_manager::destroy_loop, this));
 }
 
 
 resource_manager::~resource_manager()
 {
+	m_should_end_build = true;
+	m_build_thread.join();
+	m_should_end_destroy = true;
+	m_destroy_thread.join();
+
+	//checking that resources was destroyed properly
+	check_resource_leak(std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 }
 
 void resource_manager::init(const base_info& info)
@@ -36,40 +44,71 @@ void resource_manager::destroy()
 	delete m_instance;
 }
 
-void resource_manager::work()
+void resource_manager::build_loop()
 {
-	while (!m_should_end)
+	while (!m_should_end_build || !m_build_task_p_queue.empty())
 	{
-		if (!m_task_p_queue.empty())
+		if (!m_build_task_p_queue.empty())
 		{
-			std::unique_ptr<resource_manager_task_package> task_p;
+			std::unique_ptr<build_task_package> task_p;
 			{
-				std::lock_guard<std::mutex> lock(m_task_p_queue_mutex);
-				task_p = std::move(m_task_p_queue.front());
-				m_task_p_queue.pop();
+				std::lock_guard<std::mutex> lock(m_build_task_p_queue_mutex);
+				task_p = std::move(m_build_task_p_queue.front());
+				m_build_task_p_queue.pop();
 			}
-			do_tasks(*task_p.get());
+			do_build_tasks(*task_p.get(), std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 		}
 	}
 }
 
-void rcq::resource_manager::do_tasks(resource_manager_task_package & package)
+void rcq::resource_manager::process_build_package(build_package&& package)
 {
-	do_tasks_impl(package.build_task_p, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
-	do_tasks_impl(package.destroy_task_p, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 
+	create_build_tasks(package, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
+
+	{
+		std::lock_guard<std::mutex> lock(m_build_task_p_queue_mutex);
+		m_build_task_p_queue.push(std::move(m_current_build_task_p));
+	}
+
+	m_current_build_task_p.reset(new build_task_package);
 }
 
-void rcq::resource_manager::process_package_async(resource_manager_package && package)
+void resource_manager::destroy_loop()
 {
 
-	create_build_tasks(package.build_p, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
-	create_destroy_tasks(package.destroy_p, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
+	while (!m_should_end_destroy || !m_destroy_p_queue.empty())
+	{
+		bool should_check_pending_destroys = false;
+		for (uint32_t i = 0; i < RESOURCE_TYPE_COUNT; ++i)
+		{
+			if (!m_pending_destroys[i].empty())
+				should_check_pending_destroys = true;
+		}
+		if (should_check_pending_destroys) //happens only if invalid id is given, or 
+		{
+			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
+			std::lock_guard<std::mutex> lock_proc(m_resources_proc_mutex);
+			check_pending_destroys(std::make_index_sequence<RESOURCE_TYPE_COUNT>());
+		}
+		if (!m_destroy_p_queue.empty())
+		{
+			std::unique_ptr<destroy_package> package;
+			{
+				std::lock_guard<std::mutex> lock_queue(m_destroy_p_queue_mutex);
+				package = std::move(m_destroy_p_queue.front());
+				m_destroy_p_queue.pop();
+			}
+			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
+			if (package->destroy_confirmation.has_value())
+				package->destroy_confirmation.value().get();
+			process_destroy_package(package->ids, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
+			
+		}
+		
+		destroy_destroyables(std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 
-	std::lock_guard<std::mutex> lock(m_task_p_queue_mutex);
-	m_task_p_queue.push(std::move(m_current_task_p));
-
-	m_current_task_p.reset(new resource_manager_task_package);
+	}
 }
 
 template<>
@@ -88,21 +127,22 @@ transform resource_manager::build<RESOURCE_TYPE_TR>(transform_data data, USAGE u
 	return transform();
 }
 
-template<size_t res_type>
-void resource_manager::destroy(unique_id id)
+template<>
+void resource_manager::destroy(mesh&& _mesh)
 {
-	if constexpr (res_type == RESOURCE_TYPE_MAT)
-	{
 
-	}
-	if constexpr (res_type == RESOURCE_TYPE_MESH)
-	{
+}
 
-	}
-	if constexpr (res_type == RESOURCE_TYPE_TR)
-	{
+template<>
+void resource_manager::destroy(material&& _mesh)
+{
 
-	}
+}
+
+template<>
+void resource_manager::destroy(transform&& _mesh)
+{
+
 }
 
 /*template<>
