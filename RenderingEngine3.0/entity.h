@@ -5,13 +5,13 @@
 class entity
 {
 public:
-	entity(rcq::USAGE u);
+	entity();
 	virtual ~entity();
 
 protected:
 	mesh m_mesh;
 	size_t m_material_index;
 	transform m_transform;
-	int render_id;
+	rcq::unique_id id;
 };
 

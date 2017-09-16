@@ -40,6 +40,9 @@ void core::destroy()
 
 void core::loop()
 {
+	std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask;
+	record_mask.reset();
+
 	while (!m_should_end || !m_package_queue.empty())
 	{
 		if (!m_package_queue.empty())
@@ -53,8 +56,7 @@ void core::loop()
 
 			if (package->confirm_destroy)
 				package->confirm_destroy->set_value();
-
-			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> rerecord_command_buffers(false);
+		
 			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_renderables(false);
 
 			for (auto& destroy_id : package->destroy_renderable)
@@ -64,7 +66,7 @@ void core::loop()
 					throw std::runtime_error("cannot delete renderable with the given id, it doesn't exist!");
 				it->second.destroy = true;
 				remove_deleted_renderables.set(it->second.type);
-				rerecord_command_buffers.set(it->second.type);
+				record_mask.set(it->second.type);
 				m_renderable_refs.erase(it);
 			}
 
@@ -97,7 +99,7 @@ void core::loop()
 					type,
 					false
 				};
-				rerecord_command_buffers.set(type);
+				record_mask.set(type);
 				
 
 				if (!m_renderable_refs.insert_or_assign(std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(build_renderable),
@@ -109,7 +111,11 @@ void core::loop()
 
 			}
 
-			
+			if (package->render)
+			{
+				record_and_render(record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
+				record_mask.reset();
+			}
 		}
 	}
 }

@@ -21,8 +21,8 @@
   <ItemGroup>
     <ClCompile Include="base.cpp" />
     <ClCompile Include="basic_pass.cpp" />
-    <ClCompile Include="containers.cpp" />
     <ClCompile Include="core.cpp" />
+    <ClCompile Include="device_memory.cpp" />
     <ClCompile Include="disassembler.cpp" />
     <ClCompile Include="entity.cpp" />
     <ClCompile Include="foundation.cpp" />
@@ -35,9 +35,9 @@
     <ClInclude Include="base.h" />
     <ClInclude Include="basic_pass.h" />
     <ClInclude Include="core.h" />
+    <ClInclude Include="device_memory.h" />
     <ClInclude Include="disassembler.h" />
     <ClInclude Include="foundation.h" />
-    <ClInclude Include="containers.h" />
     <ClInclude Include="entity.h" />
     <ClInclude Include="engine.h" />
     <ClInclude Include="resource_manager.h" />

@@ -126,124 +126,95 @@ transform resource_manager::build<RESOURCE_TYPE_TR>(transform_data data, USAGE u
 {
 	return transform();
 }
+template<>
+memory resource_manager::build<RESOURCE_TYPE_MEMORY>(std::vector<VkMemoryRequirements> requirements)
+{
+	return memory();
+}
 
 template<>
 void resource_manager::destroy(mesh&& _mesh)
 {
+	vkDestroyBuffer(m_base.device, _mesh.ib, host_memory_manager);
+	vkDestroyBuffer(m_base.device, _mesh.vb, host_memory_manager);
+	if (_mesh.veb != VK_NULL_HANDLE)
+		vkDestroyBuffer(m_base.device, _mesh.veb, host_memory_manager);
 
+	vkFreeMemory(m_base.device, _mesh.memory, host_memory_manager);
 }
 
 template<>
-void resource_manager::destroy(material&& _mesh)
+void resource_manager::destroy(material&& _mat)
 {
-
+	for (size_t i = 0; i < TEX_TYPE_COUNT; ++i)
+	{
+		if (_mat.texs[i].view != VK_NULL_HANDLE)
+		{
+			vkDestroyImageView(m_base.device, _mat.texs[i].view, host_memory_manager);
+			vkDestroyImage(m_base.device, _mat.texs[i].image, host_memory_manager);
+			vkFreeMemory(m_base.device, _mat.texs[i].memory, host_memory_manager);
+		}
+	}
+	vkFreeDescriptorSets(m_base.device, /*TODO: pool*/VK_NULL_HANDLE, 1, &_mat.ds);
+	//TODO free data
 }
 
 template<>
-void resource_manager::destroy(transform&& _mesh)
+void resource_manager::destroy(transform&& _tr)
 {
-
+	//TODO: free data
 }
 
-/*template<>
-void resource_manager::destroy<RESOURCE_TYPE_MESH>(unique_id id)
-{
-
-}
 template<>
-void resource_manager::destroy_tr(unique_id id)
+void resource_manager::destroy(memory && _memory)
+{
+	for (auto mem : _memory)
+		vkFreeMemory(m_base.device, mem, host_memory_manager);
+}
+
+void rcq::resource_manager::update_cam_and_tr(const std::optional<camera_data>& cam, const std::vector<update_tr_info>& trs)
 {
 
-}*/
-
-/*
-texture rcq::resource_manager::create_depth( int width, int height, int layer_count)
-{
-	texture depth;
-
-	VkFormat depth_format = find_depth_format(m_base.physical_device);
-
-	VkImageCreateInfo image_info = {};
-	image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	image_info.arrayLayers = layer_count;
-	image_info.extent.height = height;
-	image_info.extent.width = width;
-	image_info.extent.depth = 1;
-	image_info.format = depth_format;
-	image_info.imageType = VK_IMAGE_TYPE_2D;
-	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	image_info.mipLevels = 1;
-	image_info.samples = VK_SAMPLE_COUNT_1_BIT;
-	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-	image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-
-	if (vkCreateImage(m_base.device, &image_info, host_memory_manager, &depth.image) != VK_SUCCESS)
+	if (cam)
 	{
-		throw std::runtime_error("failed to create depth image!");
+		memcpy(m_tr_dynamic_buffer_begins[0], &cam.value(), sizeof(camera_data));
+	}
+	size_t staging_buffer_offset = 0;
+	bool has_static = false;
+
+	for (const auto& tr_info : trs) //TODO: this should be optimized
+	{
+		auto tr = std::get<RESOURCE_TYPE_TR>(m_resources_ready)[std::get<UPDATE_TR_INFO_TR_ID>(tr_info)];
+		if (tr.usage==USAGE_DYNAMIC)
+			memcpy(tr.data, &std::get<UPDATE_TR_INFO_TR_DATA>(tr_info), sizeof(transform_data));
+		else
+			has_static = true;
 	}
 
-	VkMemoryRequirements memory_requirements;
-	vkGetImageMemoryRequirements(m_base.device, depth.image, &memory_requirements);
-
-	VkMemoryAllocateInfo alloc_info = {};
-	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	alloc_info.allocationSize = memory_requirements.size;
-	alloc_info.memoryTypeIndex = find_memory_type(m_base.physical_device, memory_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	if (vkAllocateMemory(m_base.device, &alloc_info, host_memory_manager, &depth.memory) != VK_SUCCESS)
+	if (has_static)
 	{
-		throw std::runtime_error("failed to allocate depth image memory!");
+		VkCommandBuffer cb=VK_NULL_HANDLE;
+		//TODO: begin cb
+		VkBufferCopy region = {};
+		region.size = sizeof(transform_data);
+		region.dstOffset = 0;
+		region.srcOffset = 0;
+
+		for (const auto& tr_info : trs)
+		{
+			auto tr= std::get<RESOURCE_TYPE_TR>(m_resources_ready)[std::get<UPDATE_TR_INFO_TR_ID>(tr_info)];
+			if (tr.usage == USAGE_STATIC)
+			{
+				memcpy(m_tr_static_staging_buffer_begin + region.srcOffset, 
+					&std::get<UPDATE_TR_INFO_TR_DATA>(tr_info), sizeof(transform_data));
+				vkCmdCopyBuffer(cb, m_tr_static_staging_buffer, tr.buffer, 1, &region);
+				region.srcOffset += sizeof(transform_data);
+			}
+		}
+
+		//TODO: end cb
 	}
-
-	vkBindImageMemory(m_base.device, depth.image, depth.memory, 0);
-
-	VkImageViewCreateInfo view_create_info = {};
-	view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	view_create_info.format = depth_format;
-	view_create_info.image = depth.image;
-	view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-	view_create_info.subresourceRange.baseArrayLayer = 0;
-	view_create_info.subresourceRange.baseMipLevel = 0;
-	view_create_info.subresourceRange.layerCount = layer_count;
-	view_create_info.subresourceRange.levelCount = 1;
-
-	if (vkCreateImageView(m_base.device, &view_create_info, host_memory_manager, &depth.view) != VK_SUCCESS)
-	{
-		throw std::runtime_error("failed to create depth image view!");
-	}
-
-	VkCommandBuffer command_buffer = begin_single_time_command(m_base.device, m_command_pool);
-
-	VkImageMemoryBarrier barrier = {};
-	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.image = m_depth_image;
-	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-	if (depth_format == VK_FORMAT_D24_UNORM_S8_UINT || depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT)
-		barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
-
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.baseMipLevel = 0;
-	barrier.subresourceRange.layerCount = 1;
-	barrier.subresourceRange.levelCount = 1;
-
-	barrier.srcAccessMask = 0;
-	barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-	vkCmdPipelineBarrier(command_buffer,
-		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-		0,
-		0, nullptr,
-		0, nullptr,
-		1, &barrier
-	);
-	end_singel_time_command_buffer(m_info.device, m_command_pool, m_info.graphics_queue, command_buffer);
-}*/
+}
 
 void rcq::resource_manager::destroy_texture(const texture & tex)
 {

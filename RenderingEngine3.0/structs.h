@@ -1,27 +1,20 @@
 #pragma once
 
 #include "foundation.h"
-#include "containers.h"
 
 
 struct material
 {
-	material() : data(rcq::containers::instance()->new_mat(rcq::USAGE_STATIC)) {}
-	~material() { rcq::containers::instance()->delete_mat(data, rcq::USAGE_STATIC); }
 
-	rcq::material_data* const data;
+	rcq::material_data data;
 	uint32_t type;
 	std::string tex_resources[rcq::TEX_TYPE_COUNT];
-	//const rcq::USAGE usage;
 };
 
 struct transform
 {
-	transform(rcq::USAGE u): usage(u), data(rcq::containers::instance()->new_tr(u)) {} 
-	~transform() { rcq::containers::instance()->delete_tr(data, usage); }
-
-	rcq::transform_data* const data;
-	const rcq::USAGE usage;
+	rcq::transform_data data;
+	rcq::USAGE usage;
 };
 
 struct mesh

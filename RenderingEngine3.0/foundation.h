@@ -46,7 +46,8 @@ namespace rcq
 	enum USAGE
 	{
 		USAGE_STATIC,
-		USAGE_DYNAMIC
+		USAGE_DYNAMIC,
+		USAGE_COUNT
 	};
 
 	enum LIFE_EXPECTANCY
@@ -77,6 +78,10 @@ namespace rcq
 		RESOURCE_TYPE_MAT,
 		RESOURCE_TYPE_MESH,
 		RESOURCE_TYPE_TR,
+
+		//for render passes
+		RESOURCE_TYPE_MEMORY,
+
 		RESOURCE_TYPE_COUNT
 	};
 
@@ -84,8 +89,11 @@ namespace rcq
 	struct transform_data;
 	struct camera_data;
 
+	
+
 	typedef std::array<std::string, TEX_TYPE_COUNT> texfiles;
 	typedef size_t unique_id;
+
 
 	typedef std::tuple<unique_id, material_data, texfiles, MAT_TYPE> build_mat_info;
 	enum 
@@ -112,6 +120,8 @@ namespace rcq
 		BUILD_TR_INFO_TR_DATA,
 		BUILD_TR_INFO_USAGE
 	};
+
+	typedef std::tuple<unique_id, std::vector<VkMemoryRequirements>> build_memory_info;
 
 	typedef std::tuple<unique_id, unique_id, unique_id, unique_id, LIFE_EXPECTANCY> build_renderable_info;
 	enum
@@ -193,12 +203,8 @@ namespace rcq
 
 	extern const VkAllocationCallbacks* host_memory_manager;
 
-	extern const size_t POOL_MAT_STATIC_SIZE; //deprecated
-	extern const size_t POOL_MAT_DYNAMIC_SIZE; //deprecated
-	extern const size_t POOL_TR_STATIC_SIZE; //deprecated
-	extern const size_t POOL_TR_DYNAMIC_SIZE; //deprecated
-
 	extern const size_t DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE;
+	extern const size_t CORE_COMMAND_QUEUE_MAX_SIZE;
 
 	struct base_create_info
 	{
@@ -258,6 +264,7 @@ namespace rcq
 		mat_texs texs;
 		MAT_TYPE type;
 		VkDescriptorSet ds;
+		VkBuffer data;
 	};
 
 
@@ -270,9 +277,16 @@ namespace rcq
 		VkDeviceSize size;
 	};
 
+	typedef std::pair<uint32_t, size_t> cell_info; //block id, offset
+
+
 	struct transform
 	{
 		VkDescriptorSet ds;
+		USAGE usage;
+		VkBuffer buffer;
+		char** data;
+		cell_info cell;
 	};
 
 	struct renderable
@@ -297,7 +311,12 @@ namespace rcq
 		bool render = false;
 	};
 
-	typedef std::tuple<std::vector<build_mat_info>, std::vector<build_mesh_info>, std::vector<build_tr_info>> build_package;
+
+	typedef std::vector<VkDeviceMemory> memory;
+
+	typedef std::tuple<std::vector<build_mat_info>, std::vector<build_mesh_info>, std::vector<build_tr_info>, 
+		std::vector<build_memory_info>> build_package;
+
 	typedef std::array<std::vector<unique_id>, RESOURCE_TYPE_COUNT> destroy_ids;
 
 	struct destroy_package
@@ -317,9 +336,10 @@ namespace rcq
 	typedef std::packaged_task<material()> build_mat_task;
 	typedef std::packaged_task<transform()> build_tr_task;
 
-	typedef std::packaged_task<texture()> create_depth_task;
+	typedef std::packaged_task<memory()> build_memory_task;
 
-	typedef std::tuple<std::vector<build_mat_task>, std::vector<build_mesh_task>, std::vector<build_tr_task>> build_task_package;
+	typedef std::tuple<std::vector<build_mat_task>, std::vector<build_mesh_task>, std::vector<build_tr_task>,
+		std::vector<build_memory_task>> build_task_package;
 
 
 	template<size_t res_type>
@@ -328,7 +348,14 @@ namespace rcq
 	template<> struct resource_typename<RESOURCE_TYPE_MAT> { typedef material type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MESH> { typedef mesh type; };
 	template<> struct resource_typename<RESOURCE_TYPE_TR>{ typedef transform type; };
+	template<> struct resource_typename<RESOURCE_TYPE_MEMORY> { typedef memory type; };
 	
+
+	class basic_pass;
+	template<size_t res_type>
+	struct render_pass_typename {};
+
+	template<> struct render_pass_typename<RENDER_PASS_BASIC> { typedef  basic_pass type; };
 
 
 	struct render_target

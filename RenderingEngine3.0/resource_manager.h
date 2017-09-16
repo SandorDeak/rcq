@@ -16,9 +16,6 @@ namespace rcq
 		static void destroy();
 		static resource_manager* instance() { return m_instance; }
 
-		texture create_depth_async(RENDER_PASS pass, int width, int height, int layer_count);
-		void destroy_depth_async(RENDER_PASS);
-
 		void process_build_package(build_package&& package);
 		void push_destroy_package(std::unique_ptr<destroy_package>&& package)
 		{
@@ -30,15 +27,27 @@ namespace rcq
 		template<RESOURCE_TYPE res_type>
 		const auto& get(unique_id id);
 
+		void update_cam_and_tr(const std::optional<camera_data>& cam, const std::vector<update_tr_info>& trs);
 
 	private:
+		
+		std::vector<VkBuffer> m_tr_dynamic_buffers;
+		//std::vector<VkBuffer> m_tr_staging_dynamic_buffers;
+		std::vector<char*> m_tr_dynamic_buffer_begins;
+
+		std::vector<VkBuffer> m_tr_static_buffers;
+		VkBuffer m_tr_static_staging_buffer;
+
+		char* m_tr_static_staging_buffer_begin;
+
+
+		std::vector<VkBuffer> m_mat_buffers;
+		VkBuffer m_mat_staging_buffer;
+		
+
 
 		resource_manager(const base_info& info);
 		void destroy_texture(const texture& tex);
-
-		texture create_depth(int width, int height, int layer_count);
-		void destroy_depth(RENDER_PASS);
-
 		
 
 		/*template<size_t res_type>
@@ -52,18 +61,23 @@ namespace rcq
 
 		const base_info m_base;
 
+		VkCommandPool m_cp;
+		std::vector<VkDescriptorPool> m_dps;
+
 		//resources
 		std::tuple<
 			std::map<unique_id, material>,
 			std::map<unique_id, mesh>,
-			std::map<unique_id, transform>
+			std::map<unique_id, transform>,
+			std::map<unique_id, memory>
 		> m_resources_ready;
 		std::mutex m_resources_ready_mutex;
 
 		std::tuple<
 			std::map<unique_id, std::future<material>>,
 			std::map<unique_id, std::future<mesh>>,
-			std::map<unique_id, std::future<transform>>
+			std::map<unique_id, std::future<transform>>,
+			std::map<unique_id, std::future<memory>>
 		> m_resources_proc;
 		std::mutex m_resources_proc_mutex;
 
@@ -106,11 +120,9 @@ namespace rcq
 		template<size_t... res_types, typename BuildPackage>
 		inline void create_build_tasks(BuildPackage&& p, std::index_sequence<res_types...>);
 
+
 		template<size_t res_type, typename... Ts>
-		typename resource_typename<res_type>::type build(Ts... args)
-		{
-			return resource_typename<res_type>::type();
-		}
+		typename resource_typename<res_type>::type build(Ts... args) = delete;
 
 		template<>
 		mesh build<RESOURCE_TYPE_MESH>(std::string filename, bool calc_tb);
@@ -120,6 +132,9 @@ namespace rcq
 
 		template<>
 		transform build<RESOURCE_TYPE_TR>(transform_data data, USAGE usage);
+
+		template<>
+		memory build<RESOURCE_TYPE_MEMORY>(std::vector<VkMemoryRequirements> requirements);
 
 		//destroy thread
 		std::thread m_destroy_thread;
@@ -131,7 +146,8 @@ namespace rcq
 		std::tuple<
 			std::vector<material>,
 			std::vector<mesh>,
-			std::vector<transform>
+			std::vector<transform>,
+			std::vector<memory>
 		> m_destroyables;
 
 		template<size_t... res_types>
@@ -151,12 +167,16 @@ namespace rcq
 		void destroy_destroyables(std::index_sequence<res_types...>);
 
 		template<typename ResourceType>
-		void destroy(ResourceType&& res) {};
+		void destroy(ResourceType&& res) = delete;
 		template<>
 		void destroy(mesh&& _mesh);
 		template<>
 		void destroy(material&& _mat);
+		template<>
 		void destroy(transform&& _tr);
+		template<>
+		void destroy(memory&& _memory);
+
 	};
 
 
@@ -290,8 +310,8 @@ namespace rcq
 	{
 		auto l = { ([this](auto&& destroyable_vect)
 		{
-			for (const auto& destroyable : destroyable_vect)
-				destroy(destroyable);
+			for (auto& destroyable : destroyable_vect)
+				destroy(std::move(destroyable));
 			destroyable_vect.clear();
 		}(std::get<res_types>(m_destroyables)), 0)... };
 	}
