@@ -26,6 +26,7 @@
 #include <optional>
 #include <tuple>
 #include <bitset>
+#include <iostream>
 
 
 namespace rcq
@@ -343,7 +344,7 @@ namespace rcq
 
 
 	template<size_t res_type>
-	struct resource_typename { typedef int type; };
+	struct resource_typename;
 
 	template<> struct resource_typename<RESOURCE_TYPE_MAT> { typedef material type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MESH> { typedef mesh type; };

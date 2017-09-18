@@ -10,7 +10,10 @@ disassembler* disassembler::m_instance = nullptr;
 disassembler::disassembler()
 {
 	m_should_end = false;
-	m_looping_thread = std::thread(std::bind(&disassembler::loop, this));
+	m_looping_thread = std::thread([this]()
+	{
+		loop();
+	});
 }
 
 

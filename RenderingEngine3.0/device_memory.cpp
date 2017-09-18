@@ -71,9 +71,9 @@ void device_memory::free_buffer(USAGE usage, const cell_info& cell)
 	m_available_cells[usage].insert(cell);
 
 	if (auto range = m_available_cells[usage].equal_range(cell.first);
-		std::distance(range.second, range.first)==BLOCK_SIZE[usage] && m_available_cells[usage].size() > BLOCK_SIZE[usage])
+		std::distance(range.second, range.first)==BLOCK_SIZE[usage]-1 && m_available_cells[usage].size() > BLOCK_SIZE[usage])
 	{
 		m_available_cells[usage].erase(range.first, range.second);
-		vkFreeMemory(m_base.device, m_blocks[usage][cell.first], host_memory_manager);
+		vkFreeMemory(m_base.device, m_blocks[usage][cell.first], host_memory_manager); 
 	}
 }

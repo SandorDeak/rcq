@@ -9,7 +9,17 @@ core* core::m_instance = nullptr;
 core::core()
 {
 	m_should_end = false;
-	m_looping_thread = std::thread(std::bind(&core::loop, this));
+	m_looping_thread = std::thread([this]()
+	{
+		try
+		{
+			loop();
+		}
+		catch (const std::runtime_error& e)
+		{
+			std::cerr << e.what() << std::endl;
+		}
+	});
 }
 
 

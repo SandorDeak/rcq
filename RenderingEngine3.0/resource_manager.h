@@ -47,7 +47,7 @@ namespace rcq
 
 
 		resource_manager(const base_info& info);
-		void destroy_texture(const texture& tex);
+		//void destroy_texture(const texture& tex);
 		
 
 		/*template<size_t res_type>
@@ -85,13 +85,13 @@ namespace rcq
 		std::map<RENDER_PASS, std::future<texture>> m_depth_proc;
 
 		template<size_t... res_types>
-		void check_resource_leak(std::index_sequence<res_types...>)
+		inline void check_resource_leak(std::index_sequence<res_types...>)
 		{
 			auto l = { (check_resource_leak_impl<res_types>(),0)... };
 		}
 
 		template<size_t res_type>
-		void check_resource_leak_impl()
+		inline void check_resource_leak_impl()
 		{
 			if (!std::get<res_type>(m_resources_ready).empty())
 				throw std::runtime_error("resource leak of resource type " + std::to_string(res_type)+ 
@@ -111,30 +111,20 @@ namespace rcq
 		bool m_should_end_build;
 
 		template<typename TaskTuple, size_t... types>
-		void do_build_tasks(TaskTuple&& p, std::index_sequence<types...>);
+		inline void do_build_tasks(TaskTuple&& p, std::index_sequence<types...>);
 
 		template<size_t res_type, typename Id, typename... Infos>
-		void create_build_tasks_impl(std::vector<std::tuple<Id, Infos...>>& build_infos);
+		inline void create_build_tasks_impl(std::vector<std::tuple<Id, Infos...>>& build_infos);
 
 
 		template<size_t... res_types, typename BuildPackage>
 		inline void create_build_tasks(BuildPackage&& p, std::index_sequence<res_types...>);
 
 
-		template<size_t res_type, typename... Ts>
-		typename resource_typename<res_type>::type build(Ts... args) = delete;
-
-		template<>
-		mesh build<RESOURCE_TYPE_MESH>(std::string filename, bool calc_tb);
-
-		template<>
-		material build<RESOURCE_TYPE_MAT>(material_data data, texfiles files, MAT_TYPE type);
-
-		template<>
-		transform build<RESOURCE_TYPE_TR>(transform_data data, USAGE usage);
-
-		template<>
-		memory build<RESOURCE_TYPE_MEMORY>(std::vector<VkMemoryRequirements> requirements);
+		mesh build(const std::string& filename, bool calc_tb);
+		material build(const material_data& data, const texfiles& files, MAT_TYPE type);
+		transform build(const transform_data& data, USAGE usage);
+		memory build(const std::vector<VkMemoryRequirements>& requirements);
 
 		//destroy thread
 		std::thread m_destroy_thread;
@@ -164,17 +154,12 @@ namespace rcq
 		inline void process_destroy_package_element(const std::vector<unique_id>& ids);
 
 		template<size_t... res_types>
-		void destroy_destroyables(std::index_sequence<res_types...>);
+		inline void destroy_destroyables(std::index_sequence<res_types...>);
 
-		template<typename ResourceType>
-		void destroy(ResourceType&& res) = delete;
-		template<>
+	
 		void destroy(mesh&& _mesh);
-		template<>
 		void destroy(material&& _mat);
-		template<>
 		void destroy(transform&& _tr);
-		template<>
 		void destroy(memory&& _memory);
 
 	};
@@ -212,21 +197,24 @@ namespace rcq
 	{
 		auto& task_vector = std::get<res_type>(*m_current_build_task_p.get());
 		task_vector.reserve(build_infos.size());
-
+		std::map<unique_id, std::future<resource_typename<res_type>::type>> m;
 		using TaskType = std::remove_reference_t<decltype(*task_vector.data())>;
 
 		for (auto& build_info : build_infos)
 		{
-			TaskType task(std::bind(&resource_manager::build<res_type, Infos...>, this,
-				std::get<Infos>(build_info)...));
-			
+			TaskType task([=/*this, std::get<Infos>(build_info)...*/]()
 			{
-				std::lock_guard<std::mutex> lock(m_resources_proc_mutex);
-				bool insert = std::get<res_type>(m_resources_proc).insert_or_assign(std::get<Id>(build_info), task.get_future()).second;
-				if (!insert)
-					throw std::runtime_error("unique id conflict!");
-			}
+				return build(std::get<Infos>(build_info)...);
+			});
+			m.insert_or_assign(std::get<Id>(build_info), task.get_future()).second;
 			task_vector.push_back(std::move(task));
+		}
+		std::lock_guard<std::mutex> lock(m_resources_proc_mutex);
+		for (auto& node : m)
+		{
+			bool insert=std::get<res_type>(m_resources_proc).insert_or_assign(node.first, std::move(node.second)).second; //should use extract when it's available
+			if (!insert)
+				throw std::runtime_error("id conflict!");
 		}
 	}
 

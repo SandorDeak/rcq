@@ -9,8 +9,29 @@ resource_manager::resource_manager(const base_info& info) : m_base(info)
 	m_current_build_task_p.reset(new build_task_package);
 	m_should_end_build = false;
 	m_should_end_destroy = false;
-	m_build_thread = std::thread(std::bind(&resource_manager::build_loop, this));
-	m_destroy_thread = std::thread(std::bind(&resource_manager::destroy_loop, this));
+	m_build_thread = std::thread([this]()
+	{
+		try
+		{
+			build_loop();
+		}
+		catch (const std::runtime_error& e)
+		{
+			std::cerr << e.what() << std::endl;
+		}
+	});
+
+	m_destroy_thread = std::thread([this]()
+	{
+		try
+		{
+			destroy_loop();
+		}
+		catch (const std::runtime_error& e)
+		{
+			std::cerr << e.what() << std::endl;
+		}
+	});
 }
 
 
@@ -85,10 +106,10 @@ void resource_manager::destroy_loop()
 			if (!m_pending_destroys[i].empty())
 				should_check_pending_destroys = true;
 		}
-		if (should_check_pending_destroys) //happens only if invalid id is given, or 
+		if (should_check_pending_destroys) //happens only if invalid id is given, or resource was never used 
 		{
-			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			std::lock_guard<std::mutex> lock_proc(m_resources_proc_mutex);
+			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			check_pending_destroys(std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 		}
 		if (!m_destroy_p_queue.empty())
@@ -101,7 +122,7 @@ void resource_manager::destroy_loop()
 			}
 			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			if (package->destroy_confirmation.has_value())
-				package->destroy_confirmation.value().get();
+				package->destroy_confirmation.value().wait();
 			process_destroy_package(package->ids, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 			
 		}
@@ -111,28 +132,26 @@ void resource_manager::destroy_loop()
 	}
 }
 
-template<>
-mesh resource_manager::build<RESOURCE_TYPE_MESH>(std::string filename, bool calc_tb)
+mesh resource_manager::build(const std::string& filename, bool calc_tb)
 {
 	return mesh();
 }
-template<>
-material resource_manager::build<RESOURCE_TYPE_MAT>(material_data data, texfiles files, MAT_TYPE type)
+
+material resource_manager::build(const material_data& data, const texfiles& files, MAT_TYPE type)
 {
 	return material();
 }
-template<>
-transform resource_manager::build<RESOURCE_TYPE_TR>(transform_data data, USAGE usage)
+
+transform resource_manager::build(const transform_data& data, USAGE usage)
 {
 	return transform();
 }
-template<>
-memory resource_manager::build<RESOURCE_TYPE_MEMORY>(std::vector<VkMemoryRequirements> requirements)
+
+memory resource_manager::build(const std::vector<VkMemoryRequirements>& requirements)
 {
 	return memory();
 }
 
-template<>
 void resource_manager::destroy(mesh&& _mesh)
 {
 	vkDestroyBuffer(m_base.device, _mesh.ib, host_memory_manager);
@@ -143,7 +162,6 @@ void resource_manager::destroy(mesh&& _mesh)
 	vkFreeMemory(m_base.device, _mesh.memory, host_memory_manager);
 }
 
-template<>
 void resource_manager::destroy(material&& _mat)
 {
 	for (size_t i = 0; i < TEX_TYPE_COUNT; ++i)
@@ -159,13 +177,11 @@ void resource_manager::destroy(material&& _mat)
 	//TODO free data
 }
 
-template<>
 void resource_manager::destroy(transform&& _tr)
 {
 	//TODO: free data
 }
 
-template<>
 void resource_manager::destroy(memory && _memory)
 {
 	for (auto mem : _memory)
@@ -214,11 +230,4 @@ void rcq::resource_manager::update_cam_and_tr(const std::optional<camera_data>& 
 
 		//TODO: end cb
 	}
-}
-
-void rcq::resource_manager::destroy_texture(const texture & tex)
-{
-	vkDestroyImageView(m_base.device, tex.view, host_memory_manager);
-	vkDestroyImage(m_base.device, tex.image, host_memory_manager);
-	vkFreeMemory(m_base.device, tex.memory, host_memory_manager);
 }
