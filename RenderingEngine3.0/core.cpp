@@ -121,6 +121,8 @@ void core::loop()
 
 			}
 
+			resource_manager::instance()->update_tr(package->update_tr);
+
 			if (package->render)
 			{
 				record_and_render(record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());

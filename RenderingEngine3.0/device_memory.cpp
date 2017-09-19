@@ -35,7 +35,7 @@ void device_memory::destroy()
 	delete m_instance;
 }
 
-cell_info device_memory::alloc_buffer(USAGE usage, VkBuffer buffer, char** data)
+cell_info device_memory::alloc_buffer_memory(USAGE usage, VkBuffer buffer, void** mapped_data)
 {
 	std::lock_guard<std::mutex> lock(m_block_mutexes[usage]);
 
@@ -45,8 +45,10 @@ cell_info device_memory::alloc_buffer(USAGE usage, VkBuffer buffer, char** data)
 		cell_info cell = *it;
 		m_available_cells[usage].erase(it);
 		vkBindBufferMemory(m_base.device, buffer, m_blocks[usage][cell.first], cell.second);
-		if (usage==USAGE_DYNAMIC)
-			vkMapMemory(m_base.device, m_blocks[usage][cell.first], cell.second, m_cell_size, 0, reinterpret_cast<void**>(data));
+		if (usage == USAGE_DYNAMIC)
+		{
+			vkMapMemory(m_base.device, m_blocks[usage][cell.first], cell.second, m_cell_size, 0, mapped_data);
+		}
 		return cell;
 	}
 

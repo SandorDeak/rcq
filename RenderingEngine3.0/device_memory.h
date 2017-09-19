@@ -15,9 +15,10 @@ namespace rcq
 		static void destroy();
 		static device_memory* instance() { return m_instance; }
 
-		cell_info alloc_buffer(USAGE usage, VkBuffer buffer, char** data);
+		cell_info alloc_buffer_memory(USAGE usage, VkBuffer buffer, void** mapped_data);
 
 		void free_buffer(USAGE usage, const cell_info& cell);
+		size_t get_cell_size() { return m_cell_size; }
 
 	private:
 		device_memory(const base_info& base);

@@ -27,44 +27,37 @@ namespace rcq
 		template<RESOURCE_TYPE res_type>
 		const auto& get(unique_id id);
 
-		void update_cam_and_tr(const std::optional<camera_data>& cam, const std::vector<update_tr_info>& trs);
+		void update_tr(const std::vector<update_tr_info>& trs);
 
 	private:
-		
-		std::vector<VkBuffer> m_tr_dynamic_buffers;
-		//std::vector<VkBuffer> m_tr_staging_dynamic_buffers;
-		std::vector<char*> m_tr_dynamic_buffer_begins;
-
-		std::vector<VkBuffer> m_tr_static_buffers;
-		VkBuffer m_tr_static_staging_buffer;
-
-		char* m_tr_static_staging_buffer_begin;
-
-
-		std::vector<VkBuffer> m_mat_buffers;
-		VkBuffer m_mat_staging_buffer;
-		
-
-
 		resource_manager(const base_info& info);
-		//void destroy_texture(const texture& tex);
 		
-
-		/*template<size_t res_type>
-		void create_destroy_tasks_impl(std::vector<unique_id>& destroy_ids);
-
-		template<size_t... types, typename DestroyPackage>
-		void create_destroy_tasks(DestroyPackage&& p, std::index_sequence<types...>);*/
-	
+		void create_samples();
+		void create_descriptor_set_layouts();
+		void create_staging_buffers();
 
 		static resource_manager* m_instance;
 
 		const base_info m_base;
 
 		VkCommandPool m_cp;
-		std::vector<VkDescriptorPool> m_dps;
 
 		//resources
+		VkBuffer m_single_cell_sb; //used by build thread
+		VkDeviceMemory m_single_cell_sb_mem;
+		char* m_single_cell_sb_data;
+
+		static const uint32_t STAGING_BUFFER_CELL_COUNT = 128;
+		VkBuffer m_sb; //used by core thread, size=
+		VkDeviceMemory m_sb_mem;
+		char* m_sb_data;
+
+		std::array<VkSampler, SAMPLER_TYPE_COUNT> m_samplers;
+		std::array<VkDescriptorSetLayout, DESCRIPTOR_SET_LAYOUT_TYPE_COUNT> m_dsls;
+		std::array<descriptor_pool_pool, DESCRIPTOR_SET_LAYOUT_TYPE_COUNT> m_dpps;
+		
+
+
 		std::tuple<
 			std::map<unique_id, material>,
 			std::map<unique_id, mesh>,
@@ -124,7 +117,8 @@ namespace rcq
 		mesh build(const std::string& filename, bool calc_tb);
 		material build(const material_data& data, const texfiles& files, MAT_TYPE type);
 		transform build(const transform_data& data, USAGE usage);
-		memory build(const std::vector<VkMemoryRequirements>& requirements);
+		memory build(const std::vector<VkMemoryAllocateInfo>& requirements);
+		texture load_texture(const std::string& filename);
 
 		//destroy thread
 		std::thread m_destroy_thread;

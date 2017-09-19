@@ -44,6 +44,16 @@ namespace rcq
 		TEX_TYPE_COUNT
 	};
 
+	enum TEX_TYPE_FLAG : uint32_t
+	{
+		TEX_TYPE_FLAG_COLOR = 1,
+		TEX_TYPE_FLAG_ROUGHNESS = 2,
+		TEX_TYPE_FLAG_METAL=4,
+		TEX_TYPE_FLAG_NORMAL=8,
+		TEX_TYPE_FLAG_HEIGHT=16,
+		TEX_TYPE_FLAG_AO=32
+	};
+
 	enum USAGE
 	{
 		USAGE_STATIC,
@@ -86,6 +96,19 @@ namespace rcq
 		RESOURCE_TYPE_COUNT
 	};
 
+	enum SAMPLER_TYPE
+	{
+		SAMPLER_TYPE_SIMPLE,
+		SAMPLER_TYPE_COUNT
+	};
+
+	enum DESCRIPTOR_SET_LAYOUT_TYPE
+	{
+		DESCRIPTOR_SET_LAYOUT_TYPE_MAT,
+		DESCRIPTOR_SET_LAYOUT_TYPE_TR,
+		DESCRIPTOR_SET_LAYOUT_TYPE_COUNT
+	};
+
 	struct material_data;
 	struct transform_data;
 	struct camera_data;
@@ -122,7 +145,7 @@ namespace rcq
 		BUILD_TR_INFO_USAGE
 	};
 
-	typedef std::tuple<unique_id, std::vector<VkMemoryRequirements>> build_memory_info;
+	typedef std::tuple<unique_id, std::vector<VkMemoryAllocateInfo>> build_memory_info;
 
 	typedef std::tuple<unique_id, unique_id, unique_id, unique_id, LIFE_EXPECTANCY> build_renderable_info;
 	enum
@@ -182,6 +205,13 @@ namespace rcq
 
 	uint32_t find_memory_type(VkPhysicalDevice device, uint32_t type_filter, VkMemoryPropertyFlags properties);
 
+	struct base_info;
+	void create_staging_buffer(const base_info& base, VkDeviceSize size, VkBuffer & buffer, VkDeviceMemory & memory);
+
+	VkCommandBuffer begin_single_time_command(VkDevice device, VkCommandPool command_pool);
+	void end_single_time_command_buffer(VkDevice device, VkCommandPool cp, VkQueue queue_for_submit, VkCommandBuffer cb);
+
+
 	inline VkFormat find_depth_format(VkPhysicalDevice device)
 	{
 		return find_support_format(device, { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT },
@@ -201,6 +231,12 @@ namespace rcq
 		for_each_impl(std::forward<Callable>(f), std::forward<Tuple>(tuple), std::make_index_sequence<std::tuple_size<Tuple>::value>());
 	}
 
+	template<typename T>
+	constexpr inline T calc_offset(T alignment, T raw_offset)
+	{
+		static_assert(std::is_integral_v<T>);
+		return (raw_offset+alignment-1)/alignment;
+	}
 
 	extern const VkAllocationCallbacks* host_memory_manager;
 
@@ -256,16 +292,20 @@ namespace rcq
 		VkImage image;
 		VkImageView view;
 		VkDeviceMemory memory;
+		SAMPLER_TYPE sampler_type;
 	};
 
 	typedef std::array<texture, TEX_TYPE_COUNT> mat_texs;
+	typedef std::pair<uint32_t, size_t> cell_info; //block id, offset
 
 	struct material
 	{
 		mat_texs texs;
 		MAT_TYPE type;
 		VkDescriptorSet ds;
+		uint32_t pool_index;
 		VkBuffer data;
+		cell_info cell;
 	};
 
 
@@ -278,15 +318,15 @@ namespace rcq
 		VkDeviceSize size;
 	};
 
-	typedef std::pair<uint32_t, size_t> cell_info; //block id, offset
 
 
 	struct transform
 	{
 		VkDescriptorSet ds;
+		uint32_t pool_index;
 		USAGE usage;
 		VkBuffer buffer;
-		char** data;
+		void* data;
 		cell_info cell;
 	};
 
@@ -350,7 +390,25 @@ namespace rcq
 	template<> struct resource_typename<RESOURCE_TYPE_MESH> { typedef mesh type; };
 	template<> struct resource_typename<RESOURCE_TYPE_TR>{ typedef transform type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MEMORY> { typedef memory type; };
-	
+
+	typedef uint32_t pool_id;
+
+	struct descriptor_pool_pool
+	{
+		std::vector<VkDescriptorPool> pools;
+		std::vector<uint32_t> availability;
+		pool_id get_available_pool_id()
+		{
+			pool_id id= 0;
+			for (uint32_t av : availability)
+			{
+				if (av > 0)
+					return id;
+				++id;
+			}
+			return id;
+		}
+	};
 
 	class basic_pass;
 	template<size_t res_type>
@@ -364,6 +422,7 @@ namespace rcq
 		VkFramebuffer framebuffer;
 		texture tex;
 	};
+
 
 	struct vertex
 	{
@@ -458,4 +517,17 @@ namespace rcq
 	}
 
 	
+}
+
+namespace std
+{
+	template<> struct hash<rcq::vertex>
+	{
+		size_t operator()(const rcq::vertex& v) const
+		{
+			return ((hash<glm::vec3>()(v.pos) ^
+				(hash<glm::vec3>()(v.normal) << 1)) >> 1) ^
+				(hash<glm::vec2>()(v.tex_coord) << 1);
+		}
+	};
 }
