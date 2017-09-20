@@ -167,6 +167,7 @@ namespace rcq
 
 	struct material_data
 	{
+		glm::vec3 color;
 		uint32_t flags;
 		float metal;
 		float roughness;
@@ -235,7 +236,7 @@ namespace rcq
 	constexpr inline T calc_offset(T alignment, T raw_offset)
 	{
 		static_assert(std::is_integral_v<T>);
-		return (raw_offset+alignment-1)/alignment;
+		return ((raw_offset+alignment-1)/alignment)*alignment;
 	}
 
 	extern const VkAllocationCallbacks* host_memory_manager;
@@ -315,7 +316,7 @@ namespace rcq
 		VkBuffer ib; //index
 		VkBuffer veb; //vertex ext
 		VkDeviceMemory memory;
-		VkDeviceSize size;
+		uint32_t size;
 	};
 
 
@@ -332,15 +333,17 @@ namespace rcq
 
 	struct renderable
 	{
-		VkDescriptorSet mat_ds;	
 		VkBuffer vb;
 		VkBuffer veb;
 		VkBuffer ib;
-		VkDeviceSize size;
+		uint32_t size;
 		VkDescriptorSet tr_ds;
+		VkDescriptorSet mat_ds;
 		uint32_t type;
 		bool destroy;
 	};
+
+	typedef std::array<std::vector<renderable>, MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> renderable_container;
 
 	struct core_package
 	{
@@ -517,6 +520,14 @@ namespace rcq
 	}
 
 	
+
+	//unique id generator
+	template<typename T>
+	inline unique_id get_unique_id()
+	{
+		static unique_id next_id = 0;
+		return next_id++;
+	}
 }
 
 namespace std

@@ -4,6 +4,7 @@
 #include "core.h"
 #include "resource_manager.h"
 #include "basic_pass.h"
+#include "device_memory.h"
 
 using namespace rcq;
 
@@ -38,17 +39,22 @@ engine::engine()
 	base::init(base_info);
 	m_base = base::instance()->get_info();
 
-
+	device_memory::init(m_base);
 	resource_manager::init(m_base);
+	core::init();
+	basic_pass::init(m_base, core::instance()->get_renderable_container());
+
 	disassembler::init();
-	basic_pass::init(m_base);
+
 }
 
 engine::~engine()
 {
-	basic_pass::destroy();
 	disassembler::destroy();
+	basic_pass::destroy();
+	core::destroy();
 	resource_manager::destroy();
+	device_memory::destroy();
 	base::destroy();
 }
 

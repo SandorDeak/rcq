@@ -8,12 +8,30 @@ device_memory* device_memory::m_instance = nullptr;
 
 device_memory::device_memory(const base_info& base) : m_base(base)
 {
+	VkPhysicalDeviceProperties props;
+	vkGetPhysicalDeviceProperties(m_base.physical_device, &props);
+	size_t alignment = static_cast<size_t>(props.limits.minUniformBufferOffsetAlignment);
 
+	constexpr size_t ideal_cell_size = std::max(sizeof(transform_data), sizeof(material_data));
+
+	m_cell_size = calc_offset(alignment, ideal_cell_size);
+
+	m_alloc_info[0].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	m_alloc_info[0].allocationSize = ideal_cell_size;
+	//m_alloc_info should be init!!!
 }
 
 
 device_memory::~device_memory()
 {
+	for (auto& blocks : m_blocks)
+	{
+		for (auto block : blocks)
+		{
+			if (block != VK_NULL_HANDLE)
+				vkFreeMemory(m_base.device, block, host_memory_manager);
+		}
+	}
 }
 
 void device_memory::init(const base_info& base)
@@ -77,5 +95,6 @@ void device_memory::free_buffer(USAGE usage, const cell_info& cell)
 	{
 		m_available_cells[usage].erase(range.first, range.second);
 		vkFreeMemory(m_base.device, m_blocks[usage][cell.first], host_memory_manager); 
+		m_blocks[usage][cell.first] = VK_NULL_HANDLE;
 	}
 }

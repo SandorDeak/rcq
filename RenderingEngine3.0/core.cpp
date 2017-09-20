@@ -11,14 +11,14 @@ core::core()
 	m_should_end = false;
 	m_looping_thread = std::thread([this]()
 	{
-		try
-		{
+		/*try
+		{*/
 			loop();
-		}
+		/*}
 		catch (const std::runtime_error& e)
 		{
 			std::cerr << e.what() << std::endl;
-		}
+		}*/
 	});
 }
 
@@ -100,12 +100,12 @@ void core::loop()
 				uint32_t type = _mat.type*std::get<BUILD_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_renderable);
 
 				renderable r = {
-					_mat.ds,
 					_mesh.vb,
 					_mesh.veb,
 					_mesh.ib,
 					_mesh.size,
 					_tr.ds,
+					_mat.ds,
 					type,
 					false
 				};
@@ -125,7 +125,7 @@ void core::loop()
 
 			if (package->render)
 			{
-				record_and_render(record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
+				record_and_render(package->update_cam, record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
 				record_mask.reset();
 			}
 		}

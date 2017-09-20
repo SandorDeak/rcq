@@ -28,6 +28,7 @@ namespace rcq
 		const auto& get(unique_id id);
 
 		void update_tr(const std::vector<update_tr_info>& trs);
+		VkDescriptorSetLayout get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE type) { return m_dsls[type]; }
 
 	private:
 		resource_manager(const base_info& info);
@@ -35,6 +36,11 @@ namespace rcq
 		void create_samples();
 		void create_descriptor_set_layouts();
 		void create_staging_buffers();
+		void create_command_pool();
+
+
+		template<DESCRIPTOR_SET_LAYOUT_TYPE dsl_type>
+		inline void extend_descriptor_pool_pool();
 
 		static resource_manager* m_instance;
 
@@ -54,6 +60,8 @@ namespace rcq
 
 		std::array<VkSampler, SAMPLER_TYPE_COUNT> m_samplers;
 		std::array<VkDescriptorSetLayout, DESCRIPTOR_SET_LAYOUT_TYPE_COUNT> m_dsls;
+
+		static const uint32_t DESCRIPTOR_POOL_SIZE = 64;
 		std::array<descriptor_pool_pool, DESCRIPTOR_SET_LAYOUT_TYPE_COUNT> m_dpps;
 		
 
@@ -163,8 +171,8 @@ namespace rcq
 	template<RESOURCE_TYPE res_type>
 	const auto& resource_manager::get(unique_id id)
 	{
-		static auto& res_ready = std::get<res_type>(m_resources_ready);
-		static auto& res_proc = std::get<res_type>(m_resources_proc);
+		auto& res_ready = std::get<res_type>(m_resources_ready);
+		auto& res_proc = std::get<res_type>(m_resources_proc);
 		{
 			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			if (auto itr = res_ready.find(id); itr != res_ready.end())
@@ -176,7 +184,7 @@ namespace rcq
 		{
 			auto ready_resource = itp->second.get();
 			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
-			auto[itr, insert] = res_ready.insert_or_assign(id, itp->second.get());
+			auto[itr, insert] = res_ready.insert_or_assign(id, ready_resource);
 			if (!insert)
 				throw std::runtime_error("id conflict!");
 			res_proc.erase(itp);
@@ -249,14 +257,20 @@ namespace rcq
 	template<size_t res_type>
 	inline void resource_manager::check_pending_destroys_impl()
 	{
-		static auto& resources_ready = std::get<res_type>(m_resources_ready);
-		static auto& pending_destroys = std::get<res_type>(m_pending_destroys);
+		auto& pending_destroys = std::get<res_type>(m_pending_destroys);
+
 		pending_destroys.erase(std::remove_if(pending_destroys.begin(), pending_destroys.end(), [this](unique_id id)
 		{
-			if (auto it = resources_ready.find(id); it != resources_ready.end())
+			if (auto it = std::get<res_type>(m_resources_ready).find(id); it != std::get<res_type>(m_resources_ready).end())
 			{
 				std::get<res_type>(m_destroyables).push_back(std::move(it->second));
-				resources_ready.erase(it);
+				std::get<res_type>(m_resources_ready).erase(it);
+				return true;
+			}
+			if (auto it = std::get<res_type>(m_resources_proc).find(id); it != std::get<res_type>(m_resources_proc).end())
+			{
+				std::get<res_type>(m_destroyables).push_back(std::move(it->second.get()));
+				std::get<res_type>(m_resources_proc).erase(it);
 				return true;
 			}
 			return false;

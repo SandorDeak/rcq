@@ -24,6 +24,8 @@ namespace rcq
 			m_package_queue.push(std::move(package));
 		}
 
+		renderable_container& get_renderable_container() { return m_renderables; }
+
 	private:
 		core();
 		void loop();
@@ -36,13 +38,13 @@ namespace rcq
 
 		std::map<unique_id, renderable&> m_renderable_refs;
 
-		std::array<std::vector<renderable>, MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> m_renderables;
+		renderable_container m_renderables;
 		
 		template<size_t... render_passes>
-		void record_and_render(std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, 
+		void record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, 
 			std::index_sequence<render_passes...>)
 		{
-			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(record_mask), 0)... };
+			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(cam, record_mask), 0)... };
 		}
 	};
 }

@@ -20,7 +20,8 @@ private:
 	camera m_camera;
 	std::vector<entity> m_entities;
 
-	std::map<size_t, material> m_materials;
-	std::map<size_t, mesh> m_meshes;
+	std::vector<material> m_mats;
+	std::vector<mesh> m_meshes;
+	std::vector<transform> m_trs;
 };
 

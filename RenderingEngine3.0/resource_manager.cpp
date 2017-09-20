@@ -20,33 +20,34 @@ resource_manager::resource_manager(const base_info& info) : m_base(info)
 	m_current_build_task_p.reset(new build_task_package);
 
 	create_samples();
-	//create dsls
-	//function to extend dpps
+	create_descriptor_set_layouts();
+	create_command_pool();
+
 	m_should_end_build = false;
 	m_should_end_destroy = false;
 	m_build_thread = std::thread([this]()
 	{
-		try
-		{
+		/*try
+		{*/
 			build_loop();
-		}
+		/*}
 
 		catch (const std::runtime_error& e)
 		{
 			std::cerr << e.what() << std::endl;
-		}
+		}*/
 	});
 
 	m_destroy_thread = std::thread([this]()
 	{
-		try
-		{
+		/*try
+		{*/
 			destroy_loop();
-		}
+		/*}
 		catch (const std::runtime_error& e)
 		{
 			std::cerr << e.what() << std::endl;
-		}
+		}*/
 	});
 
 	create_staging_buffers();
@@ -58,9 +59,22 @@ resource_manager::~resource_manager()
 {
 	vkUnmapMemory(m_base.device, m_single_cell_sb_mem);
 	vkUnmapMemory(m_base.device, m_sb_mem);
-	std::unique_ptr<destroy_package> destroy;
+	vkDestroyBuffer(m_base.device, m_single_cell_sb, host_memory_manager);
+	vkDestroyBuffer(m_base.device, m_sb, host_memory_manager);
+	auto destroy = std::make_unique<destroy_package>();
 	destroy->ids[RESOURCE_TYPE_MEMORY].push_back(~0);
 	push_destroy_package(std::move(destroy));
+
+	for (auto& sampler : m_samplers)
+		vkDestroySampler(m_base.device, sampler, host_memory_manager);
+	for (auto& dsl : m_dsls)
+		vkDestroyDescriptorSetLayout(m_base.device, dsl, host_memory_manager);
+	for (auto& dpp : m_dpps)
+	{
+		for (auto& dp : dpp.pools)
+			vkDestroyDescriptorPool(m_base.device, dp, host_memory_manager);
+	}
+	vkDestroyCommandPool(m_base.device, m_cp, host_memory_manager);
 
 
 	m_should_end_build = true;
@@ -71,8 +85,7 @@ resource_manager::~resource_manager()
 	//checking that resources was destroyed properly
 	check_resource_leak(std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 
-	for (auto& sampler : m_samplers)
-		vkDestroySampler(m_base.device, sampler, host_memory_manager);
+	
 }
 
 void resource_manager::init(const base_info& info)
@@ -265,11 +278,11 @@ mesh resource_manager::build(const std::string& filename, bool calc_tb)
 
 	size_t sb_size = vb_size + ib_size + veb_size; //staging buffer size
 
-	//create vetex buffer
+	//create vertex buffer
 	VkBufferCreateInfo vb_info = {};
 	vb_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	vb_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	vb_info.size = veb_size;
+	vb_info.size = vb_size;
 	vb_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 	if (vkCreateBuffer(m_base.device, &vb_info, host_memory_manager, &_mesh.vb) != VK_SUCCESS)
@@ -434,7 +447,7 @@ material resource_manager::build(const material_data& data, const texfiles& file
 	pool_id p_id = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_MAT].get_available_pool_id();
 	if (p_id == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_MAT].pools.size())
 	{
-		//TODO: extend descriptor_pool_pool
+		extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_MAT>();
 	}
 	alloc_info.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_MAT].pools[p_id];
 	if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &mat.ds) != VK_SUCCESS)
@@ -532,7 +545,7 @@ transform resource_manager::build(const transform_data& data, USAGE usage)
 	pool_id p_id = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TR].get_available_pool_id();
 	if (p_id == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TR].pools.size())
 	{
-		//create new pool
+		extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_TR>();
 	}
 	alloc_info.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TR].pools[p_id];
 	if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &tr.ds) != VK_SUCCESS)
@@ -622,7 +635,7 @@ void rcq::resource_manager::update_tr(const std::vector<update_tr_info>& trs)
 {
 	size_t static_count = 0;
 
-	for (const auto& tr_info : trs) //TODO: this should be optimized
+	for (const auto& tr_info : trs)
 	{
 		auto tr = std::get<RESOURCE_TYPE_TR>(m_resources_ready)[std::get<UPDATE_TR_INFO_TR_ID>(tr_info)];
 		if (tr.usage==USAGE_DYNAMIC)
@@ -872,7 +885,6 @@ void resource_manager::create_staging_buffers()
 	sb_info.size=STAGING_BUFFER_CELL_COUNT*cell_size;
 	if (vkCreateBuffer(m_base.device, &sb_info, host_memory_manager, &m_sb) != VK_SUCCESS)
 		throw std::runtime_error("failed to create staging buffer!");
-
 	vkGetBufferMemoryRequirements(m_base.device, m_sb, &mr);
 	alloc_infos[1].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	alloc_infos[1].allocationSize = mr.size;
@@ -894,4 +906,100 @@ void resource_manager::create_staging_buffers()
 	m_single_cell_sb_data = static_cast<char*>(data);
 	vkMapMemory(m_base.device, m_sb_mem, 0, cell_size*STAGING_BUFFER_CELL_COUNT, 0, &data);
 	m_sb_data = static_cast<char*>(data);
+}
+
+void resource_manager::create_descriptor_set_layouts()
+{
+	//create transform dsl
+	VkDescriptorSetLayoutBinding ub_binding = {};
+	ub_binding.binding = 0;
+	ub_binding.descriptorCount = 1;
+	ub_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	ub_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkDescriptorSetLayoutCreateInfo transform_dsl_create_info = {};
+	transform_dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	transform_dsl_create_info.bindingCount = 1;
+	transform_dsl_create_info.pBindings = &ub_binding;
+
+	if (vkCreateDescriptorSetLayout(m_base.device, &transform_dsl_create_info, host_memory_manager, 
+		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TR]) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create transform descriptor set layout!");
+	}
+
+	//create material dsl
+	VkDescriptorSetLayoutBinding tex_binding = {};
+	tex_binding.descriptorCount = 1;
+	tex_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	tex_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding material_bindings[TEX_TYPE_COUNT + 1];
+	material_bindings[0] = ub_binding;
+	for (size_t i = 1; i < TEX_TYPE_COUNT + 1; ++i)
+	{
+		tex_binding.binding = i;
+		material_bindings[i] = tex_binding;
+	}
+
+	VkDescriptorSetLayoutCreateInfo material_dsl_create_info = {};
+	material_dsl_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	material_dsl_create_info.bindingCount = TEX_TYPE_COUNT + 1;
+	material_dsl_create_info.pBindings = material_bindings;
+
+	if (vkCreateDescriptorSetLayout(m_base.device, &material_dsl_create_info, host_memory_manager, 
+		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_MAT]) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create material descriptor set layout!");
+	}
+}
+
+template<DESCRIPTOR_SET_LAYOUT_TYPE dsl_type>
+inline void resource_manager::extend_descriptor_pool_pool()
+{
+	VkDescriptorPoolCreateInfo dp_info = {};
+	dp_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	dp_info.maxSets = DESCRIPTOR_POOL_SIZE;
+
+	VkDescriptorPool new_pool;
+
+	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_TR)
+	{
+		VkDescriptorPoolSize dp_size = {};
+		dp_size.descriptorCount = 1;
+		dp_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+		dp_info.poolSizeCount = 1;
+		dp_info.pPoolSizes = &dp_size;
+	}
+
+	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_MAT)
+	{
+		std::array<VkDescriptorPoolSize, 2> dp_size = {};
+		dp_size[0].descriptorCount = 1;
+		dp_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		dp_size[1].descriptorCount = TEX_TYPE_COUNT;
+		dp_size[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+		dp_info.poolSizeCount = 2;
+		dp_info.pPoolSizes = dp_size.data()
+
+	}
+
+	if (vkCreateDescriptorPool(m_base.device, &dp_info, host_memory_manager, &new_pool) != VK_SUCCESS)
+		throw std::runtime_error("failed to create descriptor pool!");
+
+	m_dpps[dsl_type].pools.push_back(new_pool);
+	m_dpps[dsl_type].availability.push_back(DESCRIPTOR_POOL_SIZE);
+}
+
+void resource_manager::create_command_pool()
+{
+	VkCommandPoolCreateInfo cp_info = {};
+	cp_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	cp_info.queueFamilyIndex = m_base.queue_families.graphics_family;
+	cp_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+
+	if (vkCreateCommandPool(m_base.device, &cp_info, host_memory_manager, &m_cp) != VK_SUCCESS)
+		throw std::runtime_error("failed to create command pool!");
 }

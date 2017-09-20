@@ -21,13 +21,19 @@ namespace rcq
 		template<RESOURCE_TYPE type, typename... Ts>
 		void cmd_build(Ts&&... args)
 		{
-			std::get<type>(m_command_p->resource_manager_build_p).emplace_back(std::forward<Ts>(args)...);
+			if (!m_command_p->resource_manager_build_p)
+				m_command_p->resource_manager_build_p.emplace();
+
+			std::get<type>(m_command_p->resource_manager_build_p.value()).emplace_back(std::forward<Ts>(args)...);
 		}
 
 		template<RESOURCE_TYPE type>
 		void cmd_destroy(unique_id id)
 		{
-			std::get<type>(m_command_p->resource_mananger_destroy_p).push_back(id);
+			if (!m_command_p->resource_mananger_destroy_p)
+				m_command_p->resource_mananger_destroy_p.emplace();
+
+			std::get<type>(m_command_p->resource_mananger_destroy_p.value().ids).push_back(id);
 		}
 
 		void cmd_build_renderable(unique_id id, unique_id tr_id, unique_id mesh_id, unique_id mat_id, LIFE_EXPECTANCY life_exp)
