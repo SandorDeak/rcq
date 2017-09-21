@@ -18,7 +18,7 @@ namespace rcq
 		cell_info alloc_buffer_memory(USAGE usage, VkBuffer buffer, void** mapped_data);
 
 		void free_buffer(USAGE usage, const cell_info& cell);
-		size_t get_cell_size() { return m_cell_size; }
+		size_t get_cell_size(USAGE usage) { return m_cell_size[usage]; }
 
 	private:
 		device_memory(const base_info& base);
@@ -28,7 +28,7 @@ namespace rcq
 		const base_info m_base;
 
 		static const size_t BLOCK_SIZE[USAGE_COUNT];
-		size_t m_cell_size;
+		size_t m_cell_size[USAGE_COUNT];
 		VkMemoryAllocateInfo m_alloc_info[USAGE_COUNT];
 
 		std::array<std::multimap<uint32_t, size_t>, USAGE_COUNT> m_available_cells;

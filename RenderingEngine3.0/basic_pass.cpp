@@ -9,18 +9,29 @@ basic_pass* basic_pass::m_instance = nullptr;
 basic_pass::basic_pass(const base_info& info, const renderable_container& renderables): m_base(info), m_renderables(renderables)
 {
 	create_render_pass();
-	create_descriptor_set_layout();
-	create_graphics_pipelines();
 	create_command_pool();
 	create_depth_and_per_frame_buffer();
 	create_per_frame_resources();
+	create_graphics_pipelines();
 	create_framebuffers();
 	allocate_command_buffers();
+	create_semaphores();
+	create_fences();
+
+	m_record_masks.resize(m_fbs.size());
+	for (auto& bs : m_record_masks)
+		bs.reset();
 }
 
 
 basic_pass::~basic_pass()
 {
+	for (auto f : m_primary_cb_finished_fs)
+		vkDestroyFence(m_base.device, f, host_memory_manager);
+
+	vkDestroySemaphore(m_base.device, m_render_finished_s, host_memory_manager);
+	vkDestroySemaphore(m_base.device, m_image_available_s, host_memory_manager);
+
 	for (auto& dsl : m_per_frame_dsls)
 		vkDestroyDescriptorSetLayout(m_base.device, dsl, host_memory_manager);
 	vkDestroyDescriptorPool(m_base.device, m_per_frame_dp, host_memory_manager);
@@ -44,7 +55,6 @@ basic_pass::~basic_pass()
 		vkDestroyPipelineLayout(m_base.device, pl, host_memory_manager);
 	for(auto& gp : m_gps)
 		vkDestroyPipeline(m_base.device, gp, host_memory_manager);
-	vkDestroyDescriptorSetLayout(m_base.device, m_cam_dsl, host_memory_manager);
 	vkDestroyRenderPass(m_base.device, m_pass, host_memory_manager);
 }
 
@@ -150,12 +160,12 @@ void basic_pass::create_graphics_pipelines()
 
 	VkPipelineVertexInputStateCreateInfo vertex_input = {};
 	vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	constexpr auto attribs = vertex::get_attribute_descriptions();
-	constexpr auto binding = vertex::get_binding_description();
+	constexpr auto attribs = get_vertex_input_attribute_descriptions();
+	constexpr auto binding = get_vertex_input_binding_descriptions();
 	vertex_input.pVertexAttributeDescriptions = attribs.data();
 	vertex_input.vertexAttributeDescriptionCount = static_cast<uint32_t>(attribs.size());
-	vertex_input.pVertexBindingDescriptions = &binding;
-	vertex_input.vertexBindingDescriptionCount = 1;
+	vertex_input.pVertexBindingDescriptions = binding.data();
+	vertex_input.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
 	
 	VkPipelineInputAssemblyStateCreateInfo input_assembly = {};
 	input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
@@ -221,7 +231,7 @@ void basic_pass::create_graphics_pipelines()
 
 	VkPipelineLayoutCreateInfo layout = {};
 	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	VkDescriptorSetLayout dsls[] = { m_cam_dsl, resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR), 
+	VkDescriptorSetLayout dsls[] = { m_per_frame_dsls[MAT_TYPE_BASIC], resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR), 
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT) };
 	layout.pSetLayouts = dsls;
 	layout.setLayoutCount = 3;
@@ -251,24 +261,6 @@ void basic_pass::create_graphics_pipelines()
 
 	vkDestroyShaderModule(m_base.device, vert_module, host_memory_manager);
 	vkDestroyShaderModule(m_base.device, frag_module, host_memory_manager);
-}
-
-void basic_pass::create_descriptor_set_layout()
-{
-	//camera dsl
-	VkDescriptorSetLayoutBinding binding = {};
-	binding.binding = 0;
-	binding.descriptorCount = 1;
-	binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkDescriptorSetLayoutCreateInfo dsl_info = {};
-	dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	dsl_info.bindingCount = 1;
-	dsl_info.pBindings = &binding;
-
-	if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, host_memory_manager, &m_cam_dsl) != VK_SUCCESS)
-		throw std::runtime_error("failed to create camera dsl!");
 }
 
 void basic_pass::create_depth_and_per_frame_buffer()
@@ -420,51 +412,8 @@ void basic_pass::create_framebuffers()
 
 void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_maks)
 {
-	//record secondary command buffers (if necessary)
-	for (uint32_t i = 0; i < MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++i)
-	{
-		if (record_maks[i] && !m_renderables[i].empty())
-		{
-			for (uint32_t j = 0; j < m_secondary_cbs[i].size(); ++j)
-			{
-				auto cb = m_secondary_cbs[i][j];
-				uint32_t mat_type = i / LIFE_EXPECTANCY_COUNT;
-
-				VkCommandBufferInheritanceInfo inheritance = {};
-				inheritance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-				inheritance.framebuffer = m_fbs[j];
-				inheritance.occlusionQueryEnable = VK_FALSE;
-				inheritance.renderPass = m_pass;
-				inheritance.subpass = 0;
-
-				VkCommandBufferBeginInfo cb_begin = {};
-				cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-				cb_begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-				cb_begin.pInheritanceInfo = &inheritance;
-
-				vkBeginCommandBuffer(cb, &cb_begin);
-				vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[mat_type]);
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_per_frame_dsls[mat_type], 0, 1,
-					&m_per_frame_dss[mat_type], 0, nullptr);
-
-				for (auto& r : m_renderables[i])
-				{
-					vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 1, 2, &r.tr_ds, 0, nullptr);
-					vkCmdBindIndexBuffer(cb, r.ib, 0, VK_INDEX_TYPE_UINT32);
-					VkBuffer vbs[] = { r.vb, r.veb };
-					if (vbs[1] == VK_NULL_HANDLE)
-						vbs[1] = vbs[0];
-					VkDeviceSize offsets[] = { 0,0 };
-					vkCmdBindVertexBuffers(cb, 0, 2, vbs, offsets);
-					vkCmdDrawIndexed(cb, r.size, 1, 0, 0, 0);
-				}
-
-				if (vkEndCommandBuffer(cb) != VK_SUCCESS)
-					throw std::runtime_error("failed to record command buffer!");
-			}
-
-		}
-	}
+	for (auto& rm : m_record_masks)
+		rm |= record_maks;
 
 	//acquire swap chain image
 	uint32_t image_index;
@@ -474,6 +423,56 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 	{
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
+
+	if (vkWaitForFences(m_base.device, 1, &m_primary_cb_finished_fs[image_index], VK_TRUE,
+		std::numeric_limits<uint64_t>::max()) != VK_SUCCESS)
+		throw std::runtime_error("failed to wait for fence!");
+
+	//record secondary command buffers (if necessary)
+	for (uint32_t i = 0; i < MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++i)
+	{
+		if (m_record_masks[image_index][i] && !m_renderables[i].empty())
+		{
+
+			auto cb = m_secondary_cbs[i][image_index];
+			uint32_t mat_type = i / LIFE_EXPECTANCY_COUNT;
+
+			VkCommandBufferInheritanceInfo inheritance = {};
+			inheritance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+			inheritance.framebuffer = m_fbs[image_index];
+			inheritance.occlusionQueryEnable = VK_FALSE;
+			inheritance.renderPass = m_pass;
+			inheritance.subpass = 0;
+
+			VkCommandBufferBeginInfo cb_begin = {};
+			cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			cb_begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+			cb_begin.pInheritanceInfo = &inheritance;
+
+			vkBeginCommandBuffer(cb, &cb_begin);
+			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[mat_type]);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 0, 1,
+				&m_per_frame_dss[mat_type], 0, nullptr);
+
+			for (auto& r : m_renderables[i])
+			{
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 1, 1, &r.tr_ds, 0, nullptr);
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 2, 1, &r.mat_ds, 0, nullptr);
+				vkCmdBindIndexBuffer(cb, r.ib, 0, VK_INDEX_TYPE_UINT32);
+				VkBuffer vbs[] = { r.vb, r.veb };
+				if (vbs[1] == VK_NULL_HANDLE)
+					vbs[1] = vbs[0];
+				VkDeviceSize offsets[] = { 0,0 };
+				vkCmdBindVertexBuffers(cb, 0, 2, vbs, offsets);
+				vkCmdDrawIndexed(cb, r.size, 1, 0, 0, 0);
+			}
+
+			if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+				throw std::runtime_error("failed to record command buffer!");
+		}	
+	}
+	m_record_masks[image_index].reset();
+
 	// copy camera data
 	if (cam)
 		memcpy(m_per_frame_b_data, &cam.value(), sizeof(camera_data));
@@ -526,7 +525,8 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 	VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	submit.pWaitDstStageMask = &wait_stage;
 
-	if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS)
+	vkResetFences(m_base.device, 1, &m_primary_cb_finished_fs[image_index]);
+	if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, m_primary_cb_finished_fs[image_index]) != VK_SUCCESS)
 		throw std::runtime_error("failed to submit command buffer!");
 
 	VkPresentInfoKHR present = {};
@@ -539,6 +539,7 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 
 	if (vkQueuePresentKHR(m_base.present_queue, &present) != VK_SUCCESS)
 		throw std::runtime_error("failed to present image!");
+
 }
 
 void basic_pass::allocate_command_buffers()
@@ -561,6 +562,7 @@ void basic_pass::allocate_command_buffers()
 	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	if (vkAllocateCommandBuffers(m_base.device, &alloc_info, m_primary_cbs.data()) != VK_SUCCESS)
 		throw std::runtime_error("failed to allocate primary command buffers!");
+
 }
 
 void basic_pass::create_per_frame_resources()
@@ -616,4 +618,34 @@ void basic_pass::create_per_frame_resources()
 	write.pBufferInfo = &buffer_info;
 	
 	vkUpdateDescriptorSets(m_base.device, 1, &write, 0, nullptr);
+}
+
+void basic_pass::create_semaphores()
+{
+	VkSemaphoreCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	
+	if (vkCreateSemaphore(m_base.device, &info, host_memory_manager, &m_image_available_s) != VK_SUCCESS ||
+		vkCreateSemaphore(m_base.device, &info, host_memory_manager, &m_render_finished_s) != VK_SUCCESS)
+		throw std::runtime_error("failed to create semaphores!");
+}
+
+void basic_pass::create_fences()
+{
+	VkFenceCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+	m_primary_cb_finished_fs.resize(m_primary_cbs.size());
+	for (auto& f : m_primary_cb_finished_fs)
+	{
+		if (vkCreateFence(m_base.device, &info, host_memory_manager, &f) != VK_SUCCESS)
+			throw std::runtime_error("failed to create fence!");
+	}
+}
+
+void basic_pass::wait_for_finish()
+{
+	if (vkWaitForFences(m_base.device, static_cast<uint32_t>(m_primary_cb_finished_fs.size()), m_primary_cb_finished_fs.data(), VK_TRUE,
+		std::numeric_limits<uint64_t>::max()) != VK_SUCCESS)
+		throw std::runtime_error("failed to wait for fences!");
 }

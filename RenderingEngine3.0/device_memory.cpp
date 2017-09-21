@@ -6,7 +6,7 @@ const size_t device_memory::BLOCK_SIZE[USAGE_COUNT] = { 128, 128 };
 
 device_memory* device_memory::m_instance = nullptr;
 
-device_memory::device_memory(const base_info& base) : m_base(base)
+device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info{}
 {
 	VkPhysicalDeviceProperties props;
 	vkGetPhysicalDeviceProperties(m_base.physical_device, &props);
@@ -14,11 +14,42 @@ device_memory::device_memory(const base_info& base) : m_base(base)
 
 	constexpr size_t ideal_cell_size = std::max(sizeof(transform_data), sizeof(material_data));
 
-	m_cell_size = calc_offset(alignment, ideal_cell_size);
+	// = calc_offset(alignment, ideal_cell_size);
 
-	m_alloc_info[0].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	m_alloc_info[0].allocationSize = ideal_cell_size;
-	//m_alloc_info should be init!!!
+	VkBufferCreateInfo buffer_info = {};
+	buffer_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	buffer_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	buffer_info.size = ideal_cell_size;
+	buffer_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	VkBuffer temp_buffer;
+	if (vkCreateBuffer(m_base.device, &buffer_info, host_memory_manager, &temp_buffer) != VK_SUCCESS)
+		throw std::runtime_error("failed to create buffer!");
+
+	VkMemoryRequirements mr;
+	vkGetBufferMemoryRequirements(m_base.device, temp_buffer, &mr);
+	m_cell_size[USAGE_STATIC] = calc_offset(alignment, static_cast<size_t>(mr.size));
+
+	m_alloc_info[USAGE_STATIC].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	m_alloc_info[USAGE_STATIC].allocationSize = m_cell_size[USAGE_STATIC]*BLOCK_SIZE[USAGE_STATIC];
+	m_alloc_info[USAGE_STATIC].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, 
+		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	vkDestroyBuffer(m_base.device, temp_buffer, host_memory_manager);
+
+	buffer_info.size = ideal_cell_size;
+	buffer_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	if (vkCreateBuffer(m_base.device, &buffer_info, host_memory_manager, &temp_buffer) != VK_SUCCESS)
+		throw std::runtime_error("failed to create buffer!");
+
+	vkGetBufferMemoryRequirements(m_base.device, temp_buffer, &mr);
+	m_cell_size[USAGE_DYNAMIC] = calc_offset(alignment, static_cast<size_t>(mr.size));
+
+	m_alloc_info[USAGE_DYNAMIC].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	m_alloc_info[USAGE_DYNAMIC].allocationSize = m_cell_size[USAGE_DYNAMIC]*BLOCK_SIZE[USAGE_DYNAMIC];
+	m_alloc_info[USAGE_DYNAMIC].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
+		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	vkDestroyBuffer(m_base.device, temp_buffer, host_memory_manager);
 }
 
 
@@ -65,7 +96,7 @@ cell_info device_memory::alloc_buffer_memory(USAGE usage, VkBuffer buffer, void*
 		vkBindBufferMemory(m_base.device, buffer, m_blocks[usage][cell.first], cell.second);
 		if (usage == USAGE_DYNAMIC)
 		{
-			vkMapMemory(m_base.device, m_blocks[usage][cell.first], cell.second, m_cell_size, 0, mapped_data);
+			vkMapMemory(m_base.device, m_blocks[USAGE_DYNAMIC][cell.first], cell.second, m_cell_size[USAGE_DYNAMIC], 0, mapped_data);
 		}
 		return cell;
 	}
@@ -75,13 +106,17 @@ cell_info device_memory::alloc_buffer_memory(USAGE usage, VkBuffer buffer, void*
 		throw std::runtime_error("failed to allocate memory!");
 	uint32_t block_id = m_blocks[usage].size();
 	m_blocks[usage].push_back(new_block);
-	auto offset = m_cell_size;
+	auto offset = m_cell_size[usage];
 	for (size_t i = 0; i < BLOCK_SIZE[usage] - 1; ++i)
 	{
 		m_available_cells[usage].emplace_hint(m_available_cells[usage].end(), block_id, offset);
-		offset += m_cell_size;
+		offset += m_cell_size[usage];
 	}
 	vkBindBufferMemory(m_base.device, buffer, m_blocks[usage][block_id], 0);
+	if (usage == USAGE_DYNAMIC)
+	{
+		vkMapMemory(m_base.device, m_blocks[USAGE_DYNAMIC][block_id], 0, m_cell_size[USAGE_DYNAMIC], 0, mapped_data);
+	}
 	return { block_id, 0 };
 }
 
@@ -89,9 +124,9 @@ void device_memory::free_buffer(USAGE usage, const cell_info& cell)
 {
 	std::lock_guard<std::mutex> lock(m_block_mutexes[usage]);
 	m_available_cells[usage].insert(cell);
-
+	
 	if (auto range = m_available_cells[usage].equal_range(cell.first);
-		std::distance(range.second, range.first)==BLOCK_SIZE[usage]-1 && m_available_cells[usage].size() > BLOCK_SIZE[usage])
+		std::distance(range.first, range.second) ==BLOCK_SIZE[usage] && m_available_cells[usage].size() > BLOCK_SIZE[usage])
 	{
 		m_available_cells[usage].erase(range.first, range.second);
 		vkFreeMemory(m_base.device, m_blocks[usage][cell.first], host_memory_manager); 

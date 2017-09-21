@@ -15,24 +15,25 @@ namespace rcq
 		static basic_pass* instance() { return m_instance; }
 
 		void record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_maks);
+		void wait_for_finish();
 
 	private:
 		basic_pass(const base_info& info, const renderable_container& renderables);
 		
 		void create_render_pass();
-		void create_descriptor_set_layout();
+		void create_per_frame_resources();
 		void create_graphics_pipelines();
 		void create_command_pool();
-		void create_depth_and_per_frame_buffer();
-		void create_per_frame_resources();
+		void create_depth_and_per_frame_buffer();	
 		void create_framebuffers();
 		void allocate_command_buffers();
+		void create_semaphores();
+		void create_fences();
 
 		static basic_pass* m_instance;
 		
 		const base_info m_base;
 		VkRenderPass m_pass;
-		VkDescriptorSetLayout m_cam_dsl;
 
 		texture m_depth_tex;
 
@@ -56,7 +57,9 @@ namespace rcq
 
 		VkSemaphore m_image_available_s;
 		VkSemaphore m_render_finished_s;
-
+		
+		std::vector<VkFence> m_primary_cb_finished_fs;
+		std::vector<std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>> m_record_masks;
 
 	};
 

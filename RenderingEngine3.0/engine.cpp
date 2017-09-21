@@ -38,6 +38,8 @@ engine::engine()
 
 	base::init(base_info);
 	m_base = base::instance()->get_info();
+	m_window_size.x = static_cast<float>(m_base.swap_chain_image_extent.width);
+	m_window_size.y = static_cast<float>(m_base.swap_chain_image_extent.height);
 
 	device_memory::init(m_base);
 	resource_manager::init(m_base);
@@ -51,8 +53,8 @@ engine::engine()
 engine::~engine()
 {
 	disassembler::destroy();
-	basic_pass::destroy();
 	core::destroy();
+	basic_pass::destroy();
 	resource_manager::destroy();
 	device_memory::destroy();
 	base::destroy();

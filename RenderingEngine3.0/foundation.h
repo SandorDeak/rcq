@@ -168,10 +168,10 @@ namespace rcq
 	struct material_data
 	{
 		glm::vec3 color;
-		uint32_t flags;
-		float metal;
 		float roughness;
-		float refraction_index;
+		float metal;
+		float height_scale;
+		uint32_t flags;
 	};
 
 
@@ -341,6 +341,7 @@ namespace rcq
 		VkDescriptorSet mat_ds;
 		uint32_t type;
 		bool destroy;
+		unique_id id;
 	};
 
 	typedef std::array<std::vector<renderable>, MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> renderable_container;
@@ -507,7 +508,7 @@ namespace rcq
 		return std::array<VkVertexInputBindingDescription, 2>{vertex_binding, vertex_ext_binding};
 	}
 
-	constexpr decltype(auto) get_vetex_input_attribute_descriptions()
+	constexpr decltype(auto) get_vertex_input_attribute_descriptions()
 	{
 		auto vertex_attribs = vertex::get_attribute_descriptions();
 		auto vertex_ext_attribs = vertex_ext::get_attribute_descriptions();

@@ -17,6 +17,7 @@ namespace rcq
 		static engine* instance() { return m_instance; }
 
 		GLFWwindow* get_window() { return m_base.window; }
+		glm::vec2 get_window_size() { return m_window_size; }
 
 		template<RESOURCE_TYPE type, typename... Ts>
 		void cmd_build(Ts&&... args)
@@ -38,26 +39,36 @@ namespace rcq
 
 		void cmd_build_renderable(unique_id id, unique_id tr_id, unique_id mesh_id, unique_id mat_id, LIFE_EXPECTANCY life_exp)
 		{
+			if (!m_command_p->core_p)
+				m_command_p->core_p.emplace();
 			m_command_p->core_p.value().build_renderable.emplace_back(id, tr_id, mesh_id, mat_id, life_exp);
 		}
 
 		void cmd_destroy_renderable(unique_id uid)
 		{
+			if (!m_command_p->core_p)
+				m_command_p->core_p.emplace();
 			m_command_p->core_p.value().destroy_renderable.push_back(uid);
 		}
 
 		void cmd_update_camera(const camera_data& cam)
 		{
+			if (!m_command_p->core_p)
+				m_command_p->core_p.emplace();
 			m_command_p->core_p.value().update_cam = cam;
 		}
 
 		void cmd_update_transform(unique_id id, const transform_data& tr_data)
 		{
+			if (!m_command_p->core_p)
+				m_command_p->core_p.emplace();
 			m_command_p->core_p.value().update_tr.emplace_back(id, tr_data);
 		}
 
 		void cmd_render()
 		{
+			if (!m_command_p->core_p)
+				m_command_p->core_p.emplace();
 			m_command_p->core_p.value().render = true;
 		}
 
@@ -66,6 +77,7 @@ namespace rcq
 	private:
 		engine();
 		static engine* m_instance;
+		glm::vec2 m_window_size;
 
 		std::unique_ptr<command_package> m_command_p;
 

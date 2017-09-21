@@ -2,6 +2,7 @@
 
 #include "structs.h"
 
+
 class entity
 {
 public:
@@ -9,9 +10,11 @@ public:
 	virtual ~entity();
 
 protected:
-	mesh m_mesh;
-	size_t m_material_index;
-	transform m_transform;
-	rcq::unique_id id;
+	friend class scene;
+
+	rcq::unique_id m_mesh_id;
+	rcq::unique_id m_material_id;
+	rcq::unique_id m_transform_id;
+	rcq::unique_id m_id;
 };
 

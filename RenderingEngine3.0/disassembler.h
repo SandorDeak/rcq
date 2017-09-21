@@ -16,9 +16,10 @@ namespace rcq
 
 		void push_package(std::unique_ptr<command_package>&& package)
 		{
-			while (m_command_queue.size() >= DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE); //blocking
+			std::unique_lock<std::mutex> lock(m_command_queue_mutex);
+			if (m_command_queue.size() >= DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE)
+				m_command_queue_condvar.wait(lock, [this]() {return m_command_queue.size() < DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE; }); //blocking
 
-			std::lock_guard<std::mutex> lock(m_command_queue_mutex);
 			m_command_queue.push(std::move(package));
 		}
 
@@ -34,6 +35,7 @@ namespace rcq
 
 		std::queue<std::unique_ptr<command_package>> m_command_queue;
 		std::mutex m_command_queue_mutex;
+		std::condition_variable m_command_queue_condvar;
 
 	};
 

@@ -57,6 +57,9 @@ resource_manager::resource_manager(const base_info& info) : m_base(info)
 
 resource_manager::~resource_manager()
 {
+	m_should_end_build = true;
+	m_build_thread.join();
+
 	vkUnmapMemory(m_base.device, m_single_cell_sb_mem);
 	vkUnmapMemory(m_base.device, m_sb_mem);
 	vkDestroyBuffer(m_base.device, m_single_cell_sb, host_memory_manager);
@@ -64,6 +67,9 @@ resource_manager::~resource_manager()
 	auto destroy = std::make_unique<destroy_package>();
 	destroy->ids[RESOURCE_TYPE_MEMORY].push_back(~0);
 	push_destroy_package(std::move(destroy));
+	
+	m_should_end_destroy = true;
+	m_destroy_thread.join();	
 
 	for (auto& sampler : m_samplers)
 		vkDestroySampler(m_base.device, sampler, host_memory_manager);
@@ -74,13 +80,8 @@ resource_manager::~resource_manager()
 		for (auto& dp : dpp.pools)
 			vkDestroyDescriptorPool(m_base.device, dp, host_memory_manager);
 	}
-	vkDestroyCommandPool(m_base.device, m_cp, host_memory_manager);
-
-
-	m_should_end_build = true;
-	m_build_thread.join();
-	m_should_end_destroy = true;
-	m_destroy_thread.join();
+	vkDestroyCommandPool(m_base.device, m_cp_build, host_memory_manager);
+	vkDestroyCommandPool(m_base.device, m_cp_update, host_memory_manager);
 
 	//checking that resources was destroyed properly
 	check_resource_leak(std::make_index_sequence<RESOURCE_TYPE_COUNT>());
@@ -139,21 +140,24 @@ void rcq::resource_manager::process_build_package(build_package&& package)
 
 void resource_manager::destroy_loop()
 {
+	bool should_check_pending_destroys = false;
 
-	while (!m_should_end_destroy || !m_destroy_p_queue.empty())
+	while (!m_should_end_destroy || !m_destroy_p_queue.empty() || should_check_pending_destroys)
 	{
-		bool should_check_pending_destroys = false;
-		for (uint32_t i = 0; i < RESOURCE_TYPE_COUNT; ++i)
-		{
-			if (!m_pending_destroys[i].empty())
-				should_check_pending_destroys = true;
-		}
+		
 		if (should_check_pending_destroys) //happens only if invalid id is given, or resource was never used 
 		{
 			std::lock_guard<std::mutex> lock_proc(m_resources_proc_mutex);
 			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			check_pending_destroys(std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 		}
+		should_check_pending_destroys = false;
+		for (uint32_t i = 0; i < RESOURCE_TYPE_COUNT; ++i)
+		{
+			if (!m_pending_destroys[i].empty())
+				should_check_pending_destroys = true;
+		}
+
 		if (!m_destroy_p_queue.empty())
 		{
 			std::unique_ptr<destroy_package> package;
@@ -162,9 +166,9 @@ void resource_manager::destroy_loop()
 				package = std::move(m_destroy_p_queue.front());
 				m_destroy_p_queue.pop();
 			}
-			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			if (package->destroy_confirmation.has_value())
 				package->destroy_confirmation.value().wait();
+			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			process_destroy_package(package->ids, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 			
 		}
@@ -372,7 +376,7 @@ mesh resource_manager::build(const std::string& filename, bool calc_tb)
 	vkUnmapMemory(m_base.device, sb_mem);
 
 	//transfer from staging buffer
-	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp);
+	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
 	VkBufferCopy copy_region = {};
 	copy_region.dstOffset = 0;
 	copy_region.size = vb_size;
@@ -390,7 +394,7 @@ mesh resource_manager::build(const std::string& filename, bool calc_tb)
 		vkCmdCopyBuffer(cb, sb, _mesh.veb, 1, &copy_region);
 	}
 
-	end_single_time_command_buffer(m_base.device, m_cp, m_base.graphics_queue, cb);
+	end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
 
 	//destroy staging buffer
 	vkDestroyBuffer(m_base.device, sb, host_memory_manager);
@@ -430,14 +434,14 @@ material resource_manager::build(const material_data& data, const texfiles& file
 	memcpy(m_single_cell_sb_data, &data, sizeof(material_data));
 
 	//copy to material data buffer
-	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp);
+	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
 
 	VkBufferCopy region = {};
 	region.dstOffset = 0;
 	region.srcOffset = 0;
 	region.size = sizeof(material_data);
-	vkCmdCopyBuffer(cb, m_sb, mat.data, 1, &region);
-	end_single_time_command_buffer(m_base.device, m_cp, m_base.graphics_queue, cb);
+	vkCmdCopyBuffer(cb, m_single_cell_sb, mat.data, 1, &region);
+	end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
 
 	//allocate descriptor set
 	VkDescriptorSetAllocateInfo alloc_info = {};
@@ -514,6 +518,8 @@ transform resource_manager::build(const transform_data& data, USAGE usage)
 	buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	buffer_create_info.size = sizeof(transform_data);
 	buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	if (usage == USAGE_STATIC)
+		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	if (vkCreateBuffer(m_base.device, &buffer_create_info, host_memory_manager, &tr.buffer) != VK_SUCCESS)
 		throw std::runtime_error("failed to create transform buffer!");
 
@@ -527,14 +533,14 @@ transform resource_manager::build(const transform_data& data, USAGE usage)
 		memcpy(m_single_cell_sb_data, &data, sizeof(transform_data));
 
 		//copy to transform data buffer
-		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp);
+		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
 
 		VkBufferCopy region = {};
 		region.dstOffset = 0;
 		region.srcOffset = 0;
 		region.size = sizeof(transform_data);
-		vkCmdCopyBuffer(cb, m_sb, tr.buffer, 1, &region);
-		end_single_time_command_buffer(m_base.device, m_cp, m_base.graphics_queue, cb);
+		vkCmdCopyBuffer(cb, m_single_cell_sb, tr.buffer, 1, &region);
+		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
 	}
 
 	//allocate descriptor set
@@ -637,7 +643,7 @@ void rcq::resource_manager::update_tr(const std::vector<update_tr_info>& trs)
 
 	for (const auto& tr_info : trs)
 	{
-		auto tr = std::get<RESOURCE_TYPE_TR>(m_resources_ready)[std::get<UPDATE_TR_INFO_TR_ID>(tr_info)];
+		auto& tr = get<RESOURCE_TYPE_TR>(std::get<UPDATE_TR_INFO_TR_ID>(tr_info));
 		if (tr.usage==USAGE_DYNAMIC)
 			memcpy(tr.data, &std::get<UPDATE_TR_INFO_TR_DATA>(tr_info), sizeof(transform_data));
 		else
@@ -646,12 +652,12 @@ void rcq::resource_manager::update_tr(const std::vector<update_tr_info>& trs)
 
 	if (static_count!=0)
 	{
-		size_t cell_size = device_memory::instance()->get_cell_size();
+		size_t cell_size = device_memory::instance()->get_cell_size(USAGE_STATIC);
 
 		size_t i = 0;
 		while (static_count != 0)
 		{
-			VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp);
+			VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_update);
 
 			VkBufferCopy region = {};
 			region.size = sizeof(transform_data);
@@ -669,11 +675,11 @@ void rcq::resource_manager::update_tr(const std::vector<update_tr_info>& trs)
 					vkCmdCopyBuffer(cb, m_sb, tr.buffer, 1, &region);
 					region.srcOffset += cell_size;
 					++processed_static_count;
-					--static_count;
 				}
 			}
+			static_count -= processed_static_count;
 
-			end_single_time_command_buffer(m_base.device, m_cp, m_base.graphics_queue, cb);
+			end_single_time_command_buffer(m_base.device, m_cp_update, m_base.graphics_queue, cb);
 		}
 	}
 }
@@ -755,7 +761,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	barrier.subresourceRange.layerCount = 1;
 	barrier.subresourceRange.levelCount = 1;
 
-	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp);
+	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
 	vkCmdPipelineBarrier(
 		cb,
 		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -804,7 +810,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 		1, &barrier
 	);
 
-	end_single_time_command_buffer(m_base.device, m_cp,
+	end_single_time_command_buffer(m_base.device, m_cp_build,
 		m_base.graphics_queue, cb);
 
 	//destroy staging buffer
@@ -861,7 +867,7 @@ void rcq::resource_manager::create_samples()
 
 void resource_manager::create_staging_buffers()
 {
-	size_t cell_size = device_memory::instance()->get_cell_size();
+	constexpr size_t cell_size = std::max(sizeof(transform_data), sizeof(material_data));
 
 	//create single time sb
 	VkBufferCreateInfo sb_info = {};
@@ -882,7 +888,7 @@ void resource_manager::create_staging_buffers()
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 	//create sb
-	sb_info.size=STAGING_BUFFER_CELL_COUNT*cell_size;
+	sb_info.size=STAGING_BUFFER_CELL_COUNT*device_memory::instance()->get_cell_size(USAGE_STATIC);
 	if (vkCreateBuffer(m_base.device, &sb_info, host_memory_manager, &m_sb) != VK_SUCCESS)
 		throw std::runtime_error("failed to create staging buffer!");
 	vkGetBufferMemoryRequirements(m_base.device, m_sb, &mr);
@@ -936,6 +942,7 @@ void resource_manager::create_descriptor_set_layouts()
 
 	VkDescriptorSetLayoutBinding material_bindings[TEX_TYPE_COUNT + 1];
 	material_bindings[0] = ub_binding;
+	material_bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 	for (size_t i = 1; i < TEX_TYPE_COUNT + 1; ++i)
 	{
 		tex_binding.binding = i;
@@ -960,32 +967,32 @@ inline void resource_manager::extend_descriptor_pool_pool()
 	VkDescriptorPoolCreateInfo dp_info = {};
 	dp_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	dp_info.maxSets = DESCRIPTOR_POOL_SIZE;
+	dp_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 
-	VkDescriptorPool new_pool;
+	std::array<VkDescriptorPoolSize, 2> dp_size = {};
+	dp_info.pPoolSizes = dp_size.data();
 
 	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_TR)
 	{
-		VkDescriptorPoolSize dp_size = {};
-		dp_size.descriptorCount = 1;
-		dp_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
+		dp_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
 		dp_info.poolSizeCount = 1;
-		dp_info.pPoolSizes = &dp_size;
 	}
 
 	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_MAT)
 	{
-		std::array<VkDescriptorPoolSize, 2> dp_size = {};
-		dp_size[0].descriptorCount = 1;
+		
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
 		dp_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		dp_size[1].descriptorCount = TEX_TYPE_COUNT;
+		dp_size[1].descriptorCount = TEX_TYPE_COUNT*DESCRIPTOR_POOL_SIZE;
 		dp_size[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 		dp_info.poolSizeCount = 2;
-		dp_info.pPoolSizes = dp_size.data()
 
 	}
 
+	VkDescriptorPool new_pool;
 	if (vkCreateDescriptorPool(m_base.device, &dp_info, host_memory_manager, &new_pool) != VK_SUCCESS)
 		throw std::runtime_error("failed to create descriptor pool!");
 
@@ -1000,6 +1007,7 @@ void resource_manager::create_command_pool()
 	cp_info.queueFamilyIndex = m_base.queue_families.graphics_family;
 	cp_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
-	if (vkCreateCommandPool(m_base.device, &cp_info, host_memory_manager, &m_cp) != VK_SUCCESS)
+	if (vkCreateCommandPool(m_base.device, &cp_info, host_memory_manager, &m_cp_build) != VK_SUCCESS ||
+		vkCreateCommandPool(m_base.device, &cp_info, host_memory_manager, &m_cp_update) != VK_SUCCESS)
 		throw std::runtime_error("failed to create command pool!");
 }

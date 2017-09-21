@@ -46,7 +46,8 @@ namespace rcq
 
 		const base_info m_base;
 
-		VkCommandPool m_cp;
+		VkCommandPool m_cp_build;
+		VkCommandPool m_cp_update;
 
 		//resources
 		VkBuffer m_single_cell_sb; //used by build thread

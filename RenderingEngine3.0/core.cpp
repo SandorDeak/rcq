@@ -59,25 +59,28 @@ void core::loop()
 		{
 			std::unique_ptr<core_package> package;
 			{
-				std::lock_guard<std::mutex> lock(m_package_queue_mutex);
+				std::unique_lock<std::mutex> lock(m_package_queue_mutex);
 				package = std::move(m_package_queue.front());
 				m_package_queue.pop();
+				if (m_package_queue.size() == CORE_COMMAND_QUEUE_MAX_SIZE - 1)
+					m_package_queue_condvar.notify_one();
 			}
-
-			if (package->confirm_destroy)
-				package->confirm_destroy->set_value();
 		
 			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_renderables(false);
 
 			for (auto& destroy_id : package->destroy_renderable)
 			{
-				auto it = m_renderable_refs.find(destroy_id);
-				if (it == m_renderable_refs.end())
+				auto it = m_renderable_type_table.find(destroy_id);
+				if (it == m_renderable_type_table.end())
 					throw std::runtime_error("cannot delete renderable with the given id, it doesn't exist!");
-				it->second.destroy = true;
-				remove_deleted_renderables.set(it->second.type);
-				record_mask.set(it->second.type);
-				m_renderable_refs.erase(it);
+				for (auto& r : m_renderables[it->second])
+				{
+					if (r.id == destroy_id)
+						r.destroy = true;
+				}
+				remove_deleted_renderables.set(it->second);
+				record_mask.set(it->second);
+				m_renderable_type_table.erase(it);
 			}
 
 			for (size_t i = 0; i < m_renderables.size(); ++i)
@@ -107,13 +110,15 @@ void core::loop()
 					_tr.ds,
 					_mat.ds,
 					type,
-					false
+					false,
+					std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(build_renderable)
 				};
 				record_mask.set(type);
 				
+				m_renderables[type].push_back(r);
 
-				if (!m_renderable_refs.insert_or_assign(std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(build_renderable),
-					m_renderables[type].emplace_back(std::move(r))).second)
+				if (!m_renderable_type_table.insert_or_assign(std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(build_renderable),
+					r.type).second)
 				{
 					throw std::runtime_error("id conflict!");
 				}
@@ -121,13 +126,24 @@ void core::loop()
 
 			}
 
-			resource_manager::instance()->update_tr(package->update_tr);
+			if (!package->update_tr.empty())
+			{
+				wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+				resource_manager::instance()->update_tr(package->update_tr);
+			}
 
 			if (package->render)
 			{
 				record_and_render(package->update_cam, record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
 				record_mask.reset();
 			}
+
+			if (package->confirm_destroy)
+			{
+				wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+				package->confirm_destroy->set_value();
+			}
 		}
 	}
+	
 }

@@ -2,19 +2,25 @@
 
 #include "foundation.h"
 
-enum MESH
+enum MESH : rcq::unique_id
 {
 	MESH_BUDDHA,
 	MESH_COUNT
 };
 
-enum MAT
+enum MAT : rcq::unique_id
 {
 	MAT_GOLD,
 	MAT_COUNT
 };
 
-enum ENTITIY
+enum TR : rcq::unique_id
+{
+	TR_GOLD_BUDDHA,
+	TR_COUNT
+};
+
+enum ENTITIY : rcq::unique_id
 {
 	ENTITY_GOLD_BUDDHA,
 	ENTITY_COUNT

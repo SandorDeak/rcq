@@ -10,15 +10,15 @@ int main()
 	/*try
 	{ */
 		rcq::engine::init();
-		auto sc = new scene;
+		auto sc = new scene(rcq::engine::instance()->get_window_size());
 		GLFWwindow* window=rcq::engine::instance()->get_window();
 		auto time = std::chrono::high_resolution_clock::now();
 		while (!glfwWindowShouldClose(window))
 		{
 			glfwPollEvents();
-			//render should work on a different thread
 			auto now = std::chrono::high_resolution_clock::now();
 			float dt = std::chrono::duration_cast<std::chrono::milliseconds>(now - time).count()/1000.f;
+			std::cout << dt << std::endl;
 			time = now;
 			sc->update(dt);
 		}

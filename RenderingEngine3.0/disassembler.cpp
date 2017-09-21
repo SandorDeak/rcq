@@ -50,28 +50,28 @@ void disassembler::loop()
 		{
 			std::unique_ptr<command_package> package;
 			{
-				std::lock_guard<std::mutex> lock(m_command_queue_mutex);
+				std::unique_lock<std::mutex> lock(m_command_queue_mutex);
 				package = std::move(m_command_queue.front());
 				m_command_queue.pop();
+				if (m_command_queue.size() == DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE - 1)
+					m_command_queue_condvar.notify_one();
 			}
-			//resource_manager::instance()->process_package_async(std::move(package->resource_manager_p));
+
 			if (package->resource_manager_build_p)
 				resource_manager::instance()->process_build_package(std::move(package->resource_manager_build_p.value()));
-			if (package->core_p && package->resource_mananger_destroy_p)
+			if (package->resource_mananger_destroy_p)
 			{
-				package->core_p.value().confirm_destroy = {};
-				package->resource_mananger_destroy_p.value().destroy_confirmation = package->core_p.value().confirm_destroy->get_future();
-				
-				core::instance()->push_package(std::make_unique<core_package>(std::move(package->core_p.value())));
+				if (!package->core_p)
+					package->core_p.emplace();
+				package->core_p.value().confirm_destroy.emplace();
+				package->resource_mananger_destroy_p.value().destroy_confirmation.emplace(
+					package->core_p.value().confirm_destroy->get_future());
 				
 				resource_manager::instance()->push_destroy_package(
 					std::make_unique<destroy_package>(std::move(package->resource_mananger_destroy_p.value())));
 			}
-			else if (package->core_p)
+			if (package->core_p)
 				core::instance()->push_package(std::make_unique<core_package>(std::move(package->core_p.value())));
-			else if (package->resource_mananger_destroy_p)
-				resource_manager::instance()->push_destroy_package(
-					std::make_unique<destroy_package>(std::move(package->resource_mananger_destroy_p.value())));
 		}
 	}
 }

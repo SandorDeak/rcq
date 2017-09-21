@@ -5,7 +5,7 @@
 class scene
 {
 public:
-	scene();
+	scene(const glm::vec2& window_size);
 	~scene();
 	scene(const scene&) = delete;
 	scene(scene&&) = delete;
@@ -15,7 +15,8 @@ public:
 	void update(float dt);
 private:
 	void build();
-	void init_camera();
+
+	glm::vec2 m_window_size;
 
 	camera m_camera;
 	std::vector<entity> m_entities;
