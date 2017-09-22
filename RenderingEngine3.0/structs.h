@@ -4,24 +4,30 @@
 
 enum MESH : rcq::unique_id
 {
+	MESH_FLOOR,
+	MESH_SELF,
 	MESH_BUDDHA,
 	MESH_COUNT
 };
 
 enum MAT : rcq::unique_id
 {
+	MAT_OAKFLOOR,
+	MAT_BAMBOO_WOOD,
 	MAT_GOLD,
 	MAT_COUNT
 };
 
-enum TR : rcq::unique_id
+/*enum TR : rcq::unique_id
 {
 	TR_GOLD_BUDDHA,
 	TR_COUNT
-};
+};*/
 
 enum ENTITIY : rcq::unique_id
 {
+	ENTITY_FLOOR,
+	ENTITY_SELF,
 	ENTITY_GOLD_BUDDHA,
 	ENTITY_COUNT
 };
@@ -53,5 +59,7 @@ struct camera
 {
 	glm::mat4 proj;
 	glm::mat4 view;
+	glm::vec3 pos;
+	glm::vec3 look_dir;
 	rcq::camera_data data;
 };

@@ -233,7 +233,7 @@ bool base::device_is_suitable(VkPhysicalDevice device)
 
 	VkPhysicalDeviceProperties device_properties;
 	vkGetPhysicalDeviceProperties(device, &device_properties);
-	std::cout << device_properties.limits.maxFragmentOutputAttachments << std::endl;
+	//std::cout << device_properties.limits.maxFragmentOutputAttachments << std::endl;
 
 
 	//should write an algorithm for feature compare

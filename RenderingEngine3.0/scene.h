@@ -5,7 +5,7 @@
 class scene
 {
 public:
-	scene(const glm::vec2& window_size);
+	scene(GLFWwindow* window, const glm::vec2& window_size);
 	~scene();
 	scene(const scene&) = delete;
 	scene(scene&&) = delete;
@@ -15,6 +15,7 @@ public:
 	void update(float dt);
 private:
 	void build();
+	void update_camera(float dt);
 
 	glm::vec2 m_window_size;
 
@@ -24,5 +25,6 @@ private:
 	std::vector<material> m_mats;
 	std::vector<mesh> m_meshes;
 	std::vector<transform> m_trs;
+	GLFWwindow* m_window;
 };
 

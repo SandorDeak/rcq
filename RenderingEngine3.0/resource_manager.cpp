@@ -268,6 +268,7 @@ void load_mesh(const std::string& file_name, std::vector<vertex>& vertices, std:
 
 mesh resource_manager::build(const std::string& filename, bool calc_tb)
 {
+
 	std::vector<vertex> vertices;
 	std::vector<uint32_t> indices;
 	std::vector<vertex_ext> vertices_ext;
@@ -317,7 +318,6 @@ mesh resource_manager::build(const std::string& filename, bool calc_tb)
 	veb_mr.alignment = 1;
 	veb_mr.memoryTypeBits = ~0;
 	veb_mr.size = 0;
-
 	if (calc_tb)
 	{
 		VkBufferCreateInfo veb_info = {};
@@ -346,7 +346,7 @@ mesh resource_manager::build(const std::string& filename, bool calc_tb)
 
 	VkMemoryAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	alloc_info.memoryTypeIndex = find_memory_type(m_base.physical_device, veb_mr.memoryTypeBits & ib_mr.memoryTypeBits &
+	alloc_info.memoryTypeIndex = find_memory_type(m_base.physical_device, vb_mr.memoryTypeBits & ib_mr.memoryTypeBits &
 		veb_mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	alloc_info.allocationSize = size;
 
@@ -372,12 +372,12 @@ mesh resource_manager::build(const std::string& filename, bool calc_tb)
 	memcpy(data, vertices.data(), vb_size);
 	memcpy(data + vb_size, indices.data(), ib_size);
 	if (calc_tb)
-		memcpy(data + veb_size + ib_size, vertices_ext.data(), veb_size);
+		memcpy(data + vb_size + ib_size, vertices_ext.data(), veb_size);
 	vkUnmapMemory(m_base.device, sb_mem);
 
 	//transfer from staging buffer
 	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
-	VkBufferCopy copy_region = {};
+	VkBufferCopy copy_region = {};	
 	copy_region.dstOffset = 0;
 	copy_region.size = vb_size;
 	copy_region.srcOffset = 0;

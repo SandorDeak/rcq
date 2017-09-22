@@ -100,7 +100,7 @@ void core::loop()
 					std::get<BUILD_RENDERABLE_INFO_MESH_ID>(build_renderable));
 				transform _tr = resource_manager::instance()->get<RESOURCE_TYPE_TR>(
 					std::get<BUILD_RENDERABLE_INFO_TR_ID>(build_renderable));
-				uint32_t type = _mat.type*std::get<BUILD_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_renderable);
+				uint32_t type = LIFE_EXPECTANCY_COUNT*_mat.type+std::get<BUILD_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_renderable);
 
 				renderable r = {
 					_mesh.vb,

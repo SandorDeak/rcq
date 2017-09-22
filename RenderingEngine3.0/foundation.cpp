@@ -5,8 +5,8 @@
 const VkAllocationCallbacks* rcq::host_memory_manager = nullptr;
 
 
-const size_t rcq::DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE = 4;
-const size_t rcq::CORE_COMMAND_QUEUE_MAX_SIZE=4;
+const size_t rcq::DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE = 1;
+const size_t rcq::CORE_COMMAND_QUEUE_MAX_SIZE=1;
 
 
 std::vector<char> rcq::read_file(const std::string& filename)

@@ -105,7 +105,7 @@ void main()
 	}
 	if((mat.tex_flags & COLOR_TEX_FLAG_BIT)==COLOR_TEX_FLAG_BIT)
 	{
-		color=texture(color_tex, tex_coord).xyz;
+		color=pow(texture(color_tex, tex_coord).xyz, vec3(2.2));
 	}
 	else
 	{

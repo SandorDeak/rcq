@@ -454,7 +454,7 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 0, 1,
 				&m_per_frame_dss[mat_type], 0, nullptr);
 
-			for (auto& r : m_renderables[i])
+			for (const auto& r : m_renderables[i])
 			{
 				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 1, 1, &r.tr_ds, 0, nullptr);
 				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 2, 1, &r.mat_ds, 0, nullptr);
@@ -539,7 +539,7 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 
 	if (vkQueuePresentKHR(m_base.present_queue, &present) != VK_SUCCESS)
 		throw std::runtime_error("failed to present image!");
-
+		
 }
 
 void basic_pass::allocate_command_buffers()

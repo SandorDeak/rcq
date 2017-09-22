@@ -10,6 +10,7 @@ device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info
 {
 	VkPhysicalDeviceProperties props;
 	vkGetPhysicalDeviceProperties(m_base.physical_device, &props);
+	std::cout << props.deviceName << std::endl;
 	size_t alignment = static_cast<size_t>(props.limits.minUniformBufferOffsetAlignment);
 
 	constexpr size_t ideal_cell_size = std::max(sizeof(transform_data), sizeof(material_data));

@@ -10,8 +10,8 @@ int main()
 	/*try
 	{ */
 		rcq::engine::init();
-		auto sc = new scene(rcq::engine::instance()->get_window_size());
-		GLFWwindow* window=rcq::engine::instance()->get_window();
+		GLFWwindow* window = rcq::engine::instance()->get_window();
+		auto sc = new scene(window, rcq::engine::instance()->get_window_size());
 		auto time = std::chrono::high_resolution_clock::now();
 		while (!glfwWindowShouldClose(window))
 		{
