@@ -6,6 +6,9 @@
 # Additional files
 *.obj
 *.spv
+*.png
+*.jpg
+
 
 # User-specific files
 *.suo
