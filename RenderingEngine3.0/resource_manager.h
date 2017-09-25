@@ -71,6 +71,7 @@ namespace rcq
 			std::map<unique_id, material>,
 			std::map<unique_id, mesh>,
 			std::map<unique_id, transform>,
+			std::map <unique_id, light>,
 			std::map<unique_id, memory>
 		> m_resources_ready;
 		std::mutex m_resources_ready_mutex;
@@ -79,6 +80,7 @@ namespace rcq
 			std::map<unique_id, std::future<material>>,
 			std::map<unique_id, std::future<mesh>>,
 			std::map<unique_id, std::future<transform>>,
+			std::map <unique_id, std::future<light>>,
 			std::map<unique_id, std::future<memory>>
 		> m_resources_proc;
 		std::mutex m_resources_proc_mutex;
@@ -126,6 +128,7 @@ namespace rcq
 		mesh build(const std::string& filename, bool calc_tb);
 		material build(const material_data& data, const texfiles& files, MAT_TYPE type);
 		transform build(const transform_data& data, USAGE usage);
+		light build(const light_data& data, USAGE usage, bool make_shadow_map);
 		memory build(const std::vector<VkMemoryAllocateInfo>& requirements);
 		texture load_texture(const std::string& filename);
 
@@ -140,6 +143,7 @@ namespace rcq
 			std::vector<material>,
 			std::vector<mesh>,
 			std::vector<transform>,
+			std::vector<light>,
 			std::vector<memory>
 		> m_destroyables;
 
@@ -163,6 +167,7 @@ namespace rcq
 		void destroy(mesh&& _mesh);
 		void destroy(material&& _mat);
 		void destroy(transform&& _tr);
+		void destroy(light&& _light);
 		void destroy(memory&& _memory);
 
 	};

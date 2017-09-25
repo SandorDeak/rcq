@@ -959,6 +959,27 @@ void resource_manager::create_descriptor_set_layouts()
 	{
 		throw std::runtime_error("failed to create material descriptor set layout!");
 	}
+
+	//create light dsl
+	VkDescriptorSetLayoutBinding light_bindings[2];
+
+	light_bindings[0].binding = 0;
+	light_bindings[0].descriptorCount = 1;
+	light_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	light_bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	light_bindings[1].binding = 1;
+	light_bindings[1].descriptorCount = 1;
+	light_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+	VkDescriptorSetLayoutCreateInfo dsl_info = {};
+	dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	dsl_info.bindingCount = 2;
+	dsl_info.pBindings = light_bindings;
+
+	if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, host_memory_manager, 
+		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT]) != VK_SUCCESS)
+		throw std::runtime_error("failed to create light descriptor set layout!");
 }
 
 template<DESCRIPTOR_SET_LAYOUT_TYPE dsl_type>
@@ -1010,4 +1031,182 @@ void resource_manager::create_command_pool()
 	if (vkCreateCommandPool(m_base.device, &cp_info, host_memory_manager, &m_cp_build) != VK_SUCCESS ||
 		vkCreateCommandPool(m_base.device, &cp_info, host_memory_manager, &m_cp_update) != VK_SUCCESS)
 		throw std::runtime_error("failed to create command pool!");
+}
+
+light resource_manager::build(const light_data& data, USAGE usage, bool make_shadow_map)
+{
+	light l;
+	l.has_shadow_map = make_shadow_map;
+	l.usage = usage;
+	l.type = static_cast<LIGHT_TYPE>(data.index());
+
+	//create buffer
+	VkBufferCreateInfo buffer_create_info = {};
+	buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	buffer_create_info.size = sizeof(light_data);
+	buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+	if (usage == USAGE_STATIC)
+		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	if (vkCreateBuffer(m_base.device, &buffer_create_info, host_memory_manager, &l.buffer) != VK_SUCCESS)
+		throw std::runtime_error("failed to create transform buffer!");
+
+	//allocate memory and copy
+	l.cell = device_memory::instance()->alloc_buffer_memory(usage, l.buffer, &l.data);
+	if (usage == USAGE_DYNAMIC)
+		memcpy(l.data, &data, sizeof(light_data));
+	else
+	{
+		//copy to staging buffer
+		memcpy(m_single_cell_sb_data, &data, sizeof(light_data));
+
+		//copy to transform data buffer
+		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+
+		VkBufferCopy region = {};
+		region.dstOffset = 0;
+		region.srcOffset = 0;
+		region.size = sizeof(light_data);
+		vkCmdCopyBuffer(cb, m_single_cell_sb, l.buffer, 1, &region);
+		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
+	}
+
+	//allocate descriptor set
+	VkDescriptorSetAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	alloc_info.descriptorSetCount = 1;
+	alloc_info.pSetLayouts = &m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT];
+	pool_id p_id = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT].get_available_pool_id();
+	if (p_id == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT].pools.size())
+	{
+		extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT>();
+	}
+	alloc_info.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT].pools[p_id];
+	if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &l.ds) != VK_SUCCESS)
+		throw std::runtime_error("failed to allocate transform descriptor set!");
+	--m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT].availability[p_id];
+	l.pool_index = p_id;
+
+	//create shadow map (currently for omi light only)
+	if (make_shadow_map)
+	{
+		if (data.index() == LIGHT_TYPE_OMNI)
+		{
+			//create image
+			VkImageCreateInfo image_info = {};
+			image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			image_info.arrayLayers = 6;
+			image_info.extent.depth = 1;
+			image_info.extent.height = SHADOW_MAP_SIZE;
+			image_info.extent.width = SHADOW_MAP_SIZE;
+			image_info.format = VK_FORMAT_D32_SFLOAT;
+			image_info.imageType = VK_IMAGE_TYPE_2D;
+			image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			image_info.mipLevels = 1;
+			image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+			image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+			image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+			if (vkCreateImage(m_base.device, &image_info, host_memory_manager, &l.shadow_map.image) != VK_SUCCESS)
+				throw std::runtime_error("failed to create image!");
+
+			//alloc memory
+			VkMemoryRequirements mr;
+			vkGetImageMemoryRequirements(m_base.device, l.shadow_map.image, &mr);
+
+			VkMemoryAllocateInfo alloc_info = {};
+			alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			alloc_info.allocationSize = mr.size;
+			alloc_info.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			
+			if (vkAllocateMemory(m_base.device, &alloc_info, host_memory_manager, &l.shadow_map.memory) != VK_SUCCESS)
+				throw std::runtime_error("failed to allocate memory!");
+			vkBindImageMemory(m_base.device, l.shadow_map.image, l.shadow_map.memory, 0);
+
+			//create image view
+			VkImageViewCreateInfo view_info = {};
+			view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			view_info.format = VK_FORMAT_D32_SFLOAT;
+			view_info.image = l.shadow_map.image;
+			view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+			view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			view_info.subresourceRange.baseArrayLayer = 0;
+			view_info.subresourceRange.baseMipLevel = 0;
+			view_info.subresourceRange.layerCount = 6;
+			view_info.subresourceRange.levelCount = 1;
+
+			if (vkCreateImageView(m_base.device, &view_info, host_memory_manager, &l.shadow_map.view) != VK_SUCCESS)
+				throw std::runtime_error("failed to create image view!");
+
+			//transition to depth stencil optimal layout
+			VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+
+			VkImageMemoryBarrier barrier = {};
+			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+			barrier.image = l.shadow_map.image;
+			barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			barrier.srcAccessMask = 0;
+			barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			barrier.subresourceRange.baseArrayLayer = 0;
+			barrier.subresourceRange.baseMipLevel = 0;
+			barrier.subresourceRange.layerCount = 6;
+			barrier.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, nullptr,
+				0, nullptr, 1, &barrier);
+
+			end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
+
+			l.shadow_map.sampler_type = SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP;
+		}
+	}
+
+	//update descriptor set
+	VkDescriptorBufferInfo buffer_info;
+	buffer_info.buffer = l.buffer;
+	buffer_info.offset = 0;
+	buffer_info.range = sizeof(light_data);
+
+	VkWriteDescriptorSet write[2] = {};
+	write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write[0].descriptorCount = 1;
+	write[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	write[0].dstArrayElement = 0;
+	write[0].dstBinding = 0;
+	write[0].dstSet = l.ds;
+	write[0].pBufferInfo = &buffer_info;
+
+	if (make_shadow_map)
+	{
+		VkDescriptorImageInfo shadow_map_info = {};
+		shadow_map_info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		shadow_map_info.imageView = l.shadow_map.view;
+		shadow_map_info.sampler = m_samplers[SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP];
+
+		write[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write[1].descriptorCount = 1;
+		write[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		write[1].dstArrayElement = 0;
+		write[1].dstBinding = 1;
+		write[1].dstSet = l.ds;
+		write[1].pImageInfo = &shadow_map_info;
+
+		vkUpdateDescriptorSets(m_base.device, 2, write, 0, nullptr);
+	}
+	else
+	{
+		vkUpdateDescriptorSets(m_base.device, 1, write, 0, nullptr);
+	}
+
+	return l;
+}
+
+void resource_manager::destroy(light&& _light)
+{
+
 }

@@ -6,7 +6,9 @@ using namespace rcq;
 
 basic_pass* basic_pass::m_instance = nullptr;
 
-basic_pass::basic_pass(const base_info& info, const renderable_container& renderables): m_base(info), m_renderables(renderables)
+basic_pass::basic_pass(const base_info& info, const renderable_container& renderables, 
+	const light_renderable_container& light_renderables):
+	m_base(info), m_renderables(renderables), m_light_renderables(light_renderables)
 {
 	create_render_pass();
 	create_command_pool();
@@ -58,13 +60,14 @@ basic_pass::~basic_pass()
 	vkDestroyRenderPass(m_base.device, m_pass, host_memory_manager);
 }
 
-void basic_pass::init(const base_info& info, const renderable_container& renderables)
+void basic_pass::init(const base_info& info, const renderable_container& renderables,
+	const light_renderable_container& light_renderables)
 {
 	if (m_instance != nullptr)
 	{
 		throw std::runtime_error("core is already initialised!");
 	}
-	m_instance = new basic_pass(info, renderables);
+	m_instance = new basic_pass(info, renderables, light_renderables);
 }
 
 void basic_pass::destroy()
@@ -79,25 +82,37 @@ void basic_pass::destroy()
 
 void basic_pass::create_render_pass()
 {
-	VkAttachmentDescription color_attachment = {};
-	color_attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	color_attachment.format = m_base.swap_chain_image_format;
-	color_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	color_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	color_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	color_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-	color_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	color_attachment.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	VkAttachmentDescription a[ATTACHMENT_COUNT];
+
+	a[ATTACHMENT_COLOR_OUT].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	a[ATTACHMENT_COLOR_OUT].format = m_base.swap_chain_image_format;
+	a[ATTACHMENT_COLOR_OUT].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	a[ATTACHMENT_COLOR_OUT].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	a[ATTACHMENT_COLOR_OUT].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	a[ATTACHMENT_COLOR_OUT].samples = VK_SAMPLE_COUNT_1_BIT;
+	a[ATTACHMENT_COLOR_OUT].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	a[ATTACHMENT_COLOR_OUT].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	
-	VkAttachmentDescription depth_attachment = {};
-	depth_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	depth_attachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	depth_attachment.format = find_depth_format(m_base.physical_device);
-	depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	depth_attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	depth_attachment.samples = VK_SAMPLE_COUNT_1_BIT;
+	a[ATTACHMENT_DEPTH_STENCIL].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	a[ATTACHMENT_DEPTH_STENCIL].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	a[ATTACHMENT_DEPTH_STENCIL].format = find_depth_format(m_base.physical_device);
+	a[ATTACHMENT_DEPTH_STENCIL].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	a[ATTACHMENT_DEPTH_STENCIL].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	a[ATTACHMENT_DEPTH_STENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	a[ATTACHMENT_DEPTH_STENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	a[ATTACHMENT_DEPTH_STENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
+
+	for (int i = ATTACHMENT_POS; i < ATTACHMENT_COUNT; ++i)
+	{
+		a[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		a[i].format = m_base.swap_chain_image_format;
+		a[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		a[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		a[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+		a[i].samples = VK_SAMPLE_COUNT_1_BIT;
+		a[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		a[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	}
 
 	VkAttachmentReference color_ref = {};
 	color_ref.attachment = 0;
@@ -137,6 +152,124 @@ void basic_pass::create_render_pass()
 	{
 		throw std::runtime_error("failed to create render pass!");
 	}
+}
+
+void basic_pass::create_omni_light_graphics_pipelines()
+{
+	auto vert_code = read_file("shaders/basic_pass/subpass1/omni_light_shader/vert.spv");
+	auto frag_code = read_file("shaders/basic_pass/subpass1/omni_light_shader/frag.spv");
+
+	auto vert_module = create_shader_module(m_base.device, vert_code);
+	auto frag_module = create_shader_module(m_base.device, frag_code);
+
+	VkPipelineShaderStageCreateInfo shaders[2] = {};
+	shaders[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaders[0].module = vert_module;
+	shaders[0].pName = "main";
+	shaders[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+
+	shaders[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaders[1].module = frag_module;
+	shaders[1].pName = "main";
+	shaders[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	
+	VkPipelineVertexInputStateCreateInfo vertex_input = {};
+	vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertex_input.pVertexAttributeDescriptions = nullptr;
+	vertex_input.pVertexBindingDescriptions = 0;
+	vertex_input.vertexAttributeDescriptionCount = 0;
+	vertex_input.vertexBindingDescriptionCount = 0;
+
+	VkPipelineInputAssemblyStateCreateInfo assembly = {};
+	assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	assembly.primitiveRestartEnable = VK_FALSE;
+	assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+	
+	VkViewport vp = {};
+	vp.height = (float)m_base.swap_chain_image_extent.height;
+	vp.width = (float)m_base.swap_chain_image_extent.width;
+	vp.maxDepth = 1.f;
+	vp.minDepth = 0.f;
+
+	VkRect2D scissor = {};
+	scissor.extent = m_base.swap_chain_image_extent;
+	scissor.offset = { 0,0 };
+
+	VkPipelineViewportStateCreateInfo viewport = {};
+	viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewport.pScissors = &scissor;
+	viewport.pViewports = &vp;
+	viewport.scissorCount = 1;
+	viewport.viewportCount = 1;
+
+	VkPipelineRasterizationStateCreateInfo rasterizer = {};
+	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+	rasterizer.depthBiasEnable = VK_FALSE;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	rasterizer.lineWidth = 1.f;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizer.rasterizerDiscardEnable = VK_FALSE;
+
+	VkPipelineMultisampleStateCreateInfo multisample = {};
+	multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisample.alphaToCoverageEnable = VK_FALSE;
+	multisample.alphaToOneEnable = VK_FALSE;
+	multisample.minSampleShading = 0.f;
+	multisample.sampleShadingEnable = VK_FALSE;
+	multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+	VkPipelineColorBlendAttachmentState color_blend_attachment = {};
+	color_blend_attachment.blendEnable = VK_TRUE;
+	color_blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+		VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	color_blend_attachment.alphaBlendOp = VK_BLEND_OP_ADD;
+	color_blend_attachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	color_blend_attachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	color_blend_attachment.colorBlendOp = VK_BLEND_OP_ADD;
+	color_blend_attachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	color_blend_attachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+
+	VkPipelineColorBlendStateCreateInfo color_blend = {};
+	color_blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	color_blend.attachmentCount = 1;
+	color_blend.logicOp = VK_LOGIC_OP_COPY;
+	color_blend.logicOpEnable = VK_FALSE;
+	color_blend.pAttachments = &color_blend_attachment;
+
+	VkDescriptorSetLayout light_dsl = resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT);
+	VkPipelineLayoutCreateInfo layout = {};
+	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	layout.setLayoutCount = 1;
+	layout.pSetLayouts = &light_dsl;
+
+	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_light_pl) != VK_SUCCESS)
+		throw std::runtime_error("failed to create light pipeline layout!");
+
+	VkGraphicsPipelineCreateInfo gp_info = {};
+	gp_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	gp_info.basePipelineHandle = VK_NULL_HANDLE;
+	gp_info.basePipelineIndex = -1;
+	gp_info.layout = m_light_pl;
+	gp_info.pColorBlendState = &color_blend;
+	gp_info.pDepthStencilState = nullptr;
+	gp_info.pInputAssemblyState = &assembly;
+	gp_info.pMultisampleState = &multisample;
+	gp_info.pRasterizationState = &rasterizer;
+	gp_info.pStages = shaders;
+	gp_info.pVertexInputState = &vertex_input;
+	gp_info.pViewportState = &viewport;
+	gp_info.renderPass = m_pass;
+	gp_info.stageCount = 2;
+	gp_info.subpass = 1;
+
+	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &gp_info, host_memory_manager, &m_light_gps[LIGHT_TYPE_OMNI])
+		!= VK_SUCCESS)
+		throw std::runtime_error("failed to create graphics pipeline!");
+
+	vkDestroyShaderModule(m_base.device, vert_module, host_memory_manager);
+	vkDestroyShaderModule(m_base.device, frag_module, host_memory_manager);
 }
 
 void basic_pass::create_graphics_pipelines()

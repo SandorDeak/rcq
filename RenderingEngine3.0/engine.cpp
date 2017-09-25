@@ -44,7 +44,7 @@ engine::engine()
 	device_memory::init(m_base);
 	resource_manager::init(m_base);
 	core::init();
-	basic_pass::init(m_base, core::instance()->get_renderable_container());
+	basic_pass::init(m_base, core::instance()->get_renderable_container(), core::instance()->get_light_renderable_container());
 
 	disassembler::init();
 

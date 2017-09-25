@@ -27,6 +27,7 @@
 #include <tuple>
 #include <bitset>
 #include <iostream>
+#include <variant>
 
 
 namespace rcq
@@ -78,6 +79,14 @@ namespace rcq
 		//and more and more e.g. water, fire...
 	};
 
+	enum LIGHT_TYPE
+	{
+		LIGHT_TYPE_OMNI,
+		LIGHT_TYPE_SPOT,
+		LIGHT_TYPE_DIR,
+		LIGHT_TYPE_COUNT
+	};
+
 	enum RENDER_PASS
 	{
 		RENDER_PASS_BASIC,
@@ -89,6 +98,7 @@ namespace rcq
 		RESOURCE_TYPE_MAT,
 		RESOURCE_TYPE_MESH,
 		RESOURCE_TYPE_TR,
+		RESOURCE_TYPE_LIGHT,
 
 		//for render passes
 		RESOURCE_TYPE_MEMORY,
@@ -99,6 +109,7 @@ namespace rcq
 	enum SAMPLER_TYPE
 	{
 		SAMPLER_TYPE_SIMPLE,
+		SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP,
 		SAMPLER_TYPE_COUNT
 	};
 
@@ -106,12 +117,16 @@ namespace rcq
 	{
 		DESCRIPTOR_SET_LAYOUT_TYPE_MAT,
 		DESCRIPTOR_SET_LAYOUT_TYPE_TR,
+		DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT,
 		DESCRIPTOR_SET_LAYOUT_TYPE_COUNT
 	};
 
 	struct material_data;
 	struct transform_data;
 	struct camera_data;
+	struct omni_light_data;
+	struct spotlight_data;
+	struct dir_light_data;
 
 	
 
@@ -145,6 +160,17 @@ namespace rcq
 		BUILD_TR_INFO_USAGE
 	};
 
+	typedef std::variant<omni_light_data, spotlight_data, dir_light_data> light_data;
+	typedef std::tuple<unique_id, light_data, USAGE, bool> build_light_info; 
+	enum
+	{
+		BUILD_LIGHT_INFO_ID,
+		BUILD_LIGHT_INFO_DATA,
+		BUILD_LIGHT_INFO_USAGE,
+		BUILD_LIGHT_INFO_MAKE_SHADOW_MAP 
+	};  
+
+
 	typedef std::tuple<unique_id, std::vector<VkMemoryAllocateInfo>> build_memory_info;
 
 	typedef std::tuple<unique_id, unique_id, unique_id, unique_id, LIFE_EXPECTANCY> build_renderable_info;
@@ -155,6 +181,14 @@ namespace rcq
 		BUILD_RENDERABLE_INFO_MESH_ID,
 		BUILD_RENDERABLE_INFO_MAT_ID,
 		BUILD_RENDERABLE_INFO_LIFE_EXPECTANCY
+	};
+
+	typedef std::tuple<unique_id, unique_id, LIFE_EXPECTANCY> build_Light_renderable_info;
+	enum
+	{
+		BUILD_LIGHT_RENDERABLE_INFO_ID,
+		BUILD_LIGHT_RENDERABLE_INFO_RES_ID,
+		BUILD_LIGHT_RENDERABLE_INFO_LIFE_EXPECTANCY
 	};
 
 	typedef std::tuple<unique_id, transform_data> update_tr_info;
@@ -197,6 +231,8 @@ namespace rcq
 
 
 	//engine related
+
+
 	std::vector<char> read_file(const std::string& filename);
 
 	VkShaderModule create_shader_module(VkDevice device, const std::vector<char>& code);
@@ -243,6 +279,7 @@ namespace rcq
 
 	extern const size_t DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE;
 	extern const size_t CORE_COMMAND_QUEUE_MAX_SIZE;
+	extern const size_t SHADOW_MAP_SIZE;
 
 	struct base_create_info
 	{
@@ -331,6 +368,20 @@ namespace rcq
 		cell_info cell;
 	};
 
+	struct light
+	{
+		VkDescriptorSet ds;
+		uint32_t pool_index;
+		USAGE usage;
+		VkBuffer buffer;
+		void* data;
+		cell_info cell;
+		bool has_shadow_map;
+		texture shadow_map;
+		LIGHT_TYPE type;
+	};
+
+
 	struct renderable
 	{
 		VkBuffer vb;
@@ -344,12 +395,24 @@ namespace rcq
 		unique_id id;
 	};
 
+	struct light_renderable
+	{
+		VkDescriptorSet ds;
+		texture shadow_map;
+		uint32_t type;
+		bool destroy;
+		unique_id id;
+	};
+
 	typedef std::array<std::vector<renderable>, MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> renderable_container;
+	typedef std::array < std::vector<light_renderable>, LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_renderable_container;
 
 	struct core_package
 	{
 		std::vector<build_renderable_info> build_renderable;
+		std::vector<build_Light_renderable_info> build_light_renderable;
 		std::vector<unique_id> destroy_renderable;
+		std::vector<unique_id> destroy_light_renderable;
 		std::vector<update_tr_info> update_tr;
 		std::optional<camera_data> update_cam;
 		std::optional<std::promise<void>> confirm_destroy;
@@ -360,7 +423,7 @@ namespace rcq
 	typedef std::vector<VkDeviceMemory> memory;
 
 	typedef std::tuple<std::vector<build_mat_info>, std::vector<build_mesh_info>, std::vector<build_tr_info>, 
-		std::vector<build_memory_info>> build_package;
+		std::vector<build_light_info>, std::vector<build_memory_info>> build_package;
 
 	typedef std::array<std::vector<unique_id>, RESOURCE_TYPE_COUNT> destroy_ids;
 
@@ -380,11 +443,11 @@ namespace rcq
 	typedef std::packaged_task<mesh()> build_mesh_task;
 	typedef std::packaged_task<material()> build_mat_task;
 	typedef std::packaged_task<transform()> build_tr_task;
-
+	typedef std::packaged_task<light()> build_light_task;
 	typedef std::packaged_task<memory()> build_memory_task;
 
-	typedef std::tuple<std::vector<build_mat_task>, std::vector<build_mesh_task>, std::vector<build_tr_task>,
-		std::vector<build_memory_task>> build_task_package;
+	typedef std::tuple<std::vector<build_mat_task>, std::vector<build_mesh_task>, std::vector<build_tr_task>, 
+		std::vector<build_light_task>, std::vector<build_memory_task>> build_task_package;
 
 
 	template<size_t res_type>
@@ -394,6 +457,7 @@ namespace rcq
 	template<> struct resource_typename<RESOURCE_TYPE_MESH> { typedef mesh type; };
 	template<> struct resource_typename<RESOURCE_TYPE_TR>{ typedef transform type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MEMORY> { typedef memory type; };
+	template<> struct resource_typename<RESOURCE_TYPE_LIGHT> { typedef light type; };
 
 	typedef uint32_t pool_id;
 
@@ -420,11 +484,28 @@ namespace rcq
 
 	template<> struct render_pass_typename<RENDER_PASS_BASIC> { typedef  basic_pass type; };
 
-
-	struct render_target
+	struct omni_light_data
 	{
-		VkFramebuffer framebuffer;
-		texture tex;
+		glm::vec3 pos;
+		uint32_t padding0;
+		glm::vec3 radiance;
+	};
+
+	struct spotlight_data
+	{
+		glm::vec3 pos;
+		float angle;
+		glm::vec3 dir;
+		float penumbra_angle;
+		glm::vec3 radiance;
+		float umbra_angle;
+	};
+
+	struct dir_light_data
+	{
+		glm::vec3 dir;
+		uint32_t padding0;
+		glm::vec3 irradiance;
 	};
 
 

@@ -10,7 +10,8 @@ namespace rcq
 		basic_pass(basic_pass&&) = delete;
 		~basic_pass();
 
-		static void init(const base_info& info, const renderable_container& renderables);
+		static void init(const base_info& info, const renderable_container& renderables, 
+			const light_renderable_container& light_renderables);
 		static void destroy();
 		static basic_pass* instance() { return m_instance; }
 
@@ -18,11 +19,25 @@ namespace rcq
 		void wait_for_finish();
 
 	private:
-		basic_pass(const base_info& info, const renderable_container& renderables);
+		enum ATTACHMENT
+		{
+			ATTACHMENT_COLOR_OUT,
+			ATTACHMENT_DEPTH_STENCIL,
+			ATTACHMENT_POS,
+			ATTACHMENT_F0_ROUGHNESS,
+			ATTACHMENT_ALBEDO_AO,
+			ATTACHMENT_NORMAL,
+			ATTACHMENT_VIEW_DIR,
+			ATTACHMENT_COUNT
+		};
+
+		basic_pass(const base_info& info, const renderable_container& renderables, 
+			const light_renderable_container& light_renderables);
 		
 		void create_render_pass();
 		void create_per_frame_resources();
 		void create_graphics_pipelines();
+		void create_omni_light_graphics_pipelines();
 		void create_command_pool();
 		void create_depth_and_per_frame_buffer();	
 		void create_framebuffers();
@@ -42,6 +57,9 @@ namespace rcq
 
 		std::array<VkPipelineLayout, MAT_TYPE_COUNT> m_pls;
 		std::array<VkPipeline, MAT_TYPE_COUNT> m_gps;
+		std::array<VkPipeline, LIGHT_TYPE_COUNT> m_light_gps;
+		VkPipelineLayout m_light_pl;
+
 		std::array<VkDescriptorSetLayout, MAT_TYPE_COUNT> m_per_frame_dsls;
 		std::array<VkDescriptorSet, MAT_TYPE_COUNT> m_per_frame_dss;
 		VkDescriptorPool m_per_frame_dp;
@@ -53,6 +71,7 @@ namespace rcq
 		std::vector<VkCommandBuffer> m_primary_cbs;
 
 		const renderable_container& m_renderables;
+		const light_renderable_container& m_light_renderables;
 
 
 		VkSemaphore m_image_available_s;

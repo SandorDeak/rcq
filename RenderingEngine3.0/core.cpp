@@ -51,7 +51,9 @@ void core::destroy()
 void core::loop()
 {
 	std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask;
+	std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask_light;
 	record_mask.reset();
+	record_mask_light.reset();
 
 	while (!m_should_end || !m_package_queue.empty())
 	{
@@ -65,7 +67,8 @@ void core::loop()
 				if (m_package_queue.size() == CORE_COMMAND_QUEUE_MAX_SIZE - 1)
 					m_package_queue_condvar.notify_one();
 			}
-		
+			
+			//destroy renderables
 			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_renderables(false);
 
 			for (auto& destroy_id : package->destroy_renderable)
@@ -76,7 +79,10 @@ void core::loop()
 				for (auto& r : m_renderables[it->second])
 				{
 					if (r.id == destroy_id)
+					{
 						r.destroy = true;
+						break;
+					}
 				}
 				remove_deleted_renderables.set(it->second);
 				record_mask.set(it->second);
@@ -92,13 +98,44 @@ void core::loop()
 				}
 			}
 
+			//destroy light renderables
+			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_light_renderables(false);
+
+			for (auto& destroy_id : package->destroy_light_renderable)
+			{
+				auto it = m_light_renderable_type_table.find(destroy_id);
+				if (it == m_light_renderable_type_table.end())
+					throw std::runtime_error("cannot delete light renderable with the given id, it doesn't exist!");
+				for (auto& r : m_light_renderables[it->second])
+				{
+					if (r.id == destroy_id)
+					{
+						r.destroy = true;
+						break;
+					}
+				}
+				remove_deleted_light_renderables.set(it->second);
+				record_mask_light.set(it->second);
+				m_light_renderable_type_table.erase(it);
+			}
+
+			for (size_t i = 0; i < m_light_renderables.size(); ++i)
+			{
+				if (remove_deleted_light_renderables[i])
+				{
+					m_light_renderables[i].erase(std::remove_if(m_light_renderables[i].begin(), m_light_renderables[i].end(),
+						[](const light_renderable& r) {return r.destroy; }), m_light_renderables[i].end());
+				}
+			}
+
+			//build renderables
 			for (auto& build_renderable : package->build_renderable)
 			{
-				material _mat = resource_manager::instance()->get<RESOURCE_TYPE_MAT>(
+				const material& _mat = resource_manager::instance()->get<RESOURCE_TYPE_MAT>(
 					std::get<BUILD_RENDERABLE_INFO_MAT_ID>(build_renderable));
-				mesh _mesh = resource_manager::instance()->get<RESOURCE_TYPE_MESH>(
+				const mesh& _mesh = resource_manager::instance()->get<RESOURCE_TYPE_MESH>(
 					std::get<BUILD_RENDERABLE_INFO_MESH_ID>(build_renderable));
-				transform _tr = resource_manager::instance()->get<RESOURCE_TYPE_TR>(
+				const transform& _tr = resource_manager::instance()->get<RESOURCE_TYPE_TR>(
 					std::get<BUILD_RENDERABLE_INFO_TR_ID>(build_renderable));
 				uint32_t type = LIFE_EXPECTANCY_COUNT*_mat.type+std::get<BUILD_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_renderable);
 
@@ -117,15 +154,34 @@ void core::loop()
 				
 				m_renderables[type].push_back(r);
 
-				if (!m_renderable_type_table.insert_or_assign(std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(build_renderable),
-					r.type).second)
+				if (!m_renderable_type_table.insert_or_assign(r.id, r.type).second)
 				{
 					throw std::runtime_error("id conflict!");
 				}
-
-
 			}
 
+			//build light renderables
+			for (auto& build_light : package->build_light_renderable)
+			{
+				const light& res =resource_manager::instance()->get<RESOURCE_TYPE_LIGHT>(std::get<BUILD_LIGHT_RENDERABLE_INFO_RES_ID>(build_light));
+				light_renderable l;
+				l.destroy = false;
+				l.ds = res.ds;
+				l.id = std::get<BUILD_LIGHT_RENDERABLE_INFO_ID>(build_light);
+				l.type = LIFE_EXPECTANCY_COUNT*res.type + std::get<BUILD_LIGHT_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_light);
+				l.shadow_map = res.shadow_map;
+
+				record_mask_light.set(l.type);
+
+				m_light_renderables[l.type].push_back(l);
+
+				if (!m_light_renderable_type_table.insert_or_assign(l.id, l.type).second)
+				{
+					throw std::runtime_error("id conflict!");
+				}
+			}
+
+			//update tr
 			if (!package->update_tr.empty())
 			{
 				wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());

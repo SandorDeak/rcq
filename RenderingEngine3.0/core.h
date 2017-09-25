@@ -27,6 +27,7 @@ namespace rcq
 		}
 
 		renderable_container& get_renderable_container() { return m_renderables; }
+		light_renderable_container& get_light_renderable_container() { return m_light_renderables; }
 
 	private:
 		core();
@@ -41,8 +42,11 @@ namespace rcq
 
 
 		std::map<unique_id, uint32_t> m_renderable_type_table;
+		std::map<unique_id, uint32_t> m_light_renderable_type_table;
 
 		renderable_container m_renderables;
+		light_renderable_container m_light_renderables;
+
 		
 		template<size_t... render_passes>
 		void record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, 
