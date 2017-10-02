@@ -50,10 +50,10 @@ void core::destroy()
 
 void core::loop()
 {
-	std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask;
-	std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask_light;
-	record_mask.reset();
-	record_mask_light.reset();
+	std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> mat_record_mask;
+	std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_record_mask;
+	mat_record_mask.reset();
+	light_record_mask.reset();
 
 	while (!m_should_end || !m_package_queue.empty())
 	{
@@ -85,7 +85,7 @@ void core::loop()
 					}
 				}
 				remove_deleted_renderables.set(it->second);
-				record_mask.set(it->second);
+				mat_record_mask.set(it->second);
 				m_renderable_type_table.erase(it);
 			}
 
@@ -115,7 +115,7 @@ void core::loop()
 					}
 				}
 				remove_deleted_light_renderables.set(it->second);
-				record_mask_light.set(it->second);
+				light_record_mask.set(it->second);
 				m_light_renderable_type_table.erase(it);
 			}
 
@@ -150,7 +150,7 @@ void core::loop()
 					false,
 					std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(build_renderable)
 				};
-				record_mask.set(type);
+				mat_record_mask.set(type);
 				
 				m_renderables[type].push_back(r);
 
@@ -171,7 +171,7 @@ void core::loop()
 				l.type = LIFE_EXPECTANCY_COUNT*res.type + std::get<BUILD_LIGHT_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_light);
 				l.shadow_map = res.shadow_map;
 
-				record_mask_light.set(l.type);
+				light_record_mask.set(l.type);
 
 				m_light_renderables[l.type].push_back(l);
 
@@ -190,8 +190,9 @@ void core::loop()
 
 			if (package->render)
 			{
-				record_and_render(package->update_cam, record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
-				record_mask.reset();
+				record_and_render(package->update_cam, mat_record_mask, light_record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
+				mat_record_mask.reset();
+				light_record_mask.reset();
 			}
 
 			if (package->confirm_destroy)

@@ -12,16 +12,21 @@ basic_pass::basic_pass(const base_info& info, const renderable_container& render
 {
 	create_render_pass();
 	create_command_pool();
-	create_depth_and_per_frame_buffer();
-	create_per_frame_resources();
-	create_graphics_pipelines();
+	create_resources();
+	create_descriptors();
+	create_opaque_mat_pipeline();
+	create_omni_light_pipeline();
 	create_framebuffers();
 	allocate_command_buffers();
 	create_semaphores();
 	create_fences();
 
-	m_record_masks.resize(m_fbs.size());
-	for (auto& bs : m_record_masks)
+	m_mat_record_masks.resize(m_fbs.size());
+	for (auto& bs : m_mat_record_masks)
+		bs.reset();
+
+	m_light_record_masks.resize(m_fbs.size());
+	for (auto& bs : m_light_record_masks)
 		bs.reset();
 }
 
@@ -36,7 +41,8 @@ basic_pass::~basic_pass()
 
 	for (auto& dsl : m_per_frame_dsls)
 		vkDestroyDescriptorSetLayout(m_base.device, dsl, host_memory_manager);
-	vkDestroyDescriptorPool(m_base.device, m_per_frame_dp, host_memory_manager);
+	vkDestroyDescriptorSetLayout(m_base.device, m_gbuffer_dsl, host_memory_manager);
+	vkDestroyDescriptorPool(m_base.device, m_dp, host_memory_manager);
 	
 	vkUnmapMemory(m_base.device, m_per_frame_b_mem);
 	vkDestroyBuffer(m_base.device, m_per_frame_b, host_memory_manager);
@@ -48,15 +54,23 @@ basic_pass::~basic_pass()
 
 	vkDestroyImageView(m_base.device, m_depth_tex.view, host_memory_manager);
 	vkDestroyImage(m_base.device, m_depth_tex.image, host_memory_manager);
+	for (auto& view : m_gbuffer_views)
+		vkDestroyImageView(m_base.device, view, host_memory_manager);
+	vkDestroyImage(m_base.device, m_gbuffer_image, host_memory_manager);
+
 	auto destroy=std::make_unique<destroy_package>();
 	destroy->ids[RESOURCE_TYPE_MEMORY].push_back(RENDER_PASS_BASIC);
 	resource_manager::instance()->push_destroy_package(std::move(destroy));
 
-
-	for(auto& pl : m_pls)
+	for (auto& pl : m_mat_pls)
 		vkDestroyPipelineLayout(m_base.device, pl, host_memory_manager);
-	for(auto& gp : m_gps)
+	for (auto& pl : m_light_pls)
+		vkDestroyPipelineLayout(m_base.device, pl, host_memory_manager);
+	for (auto& gp : m_mat_gps)
 		vkDestroyPipeline(m_base.device, gp, host_memory_manager);
+	for (auto& gp : m_light_gps)
+		vkDestroyPipeline(m_base.device, gp, host_memory_manager);
+
 	vkDestroyRenderPass(m_base.device, m_pass, host_memory_manager);
 }
 
@@ -82,71 +96,108 @@ void basic_pass::destroy()
 
 void basic_pass::create_render_pass()
 {
-	VkAttachmentDescription a[ATTACHMENT_COUNT];
+	VkAttachmentDescription color_out{}, depth_stencil{}, gbuffer{};
 
-	a[ATTACHMENT_COLOR_OUT].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-	a[ATTACHMENT_COLOR_OUT].format = m_base.swap_chain_image_format;
-	a[ATTACHMENT_COLOR_OUT].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	a[ATTACHMENT_COLOR_OUT].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	a[ATTACHMENT_COLOR_OUT].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	a[ATTACHMENT_COLOR_OUT].samples = VK_SAMPLE_COUNT_1_BIT;
-	a[ATTACHMENT_COLOR_OUT].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	a[ATTACHMENT_COLOR_OUT].stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	color_out.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	color_out.format = m_base.swap_chain_image_format;
+	color_out.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	color_out.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	color_out.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	color_out.samples = VK_SAMPLE_COUNT_1_BIT;
+	color_out.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	color_out.stencilStoreOp=VK_ATTACHMENT_STORE_OP_DONT_CARE;
 	
-	a[ATTACHMENT_DEPTH_STENCIL].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	a[ATTACHMENT_DEPTH_STENCIL].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	a[ATTACHMENT_DEPTH_STENCIL].format = find_depth_format(m_base.physical_device);
-	a[ATTACHMENT_DEPTH_STENCIL].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	a[ATTACHMENT_DEPTH_STENCIL].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	a[ATTACHMENT_DEPTH_STENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	a[ATTACHMENT_DEPTH_STENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	a[ATTACHMENT_DEPTH_STENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
+	depth_stencil.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	depth_stencil.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	depth_stencil.format = find_depth_format(m_base.physical_device);
+	depth_stencil.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	depth_stencil.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depth_stencil.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	depth_stencil.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	depth_stencil.samples = VK_SAMPLE_COUNT_1_BIT;
 
-	for (int i = ATTACHMENT_POS; i < ATTACHMENT_COUNT; ++i)
-	{
-		a[i].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-		a[i].format = m_base.swap_chain_image_format;
-		a[i].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		a[i].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-		a[i].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-		a[i].samples = VK_SAMPLE_COUNT_1_BIT;
-		a[i].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-		a[i].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	}
+	gbuffer.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	gbuffer.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	gbuffer.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	gbuffer.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	gbuffer.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	gbuffer.samples = VK_SAMPLE_COUNT_1_BIT;
+	gbuffer.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	gbuffer.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
-	VkAttachmentReference color_ref = {};
-	color_ref.attachment = 0;
-	color_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
+	VkAttachmentDescription attachments[] = { depth_stencil, gbuffer, gbuffer, gbuffer, gbuffer, gbuffer, color_out };
+	
+	//mat pass refs
 	VkAttachmentReference depth_ref = {};
-	depth_ref.attachment = 1;
+	depth_ref.attachment = 0;
 	depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
-	VkSubpassDescription subpass = {};
-	subpass.colorAttachmentCount = 1;
-	subpass.pColorAttachments = &color_ref;
-	subpass.pDepthStencilAttachment = &depth_ref;
-	subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	VkAttachmentReference gbuffer_mat_refs[5];
+	for (int i = 0; i < 5; ++i)
+	{
+		gbuffer_mat_refs[i].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		gbuffer_mat_refs[i].attachment = i + 1;
+	}
+
+	//material subpass
+	VkSubpassDescription material_subpass = {};
+	material_subpass.colorAttachmentCount = 5;
+	material_subpass.pColorAttachments = gbuffer_mat_refs;
+	material_subpass.pDepthStencilAttachment = &depth_ref;
+	material_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+	//light pass refs
+	VkAttachmentReference gbuffer_light_refs[5];
+	for (int i = 0; i < 5; ++i)
+	{
+		gbuffer_light_refs[i].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		gbuffer_light_refs[i].attachment = i + 1;
+	}
+
+	VkAttachmentReference color_out_ref;
+	color_out_ref.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	color_out_ref.attachment = 6;
+
+
+	//light subpass
+	VkSubpassDescription light_subpass = {};
+	light_subpass.colorAttachmentCount = 1;
+	light_subpass.inputAttachmentCount = 5;
+	light_subpass.pColorAttachments = &color_out_ref;
+	light_subpass.pDepthStencilAttachment = nullptr;
+	light_subpass.pInputAttachments = gbuffer_light_refs;
+	light_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	
+	VkSubpassDescription subpasses[] = { material_subpass, light_subpass };
 
-	VkSubpassDependency dependency = {};
-	dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependency.dstSubpass = 0;
-	dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependency.srcAccessMask = 0;
-	dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	//dependencies
+	VkSubpassDependency ext_dependency = {};
+	ext_dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+	ext_dependency.dstSubpass = SUBPASS_MAT;
+	ext_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	ext_dependency.srcAccessMask = 0;
+	ext_dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	ext_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-	VkAttachmentDescription attachments[2] = { color_attachment, depth_attachment };
+	VkSubpassDependency mat_light_dependency = {};
+	mat_light_dependency.srcSubpass = SUBPASS_MAT;
+	mat_light_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	mat_light_dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+	mat_light_dependency.dstSubpass = SUBPASS_LIGHT;
+	mat_light_dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	mat_light_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+
+	VkSubpassDependency dependencies[2] = { ext_dependency, mat_light_dependency };
 
 	VkRenderPassCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	info.attachmentCount = 2;
-	info.dependencyCount = 1;
+	info.attachmentCount = 7;
+	info.dependencyCount = 2;
 	info.pAttachments = attachments;
-	info.pDependencies = &dependency;
-	info.pSubpasses = &subpass;
-	info.subpassCount = 1;
+	info.pDependencies = dependencies;
+	info.pSubpasses = subpasses;
+	info.subpassCount = 2;
 
 	if (vkCreateRenderPass(m_base.device, &info, host_memory_manager, &m_pass) != VK_SUCCESS)
 	{
@@ -154,10 +205,10 @@ void basic_pass::create_render_pass()
 	}
 }
 
-void basic_pass::create_omni_light_graphics_pipelines()
+void basic_pass::create_omni_light_pipeline()
 {
-	auto vert_code = read_file("shaders/basic_pass/subpass1/omni_light_shader/vert.spv");
-	auto frag_code = read_file("shaders/basic_pass/subpass1/omni_light_shader/frag.spv");
+	auto vert_code = read_file("shaders/basic_pass/light_subpass/omni_light/vert.spv");
+	auto frag_code = read_file("shaders/basic_pass/light_subpass/omni_light/frag.spv");
 
 	auto vert_module = create_shader_module(m_base.device, vert_code);
 	auto frag_module = create_shader_module(m_base.device, frag_code);
@@ -238,20 +289,20 @@ void basic_pass::create_omni_light_graphics_pipelines()
 	color_blend.logicOpEnable = VK_FALSE;
 	color_blend.pAttachments = &color_blend_attachment;
 
-	VkDescriptorSetLayout light_dsl = resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT);
+	VkDescriptorSetLayout dsls[2] = { resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT), m_gbuffer_dsl };
 	VkPipelineLayoutCreateInfo layout = {};
 	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	layout.setLayoutCount = 1;
-	layout.pSetLayouts = &light_dsl;
+	layout.setLayoutCount = 2;
+	layout.pSetLayouts = dsls;
 
-	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_light_pl) != VK_SUCCESS)
+	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_light_pls[LIGHT_TYPE_OMNI]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create light pipeline layout!");
 
 	VkGraphicsPipelineCreateInfo gp_info = {};
 	gp_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	gp_info.basePipelineHandle = VK_NULL_HANDLE;
 	gp_info.basePipelineIndex = -1;
-	gp_info.layout = m_light_pl;
+	gp_info.layout = m_light_pls[LIGHT_TYPE_OMNI];
 	gp_info.pColorBlendState = &color_blend;
 	gp_info.pDepthStencilState = nullptr;
 	gp_info.pInputAssemblyState = &assembly;
@@ -272,10 +323,10 @@ void basic_pass::create_omni_light_graphics_pipelines()
 	vkDestroyShaderModule(m_base.device, frag_module, host_memory_manager);
 }
 
-void basic_pass::create_graphics_pipelines()
+void basic_pass::create_opaque_mat_pipeline()
 {
-	auto vert_code = read_file("shaders/basic_pass/vert.spv");
-	auto frag_code = read_file("shaders/basic_pass/frag.spv");
+	auto vert_code = read_file("shaders/basic_pass/mat_subpass/opaque_mat/vert.spv");
+	auto frag_code = read_file("shaders/basic_pass/mat_subpass/opaque_mat/frag.spv");
 
 	auto vert_module = create_shader_module(m_base.device, vert_code);
 	auto frag_module = create_shader_module(m_base.device, frag_code);
@@ -354,13 +405,20 @@ void basic_pass::create_graphics_pipelines()
 	color_blend_attachment.blendEnable = VK_FALSE;
 	color_blend_attachment.colorWriteMask= VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
 		VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	VkPipelineColorBlendAttachmentState color_blend_attachments[5] = {
+		color_blend_attachment,
+		color_blend_attachment,
+		color_blend_attachment,
+		color_blend_attachment,
+		color_blend_attachment
+	};
 
 	VkPipelineColorBlendStateCreateInfo color_blend = {};
 	color_blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	color_blend.attachmentCount = 1;
+	color_blend.attachmentCount = 5;
 	color_blend.logicOp = VK_LOGIC_OP_COPY;
 	color_blend.logicOpEnable = VK_FALSE;
-	color_blend.pAttachments=&color_blend_attachment;
+	color_blend.pAttachments=color_blend_attachments;
 
 	VkPipelineLayoutCreateInfo layout = {};
 	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -369,14 +427,14 @@ void basic_pass::create_graphics_pipelines()
 	layout.pSetLayouts = dsls;
 	layout.setLayoutCount = 3;
 	
-	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_pls[MAT_TYPE_BASIC]) != VK_SUCCESS)
+	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_mat_pls[MAT_TYPE_BASIC]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create pipeline layout!");
 
 	VkGraphicsPipelineCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	info.basePipelineHandle = VK_NULL_HANDLE;
 	info.basePipelineIndex = -1;
-	info.layout = m_pls[MAT_TYPE_BASIC];
+	info.layout = m_mat_pls[MAT_TYPE_BASIC];
 	info.pColorBlendState = &color_blend;
 	info.pDepthStencilState = &depthstencil;
 	info.pInputAssemblyState = &input_assembly;
@@ -389,37 +447,56 @@ void basic_pass::create_graphics_pipelines()
 	info.subpass = 0;
 	info.stageCount = 2;
 
-	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &info, host_memory_manager, &m_gps[MAT_TYPE_BASIC]) != VK_SUCCESS)
+	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &info, host_memory_manager, &m_mat_gps[MAT_TYPE_BASIC]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create graphics pipeline!");
 
 	vkDestroyShaderModule(m_base.device, vert_module, host_memory_manager);
 	vkDestroyShaderModule(m_base.device, frag_module, host_memory_manager);
 }
 
-void basic_pass::create_depth_and_per_frame_buffer()
+void basic_pass::create_resources()
 {
 	VkFormat depth_format = find_depth_format(m_base.physical_device);
-	//create image
-	VkImageCreateInfo image_info = {};
-	image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	image_info.arrayLayers = 1;
-	image_info.extent.height = m_base.swap_chain_image_extent.height;
-	image_info.extent.width = m_base.swap_chain_image_extent.width;
-	image_info.extent.depth = 1;
-	image_info.format = depth_format;
-	image_info.imageType = VK_IMAGE_TYPE_2D;
-	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	image_info.mipLevels = 1;
-	image_info.samples = VK_SAMPLE_COUNT_1_BIT;
-	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-	image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	//create depth image
+	VkImageCreateInfo depth_image_info = {};
+	depth_image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	depth_image_info.arrayLayers = 1;
+	depth_image_info.extent.height = m_base.swap_chain_image_extent.height;
+	depth_image_info.extent.width = m_base.swap_chain_image_extent.width;
+	depth_image_info.extent.depth = 1;
+	depth_image_info.format = depth_format;
+	depth_image_info.imageType = VK_IMAGE_TYPE_2D;
+	depth_image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	depth_image_info.mipLevels = 1;
+	depth_image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	depth_image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	depth_image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	depth_image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-	if (vkCreateImage(m_base.device, &image_info, host_memory_manager,
+	if (vkCreateImage(m_base.device, &depth_image_info, host_memory_manager,
 		&m_depth_tex.image) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create depth image!");
 	}
+
+	//create gbuffer image
+	VkImageCreateInfo gbuffer_image_info = {};
+	gbuffer_image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	gbuffer_image_info.arrayLayers = 5;
+	gbuffer_image_info.extent.width = m_base.swap_chain_image_extent.width;
+	gbuffer_image_info.extent.height = m_base.swap_chain_image_extent.height;
+	gbuffer_image_info.extent.depth = 1;
+	gbuffer_image_info.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	gbuffer_image_info.imageType = VK_IMAGE_TYPE_2D;
+	gbuffer_image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	gbuffer_image_info.mipLevels = 1;
+	gbuffer_image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	gbuffer_image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	gbuffer_image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	gbuffer_image_info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+
+	if (vkCreateImage(m_base.device, &gbuffer_image_info, host_memory_manager, &m_gbuffer_image) != VK_SUCCESS)
+		throw std::runtime_error("failed to create gbuffer image!");
 
 	//create per frame buffer
 	VkBufferCreateInfo buffer_create_info = {};
@@ -431,18 +508,23 @@ void basic_pass::create_depth_and_per_frame_buffer()
 		throw std::runtime_error("failed to create per frame buffer!");
 
 	//send memory build package to resource manager
-	VkMemoryRequirements image_mr, buffer_mr;
-	vkGetImageMemoryRequirements(m_base.device, m_depth_tex.image, &image_mr);
-	vkGetBufferMemoryRequirements(m_base.device, m_per_frame_b, &buffer_mr);
+	VkMemoryRequirements depth_image_mr, gbuffer_image_mr, per_frame_buffer_mr;
+	vkGetImageMemoryRequirements(m_base.device, m_depth_tex.image, &depth_image_mr);
+	vkGetImageMemoryRequirements(m_base.device, m_gbuffer_image, &gbuffer_image_mr);
+	vkGetBufferMemoryRequirements(m_base.device, m_per_frame_b, &per_frame_buffer_mr);
 
-	std::vector<VkMemoryAllocateInfo> alloc_info(2);
+	std::vector<VkMemoryAllocateInfo> alloc_info(3);
 	alloc_info[0].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	alloc_info[0].allocationSize = image_mr.size;
-	alloc_info[0].memoryTypeIndex = find_memory_type(m_base.physical_device, image_mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	alloc_info[0].allocationSize = depth_image_mr.size;
+	alloc_info[0].memoryTypeIndex = find_memory_type(m_base.physical_device, depth_image_mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 	alloc_info[1].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	alloc_info[1].allocationSize = buffer_mr.size;
-	alloc_info[1].memoryTypeIndex = find_memory_type(m_base.physical_device, buffer_mr.memoryTypeBits,
+	alloc_info[1].allocationSize = gbuffer_image_mr.size;
+	alloc_info[1].memoryTypeIndex = find_memory_type(m_base.physical_device, gbuffer_image_mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	alloc_info[2].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc_info[2].allocationSize = per_frame_buffer_mr.size;
+	alloc_info[2].memoryTypeIndex = find_memory_type(m_base.physical_device, per_frame_buffer_mr.memoryTypeBits,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 	build_package build;
@@ -452,13 +534,14 @@ void basic_pass::create_depth_and_per_frame_buffer()
 	//bind memory to image and buffer and map
 	memory mem = resource_manager::instance()->get<RESOURCE_TYPE_MEMORY>(RENDER_PASS_BASIC);
 	vkBindImageMemory(m_base.device, m_depth_tex.image, mem[0], 0);
-	vkBindBufferMemory(m_base.device, m_per_frame_b, mem[1], 0);
-	m_per_frame_b_mem = mem[1];
+	vkBindImageMemory(m_base.device, m_gbuffer_image, mem[1], 0);
+	vkBindBufferMemory(m_base.device, m_per_frame_b, mem[2], 0);
+	m_per_frame_b_mem = mem[2];
 	void* raw_data;
 	vkMapMemory(m_base.device, m_per_frame_b_mem, 0, sizeof(camera_data), 0, &raw_data);
 	m_per_frame_b_data = static_cast<char*>(raw_data);
 
-	//create view
+	//create depth view
 	VkImageViewCreateInfo view_create_info = {};
 	view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 	view_create_info.format = depth_format;
@@ -476,36 +559,73 @@ void basic_pass::create_depth_and_per_frame_buffer()
 		throw std::runtime_error("failed to create depth image view!");
 	}
 
+	//create gbuffer views
+	for (uint32_t i = 0; i < m_gbuffer_views.size(); ++i)
+	{
+		VkImageViewCreateInfo gbuffer_view_info = {};
+		gbuffer_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		gbuffer_view_info.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		gbuffer_view_info.image = m_gbuffer_image;
+		gbuffer_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		gbuffer_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		gbuffer_view_info.subresourceRange.baseArrayLayer = i;
+		gbuffer_view_info.subresourceRange.baseMipLevel = 0;
+		gbuffer_view_info.subresourceRange.layerCount = 1;
+		gbuffer_view_info.subresourceRange.levelCount = 1;
 
-	//transition to depth stencial attachment optimal layout
+		if (vkCreateImageView(m_base.device, &gbuffer_view_info, host_memory_manager, &m_gbuffer_views[i]) != VK_SUCCESS)
+			throw std::runtime_error("failed to create gbuffer image views!");
+	}
+
+	//transition depth image to depth stencil attachment optimal layout, 
+	//and  gbuffer image to color attachment optimal layout
 	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp);
 
-	VkImageMemoryBarrier barrier = {};
-	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.image = m_depth_tex.image;
-	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	VkImageMemoryBarrier depth_barrier = {};
+	depth_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	depth_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	depth_barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	depth_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	depth_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	depth_barrier.image = m_depth_tex.image;
+	depth_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 	if (depth_format == VK_FORMAT_D24_UNORM_S8_UINT || depth_format == VK_FORMAT_D32_SFLOAT_S8_UINT)
-		barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+		depth_barrier.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
 
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.baseMipLevel = 0;
-	barrier.subresourceRange.layerCount = 1;
-	barrier.subresourceRange.levelCount = 1;
+	depth_barrier.subresourceRange.baseArrayLayer = 0;
+	depth_barrier.subresourceRange.baseMipLevel = 0;
+	depth_barrier.subresourceRange.layerCount = 1;
+	depth_barrier.subresourceRange.levelCount = 1;
 
-	barrier.srcAccessMask = 0;
-	barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+	depth_barrier.srcAccessMask = 0;
+	depth_barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
 	vkCmdPipelineBarrier(cb,
 		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
 		0,
 		0, nullptr,
 		0, nullptr,
-		1, &barrier
+		1, &depth_barrier
 	);
+
+	VkImageMemoryBarrier gbuffer_barrier = {};
+	gbuffer_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	gbuffer_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+	gbuffer_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	gbuffer_barrier.image = m_gbuffer_image;
+	gbuffer_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	gbuffer_barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	gbuffer_barrier.srcAccessMask = 0;
+	gbuffer_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	gbuffer_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	gbuffer_barrier.subresourceRange.baseArrayLayer = 0;
+	gbuffer_barrier.subresourceRange.baseMipLevel = 0;
+	gbuffer_barrier.subresourceRange.layerCount = 5;
+	gbuffer_barrier.subresourceRange.levelCount = 1;
+
+	vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, nullptr,
+		0, nullptr, 1, &gbuffer_barrier);
+
 	end_single_time_command_buffer(m_base.device, m_cp, m_base.graphics_queue, cb);
 }
 
@@ -522,12 +642,14 @@ void rcq::basic_pass::create_command_pool()
 
 void basic_pass::create_framebuffers()
 {
-	std::array<VkImageView, 2> attachments = {};
-	attachments[1] = m_depth_tex.view;
+	std::array<VkImageView, 7> attachments = {};
+	attachments[0] = m_depth_tex.view;
+	for (uint32_t i = 0; i < m_gbuffer_views.size(); ++i)
+		attachments[i + 1] = m_gbuffer_views[i];
 
 	VkFramebufferCreateInfo fb_info = {};
 	fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	fb_info.attachmentCount = 2;
+	fb_info.attachmentCount = 7;
 	fb_info.pAttachments = attachments.data();
 	fb_info.layers = 1;
 	fb_info.height = m_base.swap_chain_image_extent.height;
@@ -537,16 +659,19 @@ void basic_pass::create_framebuffers()
 	m_fbs.resize(m_base.swap_chain_image_views.size());
 	for (size_t i = 0; i < m_fbs.size(); ++i)
 	{
-		attachments[0] = m_base.swap_chain_image_views[i];
+		attachments[6] = m_base.swap_chain_image_views[i];
 		if (vkCreateFramebuffer(m_base.device, &fb_info, host_memory_manager, &m_fbs[i]) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");	
 	}
 }
 
-void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_maks)
+void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> mat_record_mask,
+	std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_record_mask)
 {
-	for (auto& rm : m_record_masks)
-		rm |= record_maks;
+	for (auto& rm : m_mat_record_masks)
+		rm |= mat_record_mask;
+	for (auto& rm : m_light_record_masks)
+		rm |= light_record_mask;
 
 	//acquire swap chain image
 	uint32_t image_index;
@@ -564,10 +689,10 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 	//record secondary command buffers (if necessary)
 	for (uint32_t i = 0; i < MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++i)
 	{
-		if (m_record_masks[image_index][i] && !m_renderables[i].empty())
+		if (m_mat_record_masks[image_index][i] && !m_renderables[i].empty())
 		{
 
-			auto cb = m_secondary_cbs[i][image_index];
+			auto cb = m_mat_cbs[i][image_index];
 			uint32_t mat_type = i / LIFE_EXPECTANCY_COUNT;
 
 			VkCommandBufferInheritanceInfo inheritance = {};
@@ -583,14 +708,14 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 			cb_begin.pInheritanceInfo = &inheritance;
 
 			vkBeginCommandBuffer(cb, &cb_begin);
-			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[mat_type]);
-			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 0, 1,
+			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mat_gps[mat_type]);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mat_pls[mat_type], 0, 1,
 				&m_per_frame_dss[mat_type], 0, nullptr);
 
 			for (const auto& r : m_renderables[i])
 			{
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 1, 1, &r.tr_ds, 0, nullptr);
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[mat_type], 2, 1, &r.mat_ds, 0, nullptr);
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mat_pls[mat_type], 1, 1, &r.tr_ds, 0, nullptr);
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mat_pls[mat_type], 2, 1, &r.mat_ds, 0, nullptr);
 				vkCmdBindIndexBuffer(cb, r.ib, 0, VK_INDEX_TYPE_UINT32);
 				VkBuffer vbs[] = { r.vb, r.veb };
 				if (vbs[1] == VK_NULL_HANDLE)
@@ -601,10 +726,43 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 			}
 
 			if (vkEndCommandBuffer(cb) != VK_SUCCESS)
-				throw std::runtime_error("failed to record command buffer!");
+				throw std::runtime_error("failed to record material command buffer!");
 		}	
 	}
-	m_record_masks[image_index].reset();
+
+	for (uint32_t i = 0; i < LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++i)
+	{
+		if (m_light_record_masks[image_index][i] && !m_light_renderables[i].empty())
+		{
+			auto cb = m_light_cbs[i][image_index];
+			int light_type = i / LIFE_EXPECTANCY_COUNT;
+
+			VkCommandBufferInheritanceInfo inheritance = {};
+			inheritance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+			inheritance.framebuffer = m_fbs[image_index];
+			inheritance.occlusionQueryEnable = VK_FALSE;
+			inheritance.renderPass = m_pass;
+			inheritance.subpass = 0;
+
+			VkCommandBufferBeginInfo cb_begin = {};
+			cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			cb_begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+			cb_begin.pInheritanceInfo = &inheritance;
+
+			vkBeginCommandBuffer(cb, &cb_begin);
+			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_light_gps[light_type]);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_light_pls[light_type], 1, 1, &m_gbuffer_ds, 0, nullptr);
+			for (auto& l : m_light_renderables[i])
+			{
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_light_pls[light_type], 0, 1, &l.ds, 0, nullptr);
+				vkCmdDraw(cb, 4, 1, 0, 0);
+			}
+			if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+				throw std::runtime_error("failed to record light command buffer!");
+		}
+	}
+	m_mat_record_masks[image_index].reset();
+	m_light_record_masks[image_index].reset();
 
 	// copy camera data
 	if (cam)
@@ -623,10 +781,10 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 	pass_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	pass_begin.framebuffer = m_fbs[image_index];
 
-	std::array<VkClearValue, 2> clear_values = {};
-	clear_values[0].color = { 0.f, 0.f, 0.f, 1.f };
-	clear_values[1].depthStencil = { 1.0f, 0 };
-	pass_begin.clearValueCount = 2;
+	std::array<VkClearValue, 7> clear_values = {};
+	clear_values[7].color = { 0.f, 0.f, 0.f, 1.f };
+	clear_values[0].depthStencil = { 1.0f, 0 };
+	pass_begin.clearValueCount = 7;
 	pass_begin.pClearValues = clear_values.data();
 
 	pass_begin.renderArea.offset = { 0,0 };
@@ -634,12 +792,18 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 	pass_begin.renderPass = m_pass;
 
 	vkCmdBeginRenderPass(cb, &pass_begin, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-
 	for (uint32_t j = 0; j < MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++j)
 	{
 		if (!m_renderables[j].empty())
-			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[j][image_index]);
+			vkCmdExecuteCommands(cb, 1, &m_mat_cbs[j][image_index]);
 	}
+	vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+	for (uint32_t j = 0; j < LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++j)
+	{
+		if (!m_light_renderables[j].empty())
+			vkCmdExecuteCommands(cb, 1, &m_light_cbs[j][image_index]);
+	}
+
 	vkCmdEndRenderPass(cb);
 		
 	if (vkEndCommandBuffer(cb) != VK_SUCCESS)
@@ -677,17 +841,23 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 
 void basic_pass::allocate_command_buffers()
 {
-	//allocate econdary cbs
+	//allocate material and light cbs
 	VkCommandBufferAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	alloc_info.commandBufferCount = static_cast<uint32_t>(m_fbs.size());
 	alloc_info.commandPool = m_cp;
 	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-	for (auto& cbs : m_secondary_cbs)
+	for (auto& cbs : m_mat_cbs)
 	{
 		cbs.resize(m_fbs.size());
 		if (vkAllocateCommandBuffers(m_base.device, &alloc_info, cbs.data()) != VK_SUCCESS)
 			throw std::runtime_error("failed to allocate secondary commant buffers!");	
+	}
+	for (auto& cbs :m_light_cbs)
+	{
+		cbs.resize(m_fbs.size());
+		if (vkAllocateCommandBuffers(m_base.device, &alloc_info, cbs.data()) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate secondary commant buffers!");
 	}
 
 	//allocate primary cbs
@@ -698,7 +868,7 @@ void basic_pass::allocate_command_buffers()
 
 }
 
-void basic_pass::create_per_frame_resources()
+void basic_pass::create_descriptors()
 {
 	//create per frame descriptor set layouts
 	VkDescriptorSetLayoutBinding cam_binding = {};
@@ -714,23 +884,46 @@ void basic_pass::create_per_frame_resources()
 	if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, host_memory_manager, &m_per_frame_dsls[MAT_TYPE_BASIC]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create per frame descriptor set layout!");
 
-	//create per frame descriptor pool
-	VkDescriptorPoolSize pool_size = {};
-	pool_size.descriptorCount = 1;
-	pool_size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	//create gbuffer descriptos set layout
+	VkDescriptorSetLayoutBinding gbuffer_bindings[5];
+	VkDescriptorSetLayoutBinding gbuffer_binding = {};
+	gbuffer_binding.descriptorCount = 1;
+	gbuffer_binding.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+	gbuffer_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	
+	for (uint32_t i = 0; i < 5; ++i)
+	{
+		gbuffer_binding.binding = i;
+		gbuffer_bindings[i] = gbuffer_binding;
+	}
+
+	VkDescriptorSetLayoutCreateInfo gbuffer_dsl_info = {};
+	gbuffer_dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	gbuffer_dsl_info.bindingCount = 5;
+	gbuffer_dsl_info.pBindings = gbuffer_bindings;
+	if (vkCreateDescriptorSetLayout(m_base.device, &gbuffer_dsl_info, host_memory_manager, &m_gbuffer_dsl) != VK_SUCCESS)
+		throw std::runtime_error("failed to create gbuffer descriptor set layout!");
+
+	//create descriptor pool
+	VkDescriptorPoolSize pool_size[2] = {};
+	pool_size[0].descriptorCount = 1;
+	pool_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+	pool_size[1].descriptorCount = 5;
+	pool_size[1].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 
 	VkDescriptorPoolCreateInfo pool_info = {};
 	pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	pool_info.maxSets = 1;
-	pool_info.poolSizeCount = 1;
-	pool_info.pPoolSizes = &pool_size;
-	if (vkCreateDescriptorPool(m_base.device, &pool_info, host_memory_manager, &m_per_frame_dp) != VK_SUCCESS)
+	pool_info.maxSets = 2;
+	pool_info.poolSizeCount = 2;
+	pool_info.pPoolSizes = pool_size;
+	if (vkCreateDescriptorPool(m_base.device, &pool_info, host_memory_manager, &m_dp) != VK_SUCCESS)
 		throw std::runtime_error("failed to create descriptor pool!");
 
 	//create per frame descriptor sets
 	VkDescriptorSetAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	alloc_info.descriptorPool = m_per_frame_dp;
+	alloc_info.descriptorPool = m_dp;
 	alloc_info.descriptorSetCount = 1;
 	alloc_info.pSetLayouts = &m_per_frame_dsls[MAT_TYPE_BASIC];
 	if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &m_per_frame_dss[MAT_TYPE_BASIC]) != VK_SUCCESS)
@@ -751,6 +944,31 @@ void basic_pass::create_per_frame_resources()
 	write.pBufferInfo = &buffer_info;
 	
 	vkUpdateDescriptorSets(m_base.device, 1, &write, 0, nullptr);
+
+	//create gbuffer descriptor sets
+	alloc_info.descriptorPool = m_dp;
+	alloc_info.descriptorSetCount = 1;
+	alloc_info.pSetLayouts = &m_gbuffer_dsl;
+	if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &m_gbuffer_ds) != VK_SUCCESS)
+		throw std::runtime_error("failed to allocate per frame descriptor set!");
+
+	std::array<VkDescriptorImageInfo, 5> gbuffer_image_infos = {};
+	std::array<VkWriteDescriptorSet, 5> writes = {};
+	for (uint32_t i=0; i<gbuffer_image_infos.size(); ++i)
+	{
+		gbuffer_image_infos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		gbuffer_image_infos[i].imageView = m_gbuffer_views[i];
+
+		writes[i].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[i].descriptorCount = 1;
+		writes[i].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		writes[i].dstArrayElement = 0;
+		writes[i].dstBinding = i;
+		writes[i].dstSet = m_gbuffer_ds;
+		writes[i].pImageInfo = &gbuffer_image_infos[i];
+	}
+
+	vkUpdateDescriptorSets(m_base.device, 5, writes.data(), 0, nullptr);
 }
 
 void basic_pass::create_semaphores()

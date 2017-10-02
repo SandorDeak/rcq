@@ -63,3 +63,15 @@ struct camera
 	glm::vec3 look_dir;
 	rcq::camera_data data;
 };
+
+struct light_res
+{
+	rcq::light_data data;
+	rcq::unique_id id;
+};
+
+struct light
+{
+	rcq::unique_id light_res_id;
+	rcq::unique_id id;
+};

@@ -11,5 +11,5 @@ const vec2 vertices[4]=vec2[4](
 	
 void main()
 {
-	gl_Position=vec4(vertices[Gl_index], 0.f 1.f);
+	gl_Position=vec4(vertices[gl_VertexIndex], 0.f, 1.f);
 }

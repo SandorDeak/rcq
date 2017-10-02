@@ -19,7 +19,7 @@ resource_manager::resource_manager(const base_info& info) : m_base(info)
 {
 	m_current_build_task_p.reset(new build_task_package);
 
-	create_samples();
+	create_samplers();
 	create_descriptor_set_layouts();
 	create_command_pool();
 
@@ -631,6 +631,22 @@ void resource_manager::destroy(transform&& _tr)
 	device_memory::instance()->free_buffer(_tr.usage, _tr.cell);
 }
 
+void resource_manager::destroy(light&& l)
+{
+	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT].pools[l.pool_index], 1, &l.ds);
+	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TR].availability[l.pool_index];
+
+	vkDestroyBuffer(m_base.device, l.buffer, host_memory_manager);
+	device_memory::instance()->free_buffer(l.usage, l.cell);
+
+	if (l.has_shadow_map)
+	{
+		vkDestroyImageView(m_base.device, l.shadow_map.view, host_memory_manager);
+		vkDestroyImage(m_base.device, l.shadow_map.image, host_memory_manager);
+		vkFreeMemory(m_base.device, l.shadow_map.memory, host_memory_manager);
+	}
+}
+
 void resource_manager::destroy(memory && _memory)
 {
 	for (auto mem : _memory)
@@ -840,7 +856,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	return tex;
 }
 
-void rcq::resource_manager::create_samples()
+void rcq::resource_manager::create_samplers()
 {
 	VkSamplerCreateInfo simple_sampler_info = {};
 	simple_sampler_info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
@@ -860,6 +876,27 @@ void rcq::resource_manager::create_samples()
 	simple_sampler_info.maxLod = 0.f;
 
 	if (vkCreateSampler(m_base.device, &simple_sampler_info, host_memory_manager, &m_samplers[SAMPLER_TYPE_SIMPLE]) != VK_SUCCESS)
+	{
+		throw std::runtime_error("failed to create texture sampler!");
+	}
+
+	VkSamplerCreateInfo omni_light_shadow_map_sampler = {};
+	omni_light_shadow_map_sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+	omni_light_shadow_map_sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	omni_light_shadow_map_sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	omni_light_shadow_map_sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	omni_light_shadow_map_sampler.anisotropyEnable = VK_TRUE;
+	omni_light_shadow_map_sampler.maxAnisotropy = 16.f;
+	omni_light_shadow_map_sampler.compareEnable = VK_FALSE;
+	omni_light_shadow_map_sampler.magFilter = VK_FILTER_LINEAR;
+	omni_light_shadow_map_sampler.maxLod = 0.f;
+	omni_light_shadow_map_sampler.minFilter = VK_FILTER_LINEAR;
+	omni_light_shadow_map_sampler.minLod = 0.f;
+	omni_light_shadow_map_sampler.mipLodBias = 0.f;
+	omni_light_shadow_map_sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+	if (vkCreateSampler(m_base.device, &omni_light_shadow_map_sampler, host_memory_manager, 
+		&m_samplers[SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP]) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create texture sampler!");
 	}
@@ -961,7 +998,7 @@ void resource_manager::create_descriptor_set_layouts()
 	}
 
 	//create light dsl
-	VkDescriptorSetLayoutBinding light_bindings[2];
+	VkDescriptorSetLayoutBinding light_bindings[2] = {};
 
 	light_bindings[0].binding = 0;
 	light_bindings[0].descriptorCount = 1;
@@ -1011,6 +1048,16 @@ inline void resource_manager::extend_descriptor_pool_pool()
 
 		dp_info.poolSizeCount = 2;
 
+	}
+
+	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT)
+	{
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
+		dp_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		dp_size[1].descriptorCount = DESCRIPTOR_POOL_SIZE;
+		dp_size[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+		dp_info.poolSizeCount = 2;
 	}
 
 	VkDescriptorPool new_pool;
@@ -1095,6 +1142,7 @@ light resource_manager::build(const light_data& data, USAGE usage, bool make_sha
 			//create image
 			VkImageCreateInfo image_info = {};
 			image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			image_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 			image_info.arrayLayers = 6;
 			image_info.extent.depth = 1;
 			image_info.extent.height = SHADOW_MAP_SIZE;
@@ -1204,9 +1252,4 @@ light resource_manager::build(const light_data& data, USAGE usage, bool make_sha
 	}
 
 	return l;
-}
-
-void resource_manager::destroy(light&& _light)
-{
-
 }

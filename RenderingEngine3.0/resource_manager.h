@@ -33,7 +33,7 @@ namespace rcq
 	private:
 		resource_manager(const base_info& info);
 		
-		void create_samples();
+		void create_samplers();
 		void create_descriptor_set_layouts();
 		void create_staging_buffers();
 		void create_command_pool();

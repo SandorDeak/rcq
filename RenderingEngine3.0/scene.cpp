@@ -19,6 +19,10 @@ scene::~scene()
 		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_TR>(tr.id);
 	for (auto& e : m_entities)
 		rcq::engine::instance()->cmd_destroy_renderable(e.m_id);
+	for (auto& res : m_light_res)
+		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_LIGHT>(res.id);
+	for (auto& l : m_lights)
+		rcq::engine::instance()->cmd_destroy_light_renderable(l.id);
 
 	rcq::engine::instance()->cmd_dispatch();
 }
@@ -116,7 +120,35 @@ void scene::build()
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
+	//create light res
+	rcq::omni_light_data old;
+	old.pos = glm::vec3(2.f);
+	old.radiance = glm::vec3(4.f);
 
+	light_res l_res;
+	l_res.data = old;
+	l_res.id=0;
+	m_light_res.push_back(l_res);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT>(l_res.id, l_res.data, rcq::USAGE_STATIC, true);
+
+	old.pos = glm::vec3(-2.f, -2.f, 2.f);
+	old.radiance = glm::vec3(8.f);
+	l_res.data = old;
+	l_res.id = 1;
+	m_light_res.push_back(l_res);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT>(l_res.id, l_res.data, rcq::USAGE_STATIC, false);
+
+	//create lights
+	light l;
+	l.id = 0;
+	l.light_res_id = 0;
+	m_lights.push_back(l);
+	rcq::engine::instance()->cmd_build_light_renderable(l.id, l.light_res_id, rcq::LIFE_EXPECTANCY_LONG);
+
+	l.id = 1;
+	l.light_res_id = 1;
+	m_lights.push_back(l);
+	rcq::engine::instance()->cmd_build_light_renderable(l.id, l.light_res_id, rcq::LIFE_EXPECTANCY_LONG);
 
 	//create entities
 	entity e;

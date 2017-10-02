@@ -82,8 +82,8 @@ namespace rcq
 	enum LIGHT_TYPE
 	{
 		LIGHT_TYPE_OMNI,
-		LIGHT_TYPE_SPOT,
-		LIGHT_TYPE_DIR,
+		//LIGHT_TYPE_SPOT,
+		//LIGHT_TYPE_DIR,
 		LIGHT_TYPE_COUNT
 	};
 
@@ -183,7 +183,7 @@ namespace rcq
 		BUILD_RENDERABLE_INFO_LIFE_EXPECTANCY
 	};
 
-	typedef std::tuple<unique_id, unique_id, LIFE_EXPECTANCY> build_Light_renderable_info;
+	typedef std::tuple<unique_id, unique_id, LIFE_EXPECTANCY> build_light_renderable_info;
 	enum
 	{
 		BUILD_LIGHT_RENDERABLE_INFO_ID,
@@ -410,7 +410,7 @@ namespace rcq
 	struct core_package
 	{
 		std::vector<build_renderable_info> build_renderable;
-		std::vector<build_Light_renderable_info> build_light_renderable;
+		std::vector<build_light_renderable_info> build_light_renderable;
 		std::vector<unique_id> destroy_renderable;
 		std::vector<unique_id> destroy_light_renderable;
 		std::vector<update_tr_info> update_tr;

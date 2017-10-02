@@ -49,10 +49,12 @@ namespace rcq
 
 		
 		template<size_t... render_passes>
-		void record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, 
+		void record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> mat_record_mask,
+			std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_record_mask,
 			std::index_sequence<render_passes...>)
 		{
-			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(cam, record_mask), 0)... };
+			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(cam, mat_record_mask,
+				light_record_mask), 0)... };
 		}
 
 		template<size_t... render_passes>

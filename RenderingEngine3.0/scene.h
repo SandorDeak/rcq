@@ -25,6 +25,8 @@ private:
 	std::vector<material> m_mats;
 	std::vector<mesh> m_meshes;
 	std::vector<transform> m_trs;
+	std::vector<light_res> m_light_res;
+	std::vector<light> m_lights;
 	GLFWwindow* m_window;
 };
 

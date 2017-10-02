@@ -7,7 +7,7 @@ const VkAllocationCallbacks* rcq::host_memory_manager = nullptr;
 
 const size_t rcq::DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE = 1;
 const size_t rcq::CORE_COMMAND_QUEUE_MAX_SIZE=1;
-const size_t SHADOW_MAP_SIZE=512;
+const size_t rcq::SHADOW_MAP_SIZE=512;
 
 
 
