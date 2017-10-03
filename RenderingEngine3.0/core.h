@@ -1,6 +1,7 @@
 #pragma once
 #include "foundation.h"
 #include "basic_pass.h"
+#include "omni_light_shadow_pass.h"
 
 
 namespace rcq

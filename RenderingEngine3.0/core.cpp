@@ -170,6 +170,7 @@ void core::loop()
 				l.id = std::get<BUILD_LIGHT_RENDERABLE_INFO_ID>(build_light);
 				l.type = LIFE_EXPECTANCY_COUNT*res.type + std::get<BUILD_LIGHT_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_light);
 				l.shadow_map = res.shadow_map;
+				l.shadow_map_fb = res.shadow_map_fb;
 
 				light_record_mask.set(l.type);
 
@@ -184,7 +185,8 @@ void core::loop()
 			//update tr
 			if (!package->update_tr.empty())
 			{
-				wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+				//wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+				basic_pass::instance()->wait_for_finish();
 				resource_manager::instance()->update_tr(package->update_tr);
 			}
 
@@ -197,7 +199,8 @@ void core::loop()
 
 			if (package->confirm_destroy)
 			{
-				wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+				//wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+				basic_pass::instance()->wait_for_finish();
 				package->confirm_destroy->set_value();
 			}
 		}

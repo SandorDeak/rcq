@@ -44,10 +44,15 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
 
 	m.resource = "meshes/shelf/CAB.obj";
-	m.id = MESH_SELF;
+	m.id = MESH_SHELF;
 	m_meshes.push_back(m);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
 
+	m.resource = "meshes/cube_inside_out/cube_inside_out.obj";
+	m.calc_tb = false;
+	m.id = MESH_CUBE_INSIDE_OUT;
+	m_meshes.push_back(m);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
 
 	//create materials
 	material mat;
@@ -97,7 +102,7 @@ void scene::build()
 
 	for (int i = 0; i < 10; ++i)
 	{
-		tr.data.model = glm::translate(glm::mat4(1.f), glm::vec3(float(i - 5)*0.5f, 0.f, 0.f));
+		tr.data.model = glm::translate(glm::mat4(1.f), glm::vec3(float(i - 5)*0.5f, -0.5f, 0.f));
 		tr.id = ENTITY_GOLD_BUDDHA+i;
 		m_trs.push_back(tr);
 		rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
@@ -116,14 +121,23 @@ void scene::build()
 	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, 1.f, -4.f });
 	tr.data.scale = glm::vec3(0.015f);
 	tr.data.tex_scale = glm::vec2(5.f);
-	tr.id = ENTITY_SELF;
+	tr.id = ENTITY_SHELF;
+	tr.usage = rcq::USAGE_STATIC;
+	m_trs.push_back(tr);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
+
+	//walls
+	tr.data.model = glm::translate(glm::mat4(1.f), { 0.f, 1.f, 0.f });
+	tr.data.scale = glm::vec3(6.f, 2.f, 6.f);
+	tr.id = ENTITY_WALLS;
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//create light res
 	rcq::omni_light_data old;
 	old.pos = glm::vec3(2.f);
-	old.radiance = glm::vec3(4.f);
+	old.flags = rcq::LIGHT_FLAG_SHADOW_MAP;
+	old.radiance = glm::vec3(6.f);
 
 	light_res l_res;
 	l_res.data = old;
@@ -131,12 +145,12 @@ void scene::build()
 	m_light_res.push_back(l_res);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT>(l_res.id, l_res.data, rcq::USAGE_STATIC, true);
 
-	old.pos = glm::vec3(-2.f, -2.f, 2.f);
+	/*old.pos = glm::vec3(-2.f, -2.f, 2.f);
 	old.radiance = glm::vec3(8.f);
 	l_res.data = old;
 	l_res.id = 1;
 	m_light_res.push_back(l_res);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT>(l_res.id, l_res.data, rcq::USAGE_STATIC, false);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT>(l_res.id, l_res.data, rcq::USAGE_STATIC, false);*/
 
 	//create lights
 	light l;
@@ -145,10 +159,10 @@ void scene::build()
 	m_lights.push_back(l);
 	rcq::engine::instance()->cmd_build_light_renderable(l.id, l.light_res_id, rcq::LIFE_EXPECTANCY_LONG);
 
-	l.id = 1;
+	/*l.id = 1;
 	l.light_res_id = 1;
 	m_lights.push_back(l);
-	rcq::engine::instance()->cmd_build_light_renderable(l.id, l.light_res_id, rcq::LIFE_EXPECTANCY_LONG);
+	rcq::engine::instance()->cmd_build_light_renderable(l.id, l.light_res_id, rcq::LIFE_EXPECTANCY_LONG);*/
 
 	//create entities
 	entity e;
@@ -176,9 +190,18 @@ void scene::build()
 
 	//self
 	e.m_material_id = MAT_BAMBOO_WOOD;
-	e.m_mesh_id = MESH_SELF;
-	e.m_transform_id = ENTITY_SELF;
-	e.m_id = ENTITY_SELF;
+	e.m_mesh_id = MESH_SHELF;
+	e.m_transform_id = ENTITY_SHELF;
+	e.m_id = ENTITY_SHELF;
+	m_entities.push_back(e);
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_id,
+		rcq::LIFE_EXPECTANCY_LONG);
+
+	//wall
+	e.m_material_id = MAT_GOLD;
+	e.m_mesh_id = MESH_CUBE_INSIDE_OUT;
+	e.m_transform_id = ENTITY_WALLS;
+	e.m_id = ENTITY_WALLS;
 	m_entities.push_back(e);
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_id,
 		rcq::LIFE_EXPECTANCY_LONG);
@@ -191,6 +214,7 @@ void scene::build()
 	m_camera.look_dir = glm::normalize(glm::vec3(-2.f));
 	m_camera.proj = glm::perspective(glm::radians(45.f), m_window_size.x / m_window_size.y, 0.1f, 50.f);
 	m_camera.proj[1][1] *= (-1);
+	//m_camera.proj[3][2] *= (-1);
 	m_camera.view = glm::lookAt(glm::vec3(2.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
 	m_camera.data.pos = glm::vec3(2.f);
 	m_camera.data.proj_x_view = m_camera.proj*m_camera.view;

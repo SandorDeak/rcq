@@ -3,10 +3,15 @@
 
 #define PI 3.1415926535897f
 
+const uint LIGHT_FLAG_SHADOW_MAP_BIT=1;
+
+#define near 0.1f
+#define far 100.f
+
 layout(set=0, binding=0) uniform omni_light_data
 {
 	vec3 pos;
-	uint padding0;
+	uint flags;
 	vec3 radiance;
 	
 } old;
@@ -42,7 +47,21 @@ float shlick_geometry_term(float dot_prod, float roughness)
 
 void main()
 {	
-	vec3 l=normalize(old.pos-subpassLoad(pos_in).xyz);
+	vec3 pos=subpassLoad(pos_in).xyz;
+	vec3 d=pos-old.pos;
+	
+	if ((old.flags & LIGHT_FLAG_SHADOW_MAP_BIT)==LIGHT_FLAG_SHADOW_MAP_BIT)
+	{
+		vec3 d=pos-old.pos;
+		float z=max(abs(d.x), max(abs(d.y), abs(d.z)));
+		float t=(far-(far*near/z))/(far-near);
+		if (t>texture(shadow_map, d).x)
+		{
+			discard;
+		}
+	}
+		
+	vec3 l=normalize(old.pos-pos);
 	vec3 v=subpassLoad(view_dir_in).xyz;
 	float roughness=subpassLoad(F0_roughness_in).w;
 	vec3 F0=subpassLoad(F0_roughness_in).xyz;

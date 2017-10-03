@@ -7,6 +7,7 @@
 #include <stb_image.h>
 
 #include "device_memory.h"
+#include "omni_light_shadow_pass.h"
 
 using namespace rcq;
 
@@ -639,8 +640,9 @@ void resource_manager::destroy(light&& l)
 	vkDestroyBuffer(m_base.device, l.buffer, host_memory_manager);
 	device_memory::instance()->free_buffer(l.usage, l.cell);
 
-	if (l.has_shadow_map)
+	if (l.shadow_map.image!=VK_NULL_HANDLE)
 	{
+		vkDestroyFramebuffer(m_base.device, l.shadow_map_fb, host_memory_manager);
 		vkDestroyImageView(m_base.device, l.shadow_map.view, host_memory_manager);
 		vkDestroyImage(m_base.device, l.shadow_map.image, host_memory_manager);
 		vkFreeMemory(m_base.device, l.shadow_map.memory, host_memory_manager);
@@ -1003,11 +1005,12 @@ void resource_manager::create_descriptor_set_layouts()
 	light_bindings[0].binding = 0;
 	light_bindings[0].descriptorCount = 1;
 	light_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	light_bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	light_bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT|VK_SHADER_STAGE_VERTEX_BIT;
 
 	light_bindings[1].binding = 1;
 	light_bindings[1].descriptorCount = 1;
 	light_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	light_bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	VkDescriptorSetLayoutCreateInfo dsl_info = {};
 	dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1083,7 +1086,6 @@ void resource_manager::create_command_pool()
 light resource_manager::build(const light_data& data, USAGE usage, bool make_shadow_map)
 {
 	light l;
-	l.has_shadow_map = make_shadow_map;
 	l.usage = usage;
 	l.type = static_cast<LIGHT_TYPE>(data.index());
 
@@ -1187,15 +1189,15 @@ light resource_manager::build(const light_data& data, USAGE usage, bool make_sha
 			if (vkCreateImageView(m_base.device, &view_info, host_memory_manager, &l.shadow_map.view) != VK_SUCCESS)
 				throw std::runtime_error("failed to create image view!");
 
-			//transition to depth stencil optimal layout
+			//transition to shader read only optimal
 			VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
 
 			VkImageMemoryBarrier barrier = {};
 			barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			barrier.image = l.shadow_map.image;
 			barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			barrier.srcAccessMask = 0;
 			barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -1205,13 +1207,19 @@ light resource_manager::build(const light_data& data, USAGE usage, bool make_sha
 			barrier.subresourceRange.layerCount = 6;
 			barrier.subresourceRange.levelCount = 1;
 
-			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT, 0, 0, nullptr,
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
 				0, nullptr, 1, &barrier);
 
 			end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
 
 			l.shadow_map.sampler_type = SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP;
+
+			omni_light_shadow_pass::instance()->create_framebuffer(l);
 		}
+	}
+	else
+	{
+		l.shadow_map.image = VK_NULL_HANDLE;
 	}
 
 	//update descriptor set

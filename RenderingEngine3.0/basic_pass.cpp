@@ -127,10 +127,11 @@ void basic_pass::create_render_pass()
 
 	VkAttachmentDescription attachments[] = { depth_stencil, gbuffer, gbuffer, gbuffer, gbuffer, gbuffer, color_out };
 	
-	//mat pass refs
 	VkAttachmentReference depth_ref = {};
 	depth_ref.attachment = 0;
 	depth_ref.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	//mat pass refs
 
 	VkAttachmentReference gbuffer_mat_refs[5];
 	for (int i = 0; i < 5; ++i)
@@ -164,7 +165,7 @@ void basic_pass::create_render_pass()
 	light_subpass.colorAttachmentCount = 1;
 	light_subpass.inputAttachmentCount = 5;
 	light_subpass.pColorAttachments = &color_out_ref;
-	light_subpass.pDepthStencilAttachment = nullptr;
+	light_subpass.pDepthStencilAttachment = &depth_ref;
 	light_subpass.pInputAttachments = gbuffer_light_refs;
 	light_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	
@@ -263,6 +264,15 @@ void basic_pass::create_omni_light_pipeline()
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
 
+	VkPipelineDepthStencilStateCreateInfo depth = {};
+	depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depth.depthBoundsTestEnable = VK_TRUE;
+	depth.minDepthBounds = 0.f;
+	depth.maxDepthBounds = 0.999f;
+	depth.depthTestEnable = VK_FALSE;
+	depth.depthWriteEnable = VK_FALSE;
+	depth.stencilTestEnable = VK_FALSE;
+
 	VkPipelineMultisampleStateCreateInfo multisample = {};
 	multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 	multisample.alphaToCoverageEnable = VK_FALSE;
@@ -304,7 +314,7 @@ void basic_pass::create_omni_light_pipeline()
 	gp_info.basePipelineIndex = -1;
 	gp_info.layout = m_light_pls[LIGHT_TYPE_OMNI];
 	gp_info.pColorBlendState = &color_blend;
-	gp_info.pDepthStencilState = nullptr;
+	gp_info.pDepthStencilState = &depth;
 	gp_info.pInputAssemblyState = &assembly;
 	gp_info.pMultisampleState = &multisample;
 	gp_info.pRasterizationState = &rasterizer;
@@ -742,7 +752,7 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 			inheritance.framebuffer = m_fbs[image_index];
 			inheritance.occlusionQueryEnable = VK_FALSE;
 			inheritance.renderPass = m_pass;
-			inheritance.subpass = 0;
+			inheritance.subpass = 1;
 
 			VkCommandBufferBeginInfo cb_begin = {};
 			cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;

@@ -5,8 +5,9 @@
 enum MESH : rcq::unique_id
 {
 	MESH_FLOOR,
-	MESH_SELF,
+	MESH_SHELF,
 	MESH_BUDDHA,
+	MESH_CUBE_INSIDE_OUT,
 	MESH_COUNT
 };
 
@@ -27,7 +28,8 @@ enum MAT : rcq::unique_id
 enum ENTITIY : rcq::unique_id
 {
 	ENTITY_FLOOR,
-	ENTITY_SELF,
+	ENTITY_SHELF,
+	ENTITY_WALLS,
 	ENTITY_GOLD_BUDDHA,
 	ENTITY_COUNT
 };

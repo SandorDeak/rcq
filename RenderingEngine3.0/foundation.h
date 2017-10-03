@@ -33,6 +33,10 @@
 namespace rcq
 {
 	//interface related
+	enum LIGHT_FLAG
+	{
+		LIGHT_FLAG_SHADOW_MAP
+	};
 
 	enum TEX_TYPE
 	{
@@ -89,6 +93,7 @@ namespace rcq
 
 	enum RENDER_PASS
 	{
+		RENDER_PASS_OMNI_LIGHT_SHADOW,
 		RENDER_PASS_BASIC,
 		RENDER_PASS_COUNT
 	};
@@ -376,8 +381,8 @@ namespace rcq
 		VkBuffer buffer;
 		void* data;
 		cell_info cell;
-		bool has_shadow_map;
 		texture shadow_map;
+		VkFramebuffer shadow_map_fb;
 		LIGHT_TYPE type;
 	};
 
@@ -401,6 +406,7 @@ namespace rcq
 		texture shadow_map;
 		uint32_t type;
 		bool destroy;
+		VkFramebuffer shadow_map_fb;
 		unique_id id;
 	};
 
@@ -479,15 +485,17 @@ namespace rcq
 	};
 
 	class basic_pass;
+	class omni_light_shadow_pass;
 	template<size_t res_type>
 	struct render_pass_typename {};
 
 	template<> struct render_pass_typename<RENDER_PASS_BASIC> { typedef  basic_pass type; };
+	template<> struct render_pass_typename<RENDER_PASS_OMNI_LIGHT_SHADOW> { typedef omni_light_shadow_pass type; };
 
 	struct omni_light_data
 	{
 		glm::vec3 pos;
-		uint32_t padding0;
+		uint32_t flags;
 		glm::vec3 radiance;
 	};
 

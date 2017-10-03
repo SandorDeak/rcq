@@ -4,6 +4,7 @@
 #include "core.h"
 #include "resource_manager.h"
 #include "basic_pass.h"
+#include "omni_light_shadow_pass.h"
 #include "device_memory.h"
 
 using namespace rcq;
@@ -35,6 +36,7 @@ engine::engine()
 	base_info.window_name = "RCQ Engine";
 	base_info.device_features.samplerAnisotropy = VK_TRUE;
 	base_info.device_features.geometryShader = VK_TRUE;
+	base_info.device_features.depthBounds = VK_TRUE;
 
 	base::init(base_info);
 	m_base = base::instance()->get_info();
@@ -45,6 +47,7 @@ engine::engine()
 	resource_manager::init(m_base);
 	core::init();
 	basic_pass::init(m_base, core::instance()->get_renderable_container(), core::instance()->get_light_renderable_container());
+	omni_light_shadow_pass::init(m_base, core::instance()->get_renderable_container(), core::instance()->get_light_renderable_container());
 
 	disassembler::init();
 
@@ -55,6 +58,7 @@ engine::~engine()
 	disassembler::destroy();
 	core::destroy();
 	basic_pass::destroy();
+	omni_light_shadow_pass::destroy();
 	resource_manager::destroy();
 	device_memory::destroy();
 	base::destroy();
