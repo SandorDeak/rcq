@@ -16,7 +16,6 @@ engine::engine()
 {
 	m_command_p.reset(new command_package);
 
-	//init base
 	base_create_info base_info = {};
 	base_info.device_extensions=
 	{
@@ -46,8 +45,8 @@ engine::engine()
 	device_memory::init(m_base);
 	resource_manager::init(m_base);
 	core::init();
-	basic_pass::init(m_base, core::instance()->get_renderable_container(), core::instance()->get_light_renderable_container());
-	omni_light_shadow_pass::init(m_base, core::instance()->get_renderable_container(), core::instance()->get_light_renderable_container());
+	basic_pass::init(m_base, core::instance()->get_renderable_container());
+	omni_light_shadow_pass::init(m_base, core::instance()->get_renderable_container());
 
 	disassembler::init();
 

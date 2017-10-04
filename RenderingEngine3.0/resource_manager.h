@@ -24,7 +24,7 @@ namespace rcq
 		}
 
 
-		template<RESOURCE_TYPE res_type>
+		template<size_t res_type>
 		const auto& get(unique_id id);
 
 		void update_tr(const std::vector<update_tr_info>& trs);
@@ -68,25 +68,25 @@ namespace rcq
 
 
 		std::tuple<
-			std::map<unique_id, material>,
+			std::map<unique_id, material_opaque>,
+			std::map <unique_id, light_omni>,
+			std::map<unique_id, skybox>,
 			std::map<unique_id, mesh>,
 			std::map<unique_id, transform>,
-			std::map <unique_id, light>,
 			std::map<unique_id, memory>
 		> m_resources_ready;
 		std::mutex m_resources_ready_mutex;
 
 		std::tuple<
-			std::map<unique_id, std::future<material>>,
+			std::map<unique_id, std::future<material_opaque>>,
+			std::map<unique_id, std::future<light_omni>>,
+			std::map<unique_id, std::future<skybox>>,
 			std::map<unique_id, std::future<mesh>>,
 			std::map<unique_id, std::future<transform>>,
-			std::map <unique_id, std::future<light>>,
 			std::map<unique_id, std::future<memory>>
 		> m_resources_proc;
 		std::mutex m_resources_proc_mutex;
 
-		std::map<RENDER_PASS, texture> m_depth_ready;
-		std::map<RENDER_PASS, std::future<texture>> m_depth_proc;
 
 		template<size_t... res_types>
 		inline void check_resource_leak(std::index_sequence<res_types...>)
@@ -126,10 +126,11 @@ namespace rcq
 
 
 		mesh build(const std::string& filename, bool calc_tb);
-		material build(const material_data& data, const texfiles& files, MAT_TYPE type);
+		material_opaque build(const material_opaque_data& data, const texfiles& files);
 		transform build(const transform_data& data, USAGE usage);
-		light build(const light_data& data, USAGE usage, bool make_shadow_map);
+		light_omni build(const light_omni_data& data, USAGE usage);
 		memory build(const std::vector<VkMemoryAllocateInfo>& requirements);
+		skybox build(const std::string& filename) { return skybox(); }
 		texture load_texture(const std::string& filename);
 
 		//destroy thread
@@ -140,10 +141,11 @@ namespace rcq
 		destroy_ids m_pending_destroys;
 		bool m_should_end_destroy;
 		std::tuple<
-			std::vector<material>,
+			std::vector<material_opaque>,
+			std::vector<light_omni>,
+			std::vector<skybox>,
 			std::vector<mesh>,
 			std::vector<transform>,
-			std::vector<light>,
 			std::vector<memory>
 		> m_destroyables;
 
@@ -165,16 +167,17 @@ namespace rcq
 
 	
 		void destroy(mesh&& _mesh);
-		void destroy(material&& _mat);
+		void destroy(material_opaque&& _mat);
 		void destroy(transform&& _tr);
-		void destroy(light&& _light);
+		void destroy(light_omni&& _light);
 		void destroy(memory&& _memory);
+		void destroy(skybox&& _sb) {}
 
 	};
 
 
 	//implementations
-	template<RESOURCE_TYPE res_type>
+	template<size_t res_type>
 	const auto& resource_manager::get(unique_id id)
 	{
 		auto& res_ready = std::get<res_type>(m_resources_ready);

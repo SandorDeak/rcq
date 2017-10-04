@@ -28,7 +28,6 @@ namespace rcq
 		}
 
 		renderable_container& get_renderable_container() { return m_renderables; }
-		light_renderable_container& get_light_renderable_container() { return m_light_renderables; }
 
 	private:
 		core();
@@ -41,21 +40,13 @@ namespace rcq
 		std::mutex m_package_queue_mutex;
 		std::condition_variable m_package_queue_condvar;
 
-
-		std::map<unique_id, uint32_t> m_renderable_type_table;
-		std::map<unique_id, uint32_t> m_light_renderable_type_table;
-
 		renderable_container m_renderables;
-		light_renderable_container m_light_renderables;
-
 		
 		template<size_t... render_passes>
-		void record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> mat_record_mask,
-			std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_record_mask,
+		void record_and_render(const std::optional<camera_data>& cam, std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask,
 			std::index_sequence<render_passes...>)
 		{
-			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(cam, mat_record_mask,
-				light_record_mask), 0)... };
+			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(cam, record_mask), 0)... };
 		}
 
 		template<size_t... render_passes>
@@ -63,6 +54,17 @@ namespace rcq
 		{
 			auto l = { (render_pass_typename<render_passes>::type::instance()->wait_for_finish(), 0)... };
 		}
+
+		template<size_t... renderable_types>
+		void build_renderables(const std::array<std::vector<build_renderable_info>, 
+			RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>& build_infos,
+			std::index_sequence<renderable_types...>)
+		{
+			auto l = { (build_renderables_impl<renderable_types>(build_infos[renderable_types]),0)... };
+		}
+
+		template<size_t rend_type>
+		inline void build_renderables_impl(const std::vector<build_renderable_info>& build_infos);
 	};
 }
 

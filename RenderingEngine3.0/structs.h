@@ -31,14 +31,14 @@ enum ENTITIY : rcq::unique_id
 	ENTITY_SHELF,
 	ENTITY_WALLS,
 	ENTITY_GOLD_BUDDHA,
+	ENTITY_LIGHT,
 	ENTITY_COUNT
 };
 
-struct material
+struct material_opaque
 {
 
-	rcq::material_data data;
-	rcq::MAT_TYPE type;
+	rcq::material_opaque_data data;
 	std::array<std::string, rcq::TEX_TYPE_COUNT> tex_resources;
 	rcq::unique_id id;
 };
@@ -66,14 +66,8 @@ struct camera
 	rcq::camera_data data;
 };
 
-struct light_res
+struct light_omni
 {
-	rcq::light_data data;
-	rcq::unique_id id;
-};
-
-struct light
-{
-	rcq::unique_id light_res_id;
+	rcq::light_omni_data data;
 	rcq::unique_id id;
 };

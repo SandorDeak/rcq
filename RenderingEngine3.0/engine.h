@@ -37,33 +37,21 @@ namespace rcq
 			std::get<type>(m_command_p->resource_mananger_destroy_p.value().ids).push_back(id);
 		}
 
-		void cmd_build_renderable(unique_id id, unique_id tr_id, unique_id mesh_id, unique_id mat_id, LIFE_EXPECTANCY life_exp)
+		void cmd_build_renderable(unique_id id, unique_id tr_id, unique_id mesh_id, unique_id mat_id, RENDERABLE_TYPE type, 
+			LIFE_EXPECTANCY life_exp)
 		{
 			if (!m_command_p->core_p)
 				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().build_renderable.emplace_back(id, tr_id, mesh_id, mat_id, life_exp);
+			m_command_p->core_p.value().build_renderable[type*LIFE_EXPECTANCY_COUNT+life_exp].emplace_back(id, tr_id, mesh_id, mat_id);
 		}
 
-		void cmd_build_light_renderable(unique_id id, unique_id res_id, LIFE_EXPECTANCY life_exp)
+		void cmd_destroy_renderable(unique_id uid, RENDERABLE_TYPE type, LIFE_EXPECTANCY life_exp)
 		{
 			if (!m_command_p->core_p)
 				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().build_light_renderable.emplace_back(id, res_id, life_exp);
+			m_command_p->core_p.value().destroy_renderable[type*LIFE_EXPECTANCY_COUNT + life_exp].push_back(uid);
 		}
 
-		void cmd_destroy_renderable(unique_id uid)
-		{
-			if (!m_command_p->core_p)
-				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().destroy_renderable.push_back(uid);
-		}
-
-		void cmd_destroy_light_renderable(unique_id id)
-		{
-			if (!m_command_p->core_p)
-				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().destroy_light_renderable.push_back(id);
-		}
 
 		void cmd_update_camera(const camera_data& cam)
 		{

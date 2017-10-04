@@ -6,9 +6,8 @@ using namespace rcq;
 
 basic_pass* basic_pass::m_instance = nullptr;
 
-basic_pass::basic_pass(const base_info& info, const renderable_container& renderables, 
-	const light_renderable_container& light_renderables):
-	m_base(info), m_renderables(renderables), m_light_renderables(light_renderables)
+basic_pass::basic_pass(const base_info& info, const renderable_container& renderables):
+	m_base(info), m_renderables(renderables)
 {
 	create_render_pass();
 	create_command_pool();
@@ -21,12 +20,8 @@ basic_pass::basic_pass(const base_info& info, const renderable_container& render
 	create_semaphores();
 	create_fences();
 
-	m_mat_record_masks.resize(m_fbs.size());
-	for (auto& bs : m_mat_record_masks)
-		bs.reset();
-
-	m_light_record_masks.resize(m_fbs.size());
-	for (auto& bs : m_light_record_masks)
+	m_record_masks.resize(m_fbs.size());
+	for (auto& bs : m_record_masks)
 		bs.reset();
 }
 
@@ -62,26 +57,21 @@ basic_pass::~basic_pass()
 	destroy->ids[RESOURCE_TYPE_MEMORY].push_back(RENDER_PASS_BASIC);
 	resource_manager::instance()->push_destroy_package(std::move(destroy));
 
-	for (auto& pl : m_mat_pls)
+	for (auto& pl : m_pls)
 		vkDestroyPipelineLayout(m_base.device, pl, host_memory_manager);
-	for (auto& pl : m_light_pls)
-		vkDestroyPipelineLayout(m_base.device, pl, host_memory_manager);
-	for (auto& gp : m_mat_gps)
-		vkDestroyPipeline(m_base.device, gp, host_memory_manager);
-	for (auto& gp : m_light_gps)
+	for (auto& gp : m_gps)
 		vkDestroyPipeline(m_base.device, gp, host_memory_manager);
 
 	vkDestroyRenderPass(m_base.device, m_pass, host_memory_manager);
 }
 
-void basic_pass::init(const base_info& info, const renderable_container& renderables,
-	const light_renderable_container& light_renderables)
+void basic_pass::init(const base_info& info, const renderable_container& renderables)
 {
 	if (m_instance != nullptr)
 	{
 		throw std::runtime_error("core is already initialised!");
 	}
-	m_instance = new basic_pass(info, renderables, light_renderables);
+	m_instance = new basic_pass(info, renderables);
 }
 
 void basic_pass::destroy()
@@ -299,20 +289,20 @@ void basic_pass::create_omni_light_pipeline()
 	color_blend.logicOpEnable = VK_FALSE;
 	color_blend.pAttachments = &color_blend_attachment;
 
-	VkDescriptorSetLayout dsls[2] = { resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT), m_gbuffer_dsl };
+	VkDescriptorSetLayout dsls[2] = { resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_OMNI), m_gbuffer_dsl };
 	VkPipelineLayoutCreateInfo layout = {};
 	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	layout.setLayoutCount = 2;
 	layout.pSetLayouts = dsls;
 
-	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_light_pls[LIGHT_TYPE_OMNI]) != VK_SUCCESS)
+	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_pls[RENDERABLE_TYPE_LIGHT_OMNI]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create light pipeline layout!");
 
 	VkGraphicsPipelineCreateInfo gp_info = {};
 	gp_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	gp_info.basePipelineHandle = VK_NULL_HANDLE;
 	gp_info.basePipelineIndex = -1;
-	gp_info.layout = m_light_pls[LIGHT_TYPE_OMNI];
+	gp_info.layout = m_pls[RENDERABLE_TYPE_LIGHT_OMNI];
 	gp_info.pColorBlendState = &color_blend;
 	gp_info.pDepthStencilState = &depth;
 	gp_info.pInputAssemblyState = &assembly;
@@ -325,7 +315,7 @@ void basic_pass::create_omni_light_pipeline()
 	gp_info.stageCount = 2;
 	gp_info.subpass = 1;
 
-	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &gp_info, host_memory_manager, &m_light_gps[LIGHT_TYPE_OMNI])
+	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &gp_info, host_memory_manager, &m_gps[RENDERABLE_TYPE_LIGHT_OMNI])
 		!= VK_SUCCESS)
 		throw std::runtime_error("failed to create graphics pipeline!");
 
@@ -432,19 +422,21 @@ void basic_pass::create_opaque_mat_pipeline()
 
 	VkPipelineLayoutCreateInfo layout = {};
 	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	VkDescriptorSetLayout dsls[] = { m_per_frame_dsls[MAT_TYPE_BASIC], resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR), 
-		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT) };
+	VkDescriptorSetLayout dsls[] = { 
+		m_per_frame_dsls[RENDERABLE_TYPE_MAT_OPAQUE], 
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR), 
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE) };
 	layout.pSetLayouts = dsls;
 	layout.setLayoutCount = 3;
 	
-	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_mat_pls[MAT_TYPE_BASIC]) != VK_SUCCESS)
+	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_pls[RENDERABLE_TYPE_MAT_OPAQUE]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create pipeline layout!");
 
 	VkGraphicsPipelineCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	info.basePipelineHandle = VK_NULL_HANDLE;
 	info.basePipelineIndex = -1;
-	info.layout = m_mat_pls[MAT_TYPE_BASIC];
+	info.layout = m_pls[RENDERABLE_TYPE_MAT_OPAQUE];
 	info.pColorBlendState = &color_blend;
 	info.pDepthStencilState = &depthstencil;
 	info.pInputAssemblyState = &input_assembly;
@@ -457,8 +449,91 @@ void basic_pass::create_opaque_mat_pipeline()
 	info.subpass = 0;
 	info.stageCount = 2;
 
-	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &info, host_memory_manager, &m_mat_gps[MAT_TYPE_BASIC]) != VK_SUCCESS)
+	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &info, host_memory_manager, &m_gps[RENDERABLE_TYPE_MAT_OPAQUE]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create graphics pipeline!");
+
+	vkDestroyShaderModule(m_base.device, vert_module, host_memory_manager);
+	vkDestroyShaderModule(m_base.device, frag_module, host_memory_manager);
+}
+
+void basic_pass::create_skybox_pipeline()
+{
+	auto vert_code = read_file("shaders/basic_pass/mat_subpass/skybox/vert.spv");
+	auto frag_code = read_file("shaders/basic_pass/mat_subpass/skybox/frag.spv");
+
+	VkShaderModule vert_module = create_shader_module(m_base.device, vert_code);
+	VkShaderModule frag_module = create_shader_module(m_base.device, frag_code);
+
+	VkPipelineShaderStageCreateInfo shaders[2] = {};
+	shaders[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaders[0].module = vert_module;
+	shaders[0].pName = "main";
+	shaders[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+	shaders[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaders[0].module = frag_module;
+	shaders[0].pName = "main";
+	shaders[0].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkPipelineInputAssemblyStateCreateInfo assembly = {};
+	assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	assembly.primitiveRestartEnable = VK_TRUE;
+	assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+
+	VkViewport vp = {};
+	vp.height = (float)m_base.swap_chain_image_extent.height;
+	vp.width = (float)m_base.swap_chain_image_extent.width;
+	vp.minDepth = 0.f;
+	vp.maxDepth = 1.f;
+
+	VkRect2D scissor = {};
+	scissor.extent = m_base.swap_chain_image_extent;
+	scissor.offset = { 0,0 };
+
+	VkPipelineViewportStateCreateInfo viewport = {};
+	viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewport.pScissors = &scissor;
+	viewport.pViewports = &vp;
+	viewport.scissorCount = 1;
+	viewport.viewportCount = 1;
+
+	VkPipelineRasterizationStateCreateInfo rasterizer = {};
+	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.cullMode = VK_CULL_MODE_NONE;
+	rasterizer.depthBiasEnable = VK_FALSE;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	rasterizer.lineWidth = 1.f;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizer.rasterizerDiscardEnable = VK_FALSE;
+
+	VkPipelineDepthStencilStateCreateInfo depth = {};
+	depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depth.depthBoundsTestEnable = VK_FALSE;
+	depth.depthCompareOp = VK_COMPARE_OP_EQUAL;
+	depth.depthTestEnable = VK_TRUE;
+	depth.depthWriteEnable = VK_FALSE;
+	depth.stencilTestEnable = VK_FALSE;
+
+	VkPipelineMultisampleStateCreateInfo multisample = {};
+	multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisample.alphaToCoverageEnable = VK_FALSE;
+	multisample.alphaToOneEnable = VK_FALSE;
+	multisample.minSampleShading = 0.f;
+	multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+	multisample.sampleShadingEnable = VK_FALSE;
+	
+	VkPipelineColorBlendAttachmentState color_blend_attachment = {};
+	color_blend_attachment.blendEnable = VK_FALSE;
+	color_blend_attachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT |
+		VK_COLOR_COMPONENT_A_BIT;
+
+	VkPipelineColorBlendStateCreateInfo color_blend = {};
+	color_blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+	color_blend.attachmentCount = 1;
+	color_blend.logicOpEnable = VK_FALSE;
+	color_blend.pAttachments = &color_blend_attachment;
+
+	
 
 	vkDestroyShaderModule(m_base.device, vert_module, host_memory_manager);
 	vkDestroyShaderModule(m_base.device, frag_module, host_memory_manager);
@@ -675,13 +750,11 @@ void basic_pass::create_framebuffers()
 	}
 }
 
-void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> mat_record_mask,
-	std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_record_mask)
+void basic_pass::record_and_render(const std::optional<camera_data>& cam, 
+	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask)
 {
-	for (auto& rm : m_mat_record_masks)
-		rm |= mat_record_mask;
-	for (auto& rm : m_light_record_masks)
-		rm |= light_record_mask;
+	for (auto& rm : m_record_masks)
+		rm |= record_mask;
 
 	//acquire swap chain image
 	uint32_t image_index;
@@ -697,13 +770,18 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 		throw std::runtime_error("failed to wait for fence!");
 
 	//record secondary command buffers (if necessary)
-	for (uint32_t i = 0; i < MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++i)
+
+	constexpr std::array<uint32_t, 2> deferred_rend_types = {
+		LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_MAT_OPAQUE,
+		LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_MAT_OPAQUE + 1
+	};
+	for (auto i : deferred_rend_types)
 	{
-		if (m_mat_record_masks[image_index][i] && !m_renderables[i].empty())
+		if (m_record_masks[image_index][i] && !m_renderables[i].empty())
 		{
 
-			auto cb = m_mat_cbs[i][image_index];
-			uint32_t mat_type = i / LIFE_EXPECTANCY_COUNT;
+			auto cb = m_secondary_cbs[i][image_index];
+			uint32_t rend_type = i / LIFE_EXPECTANCY_COUNT;
 
 			VkCommandBufferInheritanceInfo inheritance = {};
 			inheritance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -718,21 +796,21 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 			cb_begin.pInheritanceInfo = &inheritance;
 
 			vkBeginCommandBuffer(cb, &cb_begin);
-			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mat_gps[mat_type]);
-			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mat_pls[mat_type], 0, 1,
-				&m_per_frame_dss[mat_type], 0, nullptr);
+			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[rend_type]);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[rend_type], 0, 1,
+				&m_per_frame_dss[rend_type], 0, nullptr);
 
 			for (const auto& r : m_renderables[i])
 			{
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mat_pls[mat_type], 1, 1, &r.tr_ds, 0, nullptr);
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_mat_pls[mat_type], 2, 1, &r.mat_ds, 0, nullptr);
-				vkCmdBindIndexBuffer(cb, r.ib, 0, VK_INDEX_TYPE_UINT32);
-				VkBuffer vbs[] = { r.vb, r.veb };
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[rend_type], 1, 1, &r.tr_ds, 0, nullptr);
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[rend_type], 2, 1, &r.mat_light_ds, 0, nullptr);
+				vkCmdBindIndexBuffer(cb, r.m.ib, 0, VK_INDEX_TYPE_UINT32);
+				VkBuffer vbs[] = { r.m.vb, r.m.veb };
 				if (vbs[1] == VK_NULL_HANDLE)
 					vbs[1] = vbs[0];
 				VkDeviceSize offsets[] = { 0,0 };
 				vkCmdBindVertexBuffers(cb, 0, 2, vbs, offsets);
-				vkCmdDrawIndexed(cb, r.size, 1, 0, 0, 0);
+				vkCmdDrawIndexed(cb, r.m.size, 1, 0, 0, 0);
 			}
 
 			if (vkEndCommandBuffer(cb) != VK_SUCCESS)
@@ -740,12 +818,17 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 		}	
 	}
 
-	for (uint32_t i = 0; i < LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++i)
+	constexpr std::array<uint32_t, 2> light_pass_rend_types = {
+		LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_LIGHT_OMNI,
+		LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_LIGHT_OMNI + 1
+	};
+
+	for (auto i : light_pass_rend_types)
 	{
-		if (m_light_record_masks[image_index][i] && !m_light_renderables[i].empty())
+		if (m_record_masks[image_index][i] && !m_renderables[i].empty())
 		{
-			auto cb = m_light_cbs[i][image_index];
-			int light_type = i / LIFE_EXPECTANCY_COUNT;
+			auto cb = m_secondary_cbs[i][image_index];
+			int rend_type = i / LIFE_EXPECTANCY_COUNT;
 
 			VkCommandBufferInheritanceInfo inheritance = {};
 			inheritance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
@@ -760,19 +843,18 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 			cb_begin.pInheritanceInfo = &inheritance;
 
 			vkBeginCommandBuffer(cb, &cb_begin);
-			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_light_gps[light_type]);
-			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_light_pls[light_type], 1, 1, &m_gbuffer_ds, 0, nullptr);
-			for (auto& l : m_light_renderables[i])
+			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[rend_type]);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[rend_type], 1, 1, &m_gbuffer_ds, 0, nullptr);
+			for (auto& l : m_renderables[i])
 			{
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_light_pls[light_type], 0, 1, &l.ds, 0, nullptr);
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[rend_type], 0, 1, &l.mat_light_ds, 0, nullptr);
 				vkCmdDraw(cb, 4, 1, 0, 0);
 			}
 			if (vkEndCommandBuffer(cb) != VK_SUCCESS)
 				throw std::runtime_error("failed to record light command buffer!");
 		}
 	}
-	m_mat_record_masks[image_index].reset();
-	m_light_record_masks[image_index].reset();
+	m_record_masks[image_index].reset();
 
 	// copy camera data
 	if (cam)
@@ -802,16 +884,16 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam, std::b
 	pass_begin.renderPass = m_pass;
 
 	vkCmdBeginRenderPass(cb, &pass_begin, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-	for (uint32_t j = 0; j < MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++j)
+	for (auto j : deferred_rend_types)
 	{
 		if (!m_renderables[j].empty())
-			vkCmdExecuteCommands(cb, 1, &m_mat_cbs[j][image_index]);
+			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[j][image_index]);
 	}
 	vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-	for (uint32_t j = 0; j < LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT; ++j)
+	for (auto j : light_pass_rend_types)
 	{
-		if (!m_light_renderables[j].empty())
-			vkCmdExecuteCommands(cb, 1, &m_light_cbs[j][image_index]);
+		if (!m_renderables[j].empty())
+			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[j][image_index]);
 	}
 
 	vkCmdEndRenderPass(cb);
@@ -857,17 +939,11 @@ void basic_pass::allocate_command_buffers()
 	alloc_info.commandBufferCount = static_cast<uint32_t>(m_fbs.size());
 	alloc_info.commandPool = m_cp;
 	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-	for (auto& cbs : m_mat_cbs)
+	for (auto& cbs : m_secondary_cbs)
 	{
 		cbs.resize(m_fbs.size());
 		if (vkAllocateCommandBuffers(m_base.device, &alloc_info, cbs.data()) != VK_SUCCESS)
 			throw std::runtime_error("failed to allocate secondary commant buffers!");	
-	}
-	for (auto& cbs :m_light_cbs)
-	{
-		cbs.resize(m_fbs.size());
-		if (vkAllocateCommandBuffers(m_base.device, &alloc_info, cbs.data()) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate secondary commant buffers!");
 	}
 
 	//allocate primary cbs
@@ -891,7 +967,8 @@ void basic_pass::create_descriptors()
 	dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	dsl_info.bindingCount = 1;
 	dsl_info.pBindings = &cam_binding;
-	if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, host_memory_manager, &m_per_frame_dsls[MAT_TYPE_BASIC]) != VK_SUCCESS)
+	if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, host_memory_manager, &m_per_frame_dsls[RENDERABLE_TYPE_MAT_OPAQUE]) 
+		!= VK_SUCCESS)
 		throw std::runtime_error("failed to create per frame descriptor set layout!");
 
 	//create gbuffer descriptos set layout
@@ -935,8 +1012,8 @@ void basic_pass::create_descriptors()
 	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	alloc_info.descriptorPool = m_dp;
 	alloc_info.descriptorSetCount = 1;
-	alloc_info.pSetLayouts = &m_per_frame_dsls[MAT_TYPE_BASIC];
-	if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &m_per_frame_dss[MAT_TYPE_BASIC]) != VK_SUCCESS)
+	alloc_info.pSetLayouts = &m_per_frame_dsls[RENDERABLE_TYPE_MAT_OPAQUE];
+	if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &m_per_frame_dss[RENDERABLE_TYPE_MAT_OPAQUE]) != VK_SUCCESS)
 		throw std::runtime_error("failed to allocate per frame descriptor set!");
 
 	VkDescriptorBufferInfo buffer_info = {};
@@ -950,7 +1027,7 @@ void basic_pass::create_descriptors()
 	write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 	write.dstArrayElement = 0;
 	write.dstBinding = 0;
-	write.dstSet = m_per_frame_dss[MAT_TYPE_BASIC];
+	write.dstSet = m_per_frame_dss[RENDERABLE_TYPE_MAT_OPAQUE];
 	write.pBufferInfo = &buffer_info;
 	
 	vkUpdateDescriptorSets(m_base.device, 1, &write, 0, nullptr);

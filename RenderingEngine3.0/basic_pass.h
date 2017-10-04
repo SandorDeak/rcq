@@ -10,13 +10,12 @@ namespace rcq
 		basic_pass(basic_pass&&) = delete;
 		~basic_pass();
 
-		static void init(const base_info& info, const renderable_container& renderables, 
-			const light_renderable_container& light_renderables);
+		static void init(const base_info& info, const renderable_container& renderables);
 		static void destroy();
 		static basic_pass* instance() { return m_instance; }
 
-		void record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> mat_record_mass,
-			std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_record_mask);
+		void record_and_render(const std::optional<camera_data>& cam, 
+			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask);
 		void wait_for_finish();
 
 	private:
@@ -26,13 +25,13 @@ namespace rcq
 			SUBPASS_LIGHT
 		};
 
-		basic_pass(const base_info& info, const renderable_container& renderables, 
-			const light_renderable_container& light_renderables);
+		basic_pass(const base_info& info, const renderable_container& renderables);
 		
 		void create_render_pass();
 		void create_descriptors();
 		void create_opaque_mat_pipeline();
 		void create_omni_light_pipeline();
+		void create_skybox_pipeline();
 		void create_command_pool();
 		void create_resources();	
 		void create_framebuffers();
@@ -55,17 +54,14 @@ namespace rcq
 
 		VkCommandPool m_cp;
 
-		std::array<VkPipeline, MAT_TYPE_COUNT> m_mat_gps;
-		std::array<VkPipelineLayout, MAT_TYPE_COUNT> m_mat_pls;
-
-		std::array<VkPipeline, LIGHT_TYPE_COUNT> m_light_gps;
-		std::array<VkPipelineLayout, LIGHT_TYPE_COUNT> m_light_pls;
+		std::array<VkPipeline, RENDERABLE_TYPE_COUNT> m_gps;
+		std::array<VkPipelineLayout, RENDERABLE_TYPE_COUNT> m_pls;
 
 		VkDescriptorSetLayout m_gbuffer_dsl;
-		std::array<VkDescriptorSetLayout, MAT_TYPE_COUNT> m_per_frame_dsls;
+		std::array<VkDescriptorSetLayout, RENDERABLE_TYPE_COUNT> m_per_frame_dsls;
 
 		VkDescriptorPool m_dp;
-		std::array<VkDescriptorSet, MAT_TYPE_COUNT> m_per_frame_dss; 
+		std::array<VkDescriptorSet, RENDERABLE_TYPE_COUNT> m_per_frame_dss; 
 		
 		VkBuffer m_per_frame_b;
 		VkDeviceMemory m_per_frame_b_mem;
@@ -73,20 +69,16 @@ namespace rcq
 
 		VkDescriptorSet m_gbuffer_ds;
 
-		std::array<std::vector<VkCommandBuffer>, MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> m_mat_cbs;
-		std::array<std::vector<VkCommandBuffer>, LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> m_light_cbs;
+		std::array<std::vector<VkCommandBuffer>, RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> m_secondary_cbs;
 		std::vector<VkCommandBuffer> m_primary_cbs;
 
 		const renderable_container& m_renderables;
-		const light_renderable_container& m_light_renderables;
-
 
 		VkSemaphore m_image_available_s;
 		VkSemaphore m_render_finished_s;
 		
 		std::vector<VkFence> m_primary_cb_finished_fs;
-		std::vector<std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>> m_mat_record_masks;
-		std::vector<std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>> m_light_record_masks;
+		std::vector<std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>> m_record_masks;
 
 	};
 

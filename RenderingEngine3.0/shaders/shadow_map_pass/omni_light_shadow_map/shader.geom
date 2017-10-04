@@ -7,37 +7,37 @@
 const mat4 proj[6]= mat4[6](
 	mat4(
 		vec4(0.f, 0.f, -f/(n-f), 1.f),
-		vec4(0.f, -1.f, 0.f, 0.f),
-		vec4(1.f, 0.f, 0.f, 0.f),
-		vec4(0.f, 0.f, (f*n)/(n-f), 0.f)
-		),
-	mat4(
-		vec4(0.f, 0.f, f/(n-f), -1.f),
-		vec4(0.f, -1.f, 0.f, 0.f),
+		vec4(0.f, 1.f, 0.f, 0.f),
 		vec4(-1.f, 0.f, 0.f, 0.f),
 		vec4(0.f, 0.f, (f*n)/(n-f), 0.f)
 		),
 	mat4(
+		vec4(0.f, 0.f, f/(n-f), -1.f),
+		vec4(0.f, 1.f, 0.f, 0.f),
 		vec4(1.f, 0.f, 0.f, 0.f),
-		vec4(0.f, 0.f, -f/(n-f), 1.f),
-		vec4(0.f, -1.f, 0.f, 0.f),
 		vec4(0.f, 0.f, (f*n)/(n-f), 0.f)
 		),
 	mat4(
-		vec4(1.f, 0.f, 0.f, 0.f),
-		vec4(0.f, 0.f, f/(n-f), -1.f),
+		vec4(-1.f, 0.f, 0.f, 0.f),
+		vec4(0.f, 0.f, -f/(n-f), 1.f),
 		vec4(0.f, 1.f, 0.f, 0.f),
 		vec4(0.f, 0.f, (f*n)/(n-f), 0.f)
 		),
-	mat4( 	
-		vec4(1.f, 0.f, 0.f, 0.f),
-		vec4(0.f, -1.f, 0.f, 0.f),
+	mat4(
+		vec4(-1.f, 0.f, 0.f, 0.f),
 		vec4(0.f, 0.f, f/(n-f), -1.f),
+		vec4(0.f, -1.f, 0.f, 0.f),
 		vec4(0.f, 0.f, (f*n)/(n-f), 0.f)
 		),
 	mat4(
 		vec4(-1.f, 0.f, 0.f, 0.f),
-		vec4(0.f, -1.f, 0.f, 0.f),
+		vec4(0.f, 1.f, 0.f, 0.f),
+		vec4(0.f, 0.f, f/(n-f), -1.f),
+		vec4(0.f, 0.f, (f*n)/(n-f), 0.f)
+		),
+	mat4(
+		vec4(1.f, 0.f, 0.f, 0.f),
+		vec4(0.f, 1.f, 0.f, 0.f),
 		vec4(0.f, 0.f, -f/(n-f), 1.f),
 		vec4(0.f, 0.f, (f*n)/(n-f), 0.f)
 		)

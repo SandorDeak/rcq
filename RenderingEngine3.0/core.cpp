@@ -50,10 +50,10 @@ void core::destroy()
 
 void core::loop()
 {
-	std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> mat_record_mask;
-	std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_record_mask;
-	mat_record_mask.reset();
-	light_record_mask.reset();
+	constexpr size_t renderables_size = RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT;
+
+	std::bitset<renderables_size> record_mask;
+	record_mask.reset();
 
 	while (!m_should_end || !m_package_queue.empty())
 	{
@@ -69,117 +69,40 @@ void core::loop()
 			}
 			
 			//destroy renderables
-			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_renderables(false);
+			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_renderables(false);
 
-			for (auto& destroy_id : package->destroy_renderable)
+			for (uint32_t i = 0; i < renderables_size; ++i)
 			{
-				auto it = m_renderable_type_table.find(destroy_id);
-				if (it == m_renderable_type_table.end())
-					throw std::runtime_error("cannot delete renderable with the given id, it doesn't exist!");
-				for (auto& r : m_renderables[it->second])
+				if (!package->destroy_renderable[i].empty())
 				{
-					if (r.id == destroy_id)
+					for (auto id : package->destroy_renderable[i])
 					{
-						r.destroy = true;
-						break;
+						bool found = false;
+						for (auto& r : m_renderables[i])
+						{
+							if (r.id == id)
+							{
+								r.destroy = true;
+								found = true;
+								break;
+							}
+						}
+						if (!found)
+							throw std::runtime_error("cannot delete renderable with the given id, it doesn't exist!");
 					}
-				}
-				remove_deleted_renderables.set(it->second);
-				mat_record_mask.set(it->second);
-				m_renderable_type_table.erase(it);
-			}
-
-			for (size_t i = 0; i < m_renderables.size(); ++i)
-			{
-				if (remove_deleted_renderables[i])
-				{
 					m_renderables[i].erase(std::remove_if(m_renderables[i].begin(), m_renderables[i].end(),
-						[](const renderable& r) {return r.destroy; }), m_renderables[i].end());
+						[](renderable& r) {return r.destroy; }), m_renderables[i].end());
+					record_mask.set(i);
 				}
 			}
-
-			//destroy light renderables
-			std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_light_renderables(false);
-
-			for (auto& destroy_id : package->destroy_light_renderable)
-			{
-				auto it = m_light_renderable_type_table.find(destroy_id);
-				if (it == m_light_renderable_type_table.end())
-					throw std::runtime_error("cannot delete light renderable with the given id, it doesn't exist!");
-				for (auto& r : m_light_renderables[it->second])
-				{
-					if (r.id == destroy_id)
-					{
-						r.destroy = true;
-						break;
-					}
-				}
-				remove_deleted_light_renderables.set(it->second);
-				light_record_mask.set(it->second);
-				m_light_renderable_type_table.erase(it);
-			}
-
-			for (size_t i = 0; i < m_light_renderables.size(); ++i)
-			{
-				if (remove_deleted_light_renderables[i])
-				{
-					m_light_renderables[i].erase(std::remove_if(m_light_renderables[i].begin(), m_light_renderables[i].end(),
-						[](const light_renderable& r) {return r.destroy; }), m_light_renderables[i].end());
-				}
-			}
+				
 
 			//build renderables
-			for (auto& build_renderable : package->build_renderable)
+			build_renderables(package->build_renderable, std::make_index_sequence<renderables_size>());
+			for (uint32_t i = 0; i < renderables_size; ++i)
 			{
-				const material& _mat = resource_manager::instance()->get<RESOURCE_TYPE_MAT>(
-					std::get<BUILD_RENDERABLE_INFO_MAT_ID>(build_renderable));
-				const mesh& _mesh = resource_manager::instance()->get<RESOURCE_TYPE_MESH>(
-					std::get<BUILD_RENDERABLE_INFO_MESH_ID>(build_renderable));
-				const transform& _tr = resource_manager::instance()->get<RESOURCE_TYPE_TR>(
-					std::get<BUILD_RENDERABLE_INFO_TR_ID>(build_renderable));
-				uint32_t type = LIFE_EXPECTANCY_COUNT*_mat.type+std::get<BUILD_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_renderable);
-
-				renderable r = {
-					_mesh.vb,
-					_mesh.veb,
-					_mesh.ib,
-					_mesh.size,
-					_tr.ds,
-					_mat.ds,
-					type,
-					false,
-					std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(build_renderable)
-				};
-				mat_record_mask.set(type);
-				
-				m_renderables[type].push_back(r);
-
-				if (!m_renderable_type_table.insert_or_assign(r.id, r.type).second)
-				{
-					throw std::runtime_error("id conflict!");
-				}
-			}
-
-			//build light renderables
-			for (auto& build_light : package->build_light_renderable)
-			{
-				const light& res =resource_manager::instance()->get<RESOURCE_TYPE_LIGHT>(std::get<BUILD_LIGHT_RENDERABLE_INFO_RES_ID>(build_light));
-				light_renderable l;
-				l.destroy = false;
-				l.ds = res.ds;
-				l.id = std::get<BUILD_LIGHT_RENDERABLE_INFO_ID>(build_light);
-				l.type = LIFE_EXPECTANCY_COUNT*res.type + std::get<BUILD_LIGHT_RENDERABLE_INFO_LIFE_EXPECTANCY>(build_light);
-				l.shadow_map = res.shadow_map;
-				l.shadow_map_fb = res.shadow_map_fb;
-
-				light_record_mask.set(l.type);
-
-				m_light_renderables[l.type].push_back(l);
-
-				if (!m_light_renderable_type_table.insert_or_assign(l.id, l.type).second)
-				{
-					throw std::runtime_error("id conflict!");
-				}
+				if (!package->build_renderable[i].empty())
+					record_mask.set(i);
 			}
 
 			//update tr
@@ -192,9 +115,8 @@ void core::loop()
 
 			if (package->render)
 			{
-				record_and_render(package->update_cam, mat_record_mask, light_record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
-				mat_record_mask.reset();
-				light_record_mask.reset();
+				record_and_render(package->update_cam, record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
+				record_mask.reset();
 			}
 
 			if (package->confirm_destroy)
@@ -206,4 +128,35 @@ void core::loop()
 		}
 	}
 	
+}
+
+template<size_t rend_type>
+void core::build_renderables_impl(const std::vector<build_renderable_info>& build_infos)
+{
+	for (auto& info : build_infos)
+	{
+		renderable r;
+		r.id = std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(info);
+		r.destroy = false;
+		auto res = resource_manager::instance()->get<rend_type / LIFE_EXPECTANCY_COUNT>(
+			std::get<BUILD_RENDERABLE_INFO_MAT_OR_LIGHT_ID>(info));
+
+		r.mat_light_ds = res.ds;
+
+		if constexpr (rend_type / LIFE_EXPECTANCY_COUNT == RESOURCE_TYPE_LIGHT_OMNI)
+		{
+			r.shadow_map = res.shadow_map;
+			r.shadow_map_fb = res.shadow_map_fb;
+		}
+
+		if constexpr ((rend_type / LIFE_EXPECTANCY_COUNT) == RESOURCE_TYPE_MAT_OPAQUE)
+		{
+			r.m = resource_manager::instance()->get<RESOURCE_TYPE_MESH>(
+				std::get<BUILD_RENDERABLE_INFO_MESH_ID>(info));
+			r.tr_ds = resource_manager::instance()->get<RESOURCE_TYPE_TR>(
+				std::get<BUILD_RENDERABLE_INFO_TR_ID>(info)).ds;
+		}
+
+		m_renderables[rend_type].push_back(r);
+	}
 }

@@ -14,15 +14,13 @@ scene::~scene()
 	for (auto& m : m_meshes)
 		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_MESH>(m.id);
 	for (auto& mat : m_mats)
-		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_MAT>(mat.id);
+		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id);
 	for (auto& tr : m_trs)
 		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_TR>(tr.id);
 	for (auto& e : m_entities)
-		rcq::engine::instance()->cmd_destroy_renderable(e.m_id);
-	for (auto& res : m_light_res)
-		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_LIGHT>(res.id);
-	for (auto& l : m_lights)
-		rcq::engine::instance()->cmd_destroy_light_renderable(l.id);
+		rcq::engine::instance()->cmd_destroy_renderable(e.m_id, e.m_rend_type, e.m_life_exp);
+	for (auto& res : m_light_omni)
+		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_LIGHT_OMNI>(res.id);
 
 	rcq::engine::instance()->cmd_dispatch();
 }
@@ -55,16 +53,15 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
 
 	//create materials
-	material mat;
+	material_opaque mat;
 	//gold
 	mat.data.flags = 0;
 	mat.data.metal = 1.f;
 	mat.data.roughness = 0.1f;
 	mat.data.color = { 1.f, 0.71f, 0.29f };
 	mat.id = MAT_GOLD;
-	mat.type = rcq::MAT_TYPE_BASIC;
 	m_mats.push_back(mat);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT>(mat.id, mat.data, mat.tex_resources, mat.type);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
 	//bamboo wood
 	mat.data.flags = rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_ROUGHNESS
@@ -76,7 +73,7 @@ void scene::build()
 	mat.tex_resources[rcq::TEX_TYPE_NORMAL]= "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-normal.png";
 	mat.tex_resources[rcq::TEX_TYPE_AO]= "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-ao.png";
 	m_mats.push_back(mat);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT>(mat.id, mat.data, mat.tex_resources, mat.type);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
 	//oakfloor
 	mat.data.flags = rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_ROUGHNESS
@@ -90,7 +87,7 @@ void scene::build()
 	mat.tex_resources[rcq::TEX_TYPE_AO] = "textures/oakfloor/oakfloor_AO.png";
 	mat.tex_resources[rcq::TEX_TYPE_HEIGHT]= "textures/oakfloor/oakfloor_Height.png";
 	m_mats.push_back(mat);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT>(mat.id, mat.data, mat.tex_resources, mat.type);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
 	//create transforms
 	transform tr;
@@ -134,16 +131,16 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//create light res
-	rcq::omni_light_data old;
+	rcq::light_omni_data old;
 	old.pos = glm::vec3(2.f);
 	old.flags = rcq::LIGHT_FLAG_SHADOW_MAP;
 	old.radiance = glm::vec3(6.f);
 
-	light_res l_res;
-	l_res.data = old;
-	l_res.id=0;
-	m_light_res.push_back(l_res);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT>(l_res.id, l_res.data, rcq::USAGE_STATIC, true);
+	light_omni lo;
+	lo.data = old;
+	lo.id=0;
+	m_light_omni.push_back(lo);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT_OMNI>(lo.id, lo.data, rcq::USAGE_STATIC);
 
 	/*old.pos = glm::vec3(-2.f, -2.f, 2.f);
 	old.radiance = glm::vec3(8.f);
@@ -153,11 +150,13 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT>(l_res.id, l_res.data, rcq::USAGE_STATIC, false);*/
 
 	//create lights
-	light l;
-	l.id = 0;
-	l.light_res_id = 0;
-	m_lights.push_back(l);
-	rcq::engine::instance()->cmd_build_light_renderable(l.id, l.light_res_id, rcq::LIFE_EXPECTANCY_LONG);
+	entity l;
+	l.m_id = ENTITY_LIGHT;
+	l.m_life_exp = rcq::LIFE_EXPECTANCY_LONG;
+	l.m_material_light_id = 0;
+	l.m_rend_type = rcq::RENDERABLE_TYPE_LIGHT_OMNI;
+	m_entities.push_back(l);
+	rcq::engine::instance()->cmd_build_renderable(l.m_id, 0, 0, l.m_material_light_id, l.m_rend_type, l.m_life_exp);
 
 	/*l.id = 1;
 	l.light_res_id = 1;
@@ -167,44 +166,46 @@ void scene::build()
 	//create entities
 	entity e;
 	//buddha
-	e.m_material_id = MAT_GOLD;
+	e.m_material_light_id = MAT_GOLD;
 	e.m_mesh_id = MESH_BUDDHA;
+	e.m_life_exp=rcq::LIFE_EXPECTANCY_LONG;
+	e.m_rend_type = rcq::RENDERABLE_TYPE_MAT_OPAQUE;
 
 	for (int i = 0; i < 10; ++i)
 	{
 		e.m_transform_id = ENTITY_GOLD_BUDDHA+i;
 		e.m_id = ENTITY_GOLD_BUDDHA + i;
 		m_entities.push_back(e);
-		rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_id,
-			rcq::LIFE_EXPECTANCY_LONG);
+		rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
+			e.m_life_exp);
 	}
 
 	//floor
-	e.m_material_id = MAT_OAKFLOOR;
+	e.m_material_light_id = MAT_OAKFLOOR;
 	e.m_mesh_id = MESH_FLOOR;
 	e.m_transform_id = ENTITY_FLOOR;
 	e.m_id = ENTITY_FLOOR;
 	m_entities.push_back(e);
-	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_id,
-		rcq::LIFE_EXPECTANCY_LONG);
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
+		e.m_life_exp);
 
 	//self
-	e.m_material_id = MAT_BAMBOO_WOOD;
+	e.m_material_light_id = MAT_BAMBOO_WOOD;
 	e.m_mesh_id = MESH_SHELF;
 	e.m_transform_id = ENTITY_SHELF;
 	e.m_id = ENTITY_SHELF;
 	m_entities.push_back(e);
-	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_id,
-		rcq::LIFE_EXPECTANCY_LONG);
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
+		e.m_life_exp);
 
 	//wall
-	e.m_material_id = MAT_GOLD;
+	e.m_material_light_id = MAT_GOLD;
 	e.m_mesh_id = MESH_CUBE_INSIDE_OUT;
 	e.m_transform_id = ENTITY_WALLS;
 	e.m_id = ENTITY_WALLS;
 	m_entities.push_back(e);
-	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_id,
-		rcq::LIFE_EXPECTANCY_LONG);
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
+		e.m_life_exp);
 
 	//dispatch
 	rcq::engine::instance()->cmd_dispatch();

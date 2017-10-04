@@ -5,11 +5,9 @@ using namespace rcq;
 
 omni_light_shadow_pass* omni_light_shadow_pass::m_instance = nullptr;
 
-omni_light_shadow_pass::omni_light_shadow_pass(const base_info& info, const renderable_container& renderables,
-	const light_renderable_container& light_renderables):
+omni_light_shadow_pass::omni_light_shadow_pass(const base_info& info, const renderable_container& renderables):
 	m_base(info),
-	m_renderables(renderables),
-	m_light_renderables(light_renderables)
+	m_renderables(renderables)
 {
 	create_render_pass();
 	create_command_pool();
@@ -30,14 +28,13 @@ omni_light_shadow_pass::~omni_light_shadow_pass()
 	vkDestroyRenderPass(m_base.device, m_pass, host_memory_manager);
 }
 
-void omni_light_shadow_pass::init(const base_info& info, const renderable_container& renderables,
-	const light_renderable_container& light_renderables)
+void omni_light_shadow_pass::init(const base_info& info, const renderable_container& renderables)
 {
 	if (m_instance != nullptr)
 	{
 		throw std::runtime_error("omni light shadow pass is already initialised!");
 	}
-	m_instance = new omni_light_shadow_pass(info, renderables, light_renderables);
+	m_instance = new omni_light_shadow_pass(info, renderables);
 }
 
 void omni_light_shadow_pass::destroy()
@@ -177,7 +174,7 @@ void omni_light_shadow_pass::create_pipeline()
 
 	VkPipelineLayoutCreateInfo layout = {};
 	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	VkDescriptorSetLayout dss[2] = { resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT),
+	VkDescriptorSetLayout dss[2] = { resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_OMNI),
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR) };
 	layout.setLayoutCount = 2;
 	layout.pSetLayouts = dss;
@@ -220,7 +217,8 @@ void omni_light_shadow_pass::allocate_command_buffer()
 		throw std::runtime_error("failed to allocate command buffer!");
 }
 
-void omni_light_shadow_pass::record_and_render(const std::optional<camera_data>& cam, std::bitset<MAT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> mat_record_mass, std::bitset<LIGHT_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> light_record_mask)
+void omni_light_shadow_pass::record_and_render(const std::optional<camera_data>& cam, 
+	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask)
 {
 	//record cb
 	VkCommandBufferBeginInfo cb_begin = {};
@@ -229,75 +227,87 @@ void omni_light_shadow_pass::record_and_render(const std::optional<camera_data>&
 
 	vkBeginCommandBuffer(m_cb, &cb_begin);
 
-	for (auto& l : m_light_renderables[LIGHT_TYPE_OMNI * 2])
+	constexpr std::array<uint32_t, 2> omni_light_rend_types = {
+		LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_LIGHT_OMNI,
+		LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_LIGHT_OMNI + 1
+	};
+
+	for (auto rend_type : omni_light_rend_types)
 	{
-		if (l.shadow_map.image != VK_NULL_HANDLE)
+		for (auto& l : m_renderables[rend_type])
 		{
-			VkImageMemoryBarrier barrier0 = {};
-			barrier0.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			barrier0.image = l.shadow_map.image;
-			barrier0.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			barrier0.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			barrier0.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			barrier0.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			barrier0.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier0.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier0.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-			barrier0.subresourceRange.baseArrayLayer = 0;
-			barrier0.subresourceRange.baseMipLevel = 0;
-			barrier0.subresourceRange.layerCount = 6;
-			barrier0.subresourceRange.levelCount = 1;
-
-			vkCmdPipelineBarrier(m_cb, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-				0, 0, nullptr, 0, nullptr, 1, &barrier0);
-
-			VkRenderPassBeginInfo pass_begin = {};
-			pass_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			pass_begin.clearValueCount = 1;
-			VkClearValue clear;
-			clear.depthStencil = { 1.f, 0 };
-			pass_begin.pClearValues = &clear;
-			pass_begin.framebuffer = l.shadow_map_fb;
-			pass_begin.renderPass = m_pass;
-			pass_begin.renderArea.extent = { SHADOW_MAP_SIZE, SHADOW_MAP_SIZE };
-			pass_begin.renderArea.offset = { 0,0 };
-
-			vkCmdBeginRenderPass(m_cb, &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
-
-
-			vkCmdBindPipeline(m_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gp);
-			vkCmdBindDescriptorSets(m_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pl, 0, 1, &l.ds, 0, nullptr);
-			std::array<int, 2> opaque_mat_types = { 2 * MAT_TYPE_BASIC, 2 * MAT_TYPE_BASIC + 1 };
-			for (int mat_type : opaque_mat_types)
+			if (l.shadow_map.image != VK_NULL_HANDLE)
 			{
-				for (auto& r : m_renderables[mat_type])
+				VkImageMemoryBarrier barrier0 = {};
+				barrier0.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				barrier0.image = l.shadow_map.image;
+				barrier0.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				barrier0.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				barrier0.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				barrier0.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				barrier0.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier0.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier0.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+				barrier0.subresourceRange.baseArrayLayer = 0;
+				barrier0.subresourceRange.baseMipLevel = 0;
+				barrier0.subresourceRange.layerCount = 6;
+				barrier0.subresourceRange.levelCount = 1;
+
+				vkCmdPipelineBarrier(m_cb, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+					0, 0, nullptr, 0, nullptr, 1, &barrier0);
+
+				VkRenderPassBeginInfo pass_begin = {};
+				pass_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+				pass_begin.clearValueCount = 1;
+				VkClearValue clear;
+				clear.depthStencil = { 1.f, 0 };
+				pass_begin.pClearValues = &clear;
+				pass_begin.framebuffer = l.shadow_map_fb;
+				pass_begin.renderPass = m_pass;
+				pass_begin.renderArea.extent = { SHADOW_MAP_SIZE, SHADOW_MAP_SIZE };
+				pass_begin.renderArea.offset = { 0,0 };
+
+				vkCmdBeginRenderPass(m_cb, &pass_begin, VK_SUBPASS_CONTENTS_INLINE);
+
+
+				vkCmdBindPipeline(m_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gp);
+				vkCmdBindDescriptorSets(m_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pl, 0, 1, &l.mat_light_ds, 0, nullptr);
+				constexpr std::array<int, 2> opaque_rend_types = { 
+					LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_MAT_OPAQUE,
+					LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_MAT_OPAQUE+1
+				};
+
+				for (int rend_type : opaque_rend_types)
 				{
-					vkCmdBindDescriptorSets(m_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pl, 1, 1, &r.tr_ds, 0, nullptr);
-					VkDeviceSize offset = 0;
-					vkCmdBindVertexBuffers(m_cb, 0, 1, &r.vb, &offset);
-					vkCmdBindIndexBuffer(m_cb, r.ib, 0, VK_INDEX_TYPE_UINT32);
-					vkCmdDrawIndexed(m_cb, r.size, 1, 0, 0, 0);
+					for (auto& r : m_renderables[rend_type])
+					{
+						vkCmdBindDescriptorSets(m_cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pl, 1, 1, &r.tr_ds, 0, nullptr);
+						VkDeviceSize offset = 0;
+						vkCmdBindVertexBuffers(m_cb, 0, 1, &r.m.vb, &offset);
+						vkCmdBindIndexBuffer(m_cb, r.m.ib, 0, VK_INDEX_TYPE_UINT32);
+						vkCmdDrawIndexed(m_cb, r.m.size, 1, 0, 0, 0);
+					}
 				}
+				vkCmdEndRenderPass(m_cb);
+
+				VkImageMemoryBarrier barrier1 = {};
+				barrier1.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				barrier1.image = l.shadow_map.image;
+				barrier1.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+				barrier1.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				barrier1.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+				barrier1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				barrier1.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier1.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				barrier1.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+				barrier1.subresourceRange.baseArrayLayer = 0;
+				barrier1.subresourceRange.baseMipLevel = 0;
+				barrier1.subresourceRange.layerCount = 6;
+				barrier1.subresourceRange.levelCount = 1;
+
+				vkCmdPipelineBarrier(m_cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+					0, nullptr, 0, nullptr, 1, &barrier1);
 			}
-			vkCmdEndRenderPass(m_cb);
-
-			VkImageMemoryBarrier barrier1 = {};
-			barrier1.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			barrier1.image = l.shadow_map.image;
-			barrier1.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-			barrier1.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			barrier1.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-			barrier1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			barrier1.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier1.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			barrier1.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-			barrier1.subresourceRange.baseArrayLayer = 0;
-			barrier1.subresourceRange.baseMipLevel = 0;
-			barrier1.subresourceRange.layerCount = 6;
-			barrier1.subresourceRange.levelCount = 1;
-
-			vkCmdPipelineBarrier(m_cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-				0, nullptr, 0, nullptr, 1, &barrier1);
 		}
 	}
 
@@ -326,7 +336,7 @@ void omni_light_shadow_pass::create_semaphore()
 		throw std::runtime_error("failed to create semaphore!");
 }
 
-void omni_light_shadow_pass::create_framebuffer(light& l)
+void omni_light_shadow_pass::create_framebuffer(light_omni& l)
 {
 	VkFramebufferCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;

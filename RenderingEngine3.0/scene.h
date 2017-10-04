@@ -22,11 +22,10 @@ private:
 	camera m_camera;
 	std::vector<entity> m_entities;
 
-	std::vector<material> m_mats;
+	std::vector<material_opaque> m_mats;
 	std::vector<mesh> m_meshes;
 	std::vector<transform> m_trs;
-	std::vector<light_res> m_light_res;
-	std::vector<light> m_lights;
+	std::vector<light_omni> m_light_omni;
 	GLFWwindow* m_window;
 };
 
