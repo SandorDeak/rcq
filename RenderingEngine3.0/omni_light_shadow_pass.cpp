@@ -148,7 +148,7 @@ void omni_light_shadow_pass::create_pipeline()
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasSlopeFactor = 0.f;
 	rasterizer.depthClampEnable = VK_FALSE;
-	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
 	rasterizer.lineWidth = 1.f;
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.rasterizerDiscardEnable = VK_FALSE;
@@ -324,6 +324,7 @@ void omni_light_shadow_pass::record_and_render(const std::optional<camera_data>&
 	if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, m_render_finished_f) != VK_SUCCESS)
 		throw std::runtime_error("failed to submit cb!");
 	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+	
 	vkResetFences(m_base.device, 1, &m_render_finished_f);
 }
 

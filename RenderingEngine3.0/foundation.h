@@ -605,6 +605,27 @@ namespace rcq
 		static unique_id next_id = 0;
 		return next_id++;
 	}
+
+	class timer
+	{
+	public:
+		void start()
+		{
+			time = std::chrono::high_resolution_clock::now();
+		}
+		void stop()
+		{
+			auto end_time = std::chrono::high_resolution_clock::now();
+			duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - time).count() / 1000.f;
+		}
+		float get()
+		{
+			return duration;
+		}
+	private:
+		std::chrono::time_point<std::chrono::steady_clock> time;
+		float duration;
+	};
 }
 
 namespace std

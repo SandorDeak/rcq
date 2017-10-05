@@ -2,6 +2,8 @@
 
 #include "engine.h"
 
+const int buddha_count = 10;
+
 
 scene::scene(GLFWwindow* window, const glm::vec2& window_size) : m_window(window), m_window_size(window_size)
 {
@@ -97,7 +99,7 @@ void scene::build()
 	tr.id = ENTITY_GOLD_BUDDHA;
 	tr.usage = rcq::USAGE_DYNAMIC;
 
-	for (int i = 0; i < 10; ++i)
+	for (int i = 0; i < buddha_count; ++i)
 	{
 		tr.data.model = glm::translate(glm::mat4(1.f), glm::vec3(float(i - 5)*0.5f, -0.5f, 0.f));
 		tr.id = ENTITY_GOLD_BUDDHA+i;
@@ -115,7 +117,7 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//self
-	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, 1.f, -4.f });
+	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, 2.f, 0.f });
 	tr.data.scale = glm::vec3(0.015f);
 	tr.data.tex_scale = glm::vec2(5.f);
 	tr.id = ENTITY_SHELF;
@@ -171,7 +173,7 @@ void scene::build()
 	e.m_life_exp=rcq::LIFE_EXPECTANCY_LONG;
 	e.m_rend_type = rcq::RENDERABLE_TYPE_MAT_OPAQUE;
 
-	for (int i = 0; i < 10; ++i)
+	for (int i = 0; i < buddha_count; ++i)
 	{
 		e.m_transform_id = ENTITY_GOLD_BUDDHA+i;
 		e.m_id = ENTITY_GOLD_BUDDHA + i;
@@ -227,7 +229,7 @@ void scene::update(float dt)
 	static float elapsed_time = 0.f;
 	elapsed_time += dt;
 
-	for (int i = 0; i < 10; ++i)
+	for (int i = 0; i < buddha_count; ++i)
 	{
 		m_trs[i].data.model = glm::rotate(m_trs[i].data.model, glm::radians(90.f*dt), glm::vec3(0.f, 1.f, 0.f));
 		rcq::engine::instance()->cmd_update_transform(m_trs[i].id, m_trs[i].data);
