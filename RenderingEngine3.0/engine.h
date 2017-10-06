@@ -22,56 +22,55 @@ namespace rcq
 		template<RESOURCE_TYPE type, typename... Ts>
 		void cmd_build(Ts&&... args)
 		{
-			if (!m_command_p->resource_manager_build_p)
-				m_command_p->resource_manager_build_p.emplace();
-
-			std::get<type>(m_command_p->resource_manager_build_p.value()).emplace_back(std::forward<Ts>(args)...);
+			if (!m_build_p)
+				m_build_p.reset(new build_package);
+			std::get<type>(*m_build_p.get()).emplace_back(std::forward<Ts>(args)...);
 		}
 
 		template<RESOURCE_TYPE type>
 		void cmd_destroy(unique_id id)
 		{
-			if (!m_command_p->resource_mananger_destroy_p)
-				m_command_p->resource_mananger_destroy_p.emplace();
+			if (!m_destroy_p)
+				m_destroy_p.reset(new destroy_package);
 
-			std::get<type>(m_command_p->resource_mananger_destroy_p.value().ids).push_back(id);
+			std::get<type>(m_destroy_p->ids).push_back(id);
 		}
 
 		void cmd_build_renderable(unique_id id, unique_id tr_id, unique_id mesh_id, unique_id mat_id, RENDERABLE_TYPE type, 
 			LIFE_EXPECTANCY life_exp)
 		{
-			if (!m_command_p->core_p)
-				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().build_renderable[type*LIFE_EXPECTANCY_COUNT+life_exp].emplace_back(id, tr_id, mesh_id, mat_id);
+			if (!m_core_p)
+				m_core_p.reset(new core_package);
+			m_core_p->build_renderable[type*LIFE_EXPECTANCY_COUNT+life_exp].emplace_back(id, tr_id, mesh_id, mat_id);
 		}
 
 		void cmd_destroy_renderable(unique_id uid, RENDERABLE_TYPE type, LIFE_EXPECTANCY life_exp)
 		{
-			if (!m_command_p->core_p)
-				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().destroy_renderable[type*LIFE_EXPECTANCY_COUNT + life_exp].push_back(uid);
+			if (!m_core_p)
+				m_core_p.reset(new core_package);
+			m_core_p->destroy_renderable[type*LIFE_EXPECTANCY_COUNT + life_exp].push_back(uid);
 		}
 
 
 		void cmd_update_camera(const camera_data& cam)
 		{
-			if (!m_command_p->core_p)
-				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().update_cam = cam;
+			if (!m_core_p)
+				m_core_p.reset(new core_package);
+			m_core_p->update_cam = cam;
 		}
 
 		void cmd_update_transform(unique_id id, const transform_data& tr_data)
 		{
-			if (!m_command_p->core_p)
-				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().update_tr.emplace_back(id, tr_data);
+			if (!m_core_p)
+				m_core_p.reset(new core_package);
+			m_core_p->update_tr.emplace_back(id, tr_data);
 		}
 
 		void cmd_render()
 		{
-			if (!m_command_p->core_p)
-				m_command_p->core_p.emplace();
-			m_command_p->core_p.value().render = true;
+			if (!m_core_p)
+				m_core_p.reset(new core_package);
+			m_core_p->render = true;
 		}
 
 		void cmd_dispatch();
@@ -81,7 +80,9 @@ namespace rcq
 		static engine* m_instance;
 		glm::vec2 m_window_size;
 
-		std::unique_ptr<command_package> m_command_p;
+		std::unique_ptr<core_package> m_core_p;
+		std::unique_ptr<build_package> m_build_p;
+		std::unique_ptr<destroy_package> m_destroy_p;
 
 		base_info m_base;
 	};

@@ -8,6 +8,7 @@
 
 #include "device_memory.h"
 #include "omni_light_shadow_pass.h"
+#include "basic_pass.h"
 
 using namespace rcq;
 
@@ -168,7 +169,18 @@ void resource_manager::destroy_loop()
 				m_destroy_p_queue.pop();
 			}
 			if (package->destroy_confirmation.has_value())
+			{
 				package->destroy_confirmation.value().wait();
+				wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+			}
+			/*bool has_user_resource = false;
+			for (int i = 0; i < RESOURCE_TYPE_COUNT - 1; ++i)
+			{
+				if (!package->ids[i].empty())
+					has_user_resource = true;
+			}
+			if (has_user_resource)
+				wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());*/
 			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			process_destroy_package(package->ids, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 			
@@ -406,8 +418,9 @@ mesh resource_manager::build(const std::string& filename, bool calc_tb)
 
 material_opaque resource_manager::build(const material_opaque_data& data, const texfiles& files)
 {
-	//load textures
 	material_opaque mat;
+
+	//load textures	
 	uint32_t flag = 1;
 	for (uint32_t i=0; i<TEX_TYPE_COUNT; ++i)
 	{
@@ -897,7 +910,7 @@ void rcq::resource_manager::create_samplers()
 	omni_light_shadow_map_sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
 	if (vkCreateSampler(m_base.device, &omni_light_shadow_map_sampler, host_memory_manager, 
-		&m_samplers[SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP]) != VK_SUCCESS)
+		&m_samplers[SAMPLER_TYPE_CUBE]) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create texture sampler!");
 	}
@@ -972,7 +985,7 @@ void resource_manager::create_descriptor_set_layouts()
 		throw std::runtime_error("failed to create transform descriptor set layout!");
 	}
 
-	//create material dsl
+	//create material opaque dsl
 	VkDescriptorSetLayoutBinding tex_binding = {};
 	tex_binding.descriptorCount = 1;
 	tex_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -998,7 +1011,7 @@ void resource_manager::create_descriptor_set_layouts()
 		throw std::runtime_error("failed to create material descriptor set layout!");
 	}
 
-	//create light dsl
+	//create light omni dsl
 	VkDescriptorSetLayoutBinding light_bindings[2] = {};
 
 	light_bindings[0].binding = 0;
@@ -1019,6 +1032,22 @@ void resource_manager::create_descriptor_set_layouts()
 	if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, host_memory_manager, 
 		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_OMNI]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create light descriptor set layout!");
+
+	//create skybox dsl
+	VkDescriptorSetLayoutBinding cubemap_binding = {};
+	cubemap_binding.binding = 0;
+	cubemap_binding.descriptorCount = 1;
+	cubemap_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	cubemap_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutCreateInfo skybox_dsl = {};
+	skybox_dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	skybox_dsl.bindingCount = 1;
+	skybox_dsl.pBindings = &cubemap_binding;
+
+	if (vkCreateDescriptorSetLayout(m_base.device, &skybox_dsl, host_memory_manager,
+		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX]) != VK_SUCCESS)
+		throw std::runtime_error("failde to create skybox descriptor set layout!");
 }
 
 template<DESCRIPTOR_SET_LAYOUT_TYPE dsl_type>
@@ -1060,6 +1089,14 @@ inline void resource_manager::extend_descriptor_pool_pool()
 		dp_size[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 		dp_info.poolSizeCount = 2;
+	}
+
+	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX)
+	{
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
+		dp_size[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+		dp_info.poolSizeCount = 1;
 	}
 
 	VkDescriptorPool new_pool;
@@ -1208,7 +1245,7 @@ light_omni resource_manager::build(const light_omni_data& data, USAGE usage)
 
 		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
 
-		l.shadow_map.sampler_type = SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP;
+		l.shadow_map.sampler_type = SAMPLER_TYPE_CUBE;
 
 		omni_light_shadow_pass::instance()->create_framebuffer(l);
 
@@ -1238,7 +1275,7 @@ light_omni resource_manager::build(const light_omni_data& data, USAGE usage)
 		VkDescriptorImageInfo shadow_map_info = {};
 		shadow_map_info.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 		shadow_map_info.imageView = l.shadow_map.view;
-		shadow_map_info.sampler = m_samplers[SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP];
+		shadow_map_info.sampler = m_samplers[SAMPLER_TYPE_CUBE];
 
 		write[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write[1].descriptorCount = 1;
@@ -1256,4 +1293,200 @@ light_omni resource_manager::build(const light_omni_data& data, USAGE usage)
 	}
 
 	return l;
+}
+
+template<size_t... render_passes>
+void resource_manager::wait_for_finish(std::index_sequence<render_passes...>)
+{
+	auto l = { (render_pass_typename<render_passes>::type::instance()->wait_for_finish(), 0)... };
+}
+
+void resource_manager::destroy(skybox&& sb)
+{
+	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX].pools[sb.pool_index], 1, &sb.ds);
+	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX].availability[sb.pool_index];
+
+	vkDestroyImageView(m_base.device, sb.tex.view, host_memory_manager);
+	vkDestroyImage(m_base.device, sb.tex.image, host_memory_manager);
+	vkFreeMemory(m_base.device, sb.tex.memory, host_memory_manager);
+}
+
+skybox resource_manager::build(const std::string & filename)
+{
+	static const std::string postfix[6] = { "/posx.jpg", "/negx.jpg", "/posy.jpg", "/negy.jpg", "/negz.jpg", "/posz.jpg" };
+
+	skybox skyb;
+
+	std::array<stbi_uc*, 6> pictures;
+
+	int width, height, channels;
+
+	for (uint32_t i=0; i<6; ++i)
+	{
+		pictures[i] = stbi_load((filename + postfix[i]).c_str(), &width, &height, &channels, STBI_rgb_alpha);
+		if (!pictures[i])
+			throw std::runtime_error("failed to load skybox image!");
+	}
+
+
+	size_t image_size = width*height * 4;
+
+	VkBuffer sb;
+	VkDeviceMemory sb_mem;
+	create_staging_buffer(m_base, 6 * image_size, sb, sb_mem);
+
+	void* raw_data;
+	vkMapMemory(m_base.device, sb_mem, 0, 6 * image_size, 0, &raw_data);
+	char* data = static_cast<char*>(raw_data);
+
+	for (int i = 0; i < 6; ++i)
+	{
+		memcpy(data, pictures[i], image_size);
+		stbi_image_free(pictures[i]);
+		data += image_size;
+	}	
+	vkUnmapMemory(m_base.device, sb_mem);
+
+	//create image
+	VkImageCreateInfo image_info = {};
+	image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	image_info.arrayLayers = 6;
+	image_info.extent.depth = 1;
+	image_info.extent.width = static_cast<uint32_t>(width);
+	image_info.extent.height = static_cast<uint32_t>(height);
+	image_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+	image_info.imageType = VK_IMAGE_TYPE_2D;
+	image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	image_info.mipLevels = 1;
+	image_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	image_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	image_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+	image_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+
+	if (vkCreateImage(m_base.device, &image_info, host_memory_manager, &skyb.tex.image) != VK_SUCCESS)
+		throw std::runtime_error("failed to create skybox image!");
+
+	//allocate memory
+	VkMemoryRequirements mr;
+	vkGetImageMemoryRequirements(m_base.device, skyb.tex.image, &mr);
+
+	VkMemoryAllocateInfo alloc_info = {};
+	alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc_info.allocationSize = mr.size;
+	alloc_info.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	
+	if (vkAllocateMemory(m_base.device, &alloc_info, host_memory_manager, &skyb.tex.memory) != VK_SUCCESS)
+		throw std::runtime_error("failed to allocate memory for skybox!");
+
+	vkBindImageMemory(m_base.device, skyb.tex.image, skyb.tex.memory, 0);
+
+	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+	//transition image to transfer dst optimal
+	VkImageMemoryBarrier barrier0 = {};
+	barrier0.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier0.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	barrier0.image = skyb.tex.image;
+	barrier0.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	barrier0.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	barrier0.srcAccessMask = 0;
+	barrier0.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier0.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier0.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier0.subresourceRange.baseArrayLayer = 0;
+	barrier0.subresourceRange.baseMipLevel = 0;
+	barrier0.subresourceRange.layerCount = 6;
+	barrier0.subresourceRange.levelCount = 1;
+
+	vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
+		0, nullptr, 1, &barrier0);
+
+	//copy from staging buffer
+	VkBufferImageCopy region = {};
+	region.bufferOffset = 0;
+	region.bufferImageHeight = 0;
+	region.bufferRowLength = 0;
+	region.imageExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
+	region.imageOffset = { 0,0,0 };
+	region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	region.imageSubresource.baseArrayLayer = 0;
+	region.imageSubresource.layerCount = 6;
+	region.imageSubresource.mipLevel = 0;
+
+	vkCmdCopyBufferToImage(cb, sb, skyb.tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+	//transition to shader read only optimal layout
+	VkImageMemoryBarrier barrier1 = {};
+	barrier1.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier1.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	barrier1.image = skyb.tex.image;
+	barrier1.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	barrier1.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	barrier1.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	barrier1.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier1.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier1.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier1.subresourceRange.baseArrayLayer = 0;
+	barrier1.subresourceRange.baseMipLevel = 0;
+	barrier1.subresourceRange.layerCount = 6;
+	barrier1.subresourceRange.levelCount = 1;
+
+	vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+		0, nullptr, 1, &barrier1);
+
+	end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);	
+
+	//destroy staging buffer
+	vkDestroyBuffer(m_base.device, sb, host_memory_manager);
+	vkFreeMemory(m_base.device, sb_mem, host_memory_manager);
+
+	//create image view
+	VkImageViewCreateInfo view_info = {};
+	view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	view_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+	view_info.image = skyb.tex.image;
+	view_info.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+	view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	view_info.subresourceRange.baseArrayLayer = 0;
+	view_info.subresourceRange.baseMipLevel = 0;
+	view_info.subresourceRange.layerCount = 6;
+	view_info.subresourceRange.levelCount = 1;
+
+	if (vkCreateImageView(m_base.device, &view_info, host_memory_manager, &skyb.tex.view) != VK_SUCCESS)
+		throw std::runtime_error("failed to create skybox image view!");
+
+	skyb.tex.sampler_type = SAMPLER_TYPE_CUBE;
+
+	//allocate ds
+	VkDescriptorSetAllocateInfo ds_alloc = {};
+	ds_alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	skyb.pool_index = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX].get_available_pool_id();
+	if (skyb.pool_index == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX].pools.size())
+		extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX>();
+	--m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX].availability[skyb.pool_index];
+	ds_alloc.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX].pools[skyb.pool_index];
+	ds_alloc.descriptorSetCount = 1;
+	ds_alloc.pSetLayouts = &m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX];
+	
+	if (vkAllocateDescriptorSets(m_base.device, &ds_alloc, &skyb.ds) != VK_SUCCESS)
+		throw std::runtime_error("failde to allocate skybox descriptor set!");
+
+	//update ds
+	VkDescriptorImageInfo update_image = {};
+	update_image.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	update_image.imageView = skyb.tex.view;
+	update_image.sampler = m_samplers[skyb.tex.sampler_type];
+
+	VkWriteDescriptorSet write = {};
+	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	write.descriptorCount = 1;
+	write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	write.dstArrayElement = 0;
+	write.dstBinding = 0;
+	write.dstSet = skyb.ds;
+	write.pImageInfo = &update_image;
+
+	vkUpdateDescriptorSets(m_base.device, 1, &write, 0, nullptr);
+
+	return skyb;
 }

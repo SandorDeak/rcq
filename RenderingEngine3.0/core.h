@@ -20,11 +20,14 @@ namespace rcq
 
 		void push_package(std::unique_ptr<core_package>&& package)
 		{
-			std::unique_lock<std::mutex> lock(m_package_queue_mutex);
-			if (m_package_queue.size() >= CORE_COMMAND_QUEUE_MAX_SIZE) //blocking
-				m_package_queue_condvar.wait(lock, [this]() {return m_package_queue.size() < CORE_COMMAND_QUEUE_MAX_SIZE; });
-
-			m_package_queue.push(std::move(package));
+			timer t;
+			t.start();
+			std::unique_lock<std::mutex> lock(m_package_mutex);
+			if (m_package)
+				m_package_condvar.wait(lock, [this]() { return !m_package; });
+			m_package = std::move(package);
+			t.stop();
+			std::cout << "core push package wait: " << t.get() << "\n";
 		}
 
 		renderable_container& get_renderable_container() { return m_renderables; }
@@ -36,18 +39,21 @@ namespace rcq
 		static core* m_instance;
 
 		std::thread m_looping_thread;
-		std::queue<std::unique_ptr<core_package>> m_package_queue;
-		std::mutex m_package_queue_mutex;
-		std::condition_variable m_package_queue_condvar;
+
+		std::mutex m_package_mutex;
+		std::condition_variable m_package_condvar;
+		std::unique_ptr<core_package> m_package;
 
 		renderable_container m_renderables;
 		
-		template<size_t... render_passes>
+		/*template<size_t... render_passes>
 		void record_and_render(const std::optional<camera_data>& cam, std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask,
 			std::index_sequence<render_passes...>)
 		{
 			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(cam, record_mask), 0)... };
-		}
+		}*/
+		void record_and_render(const std::optional<camera_data>& cam, std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask);
+		VkSemaphore m_begin_s;
 
 		template<size_t... render_passes>
 		void wait_for_finish(std::index_sequence<render_passes...>)

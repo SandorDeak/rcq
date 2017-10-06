@@ -2,7 +2,7 @@
 
 #include "engine.h"
 
-const int buddha_count = 10;
+const int buddha_count = 3;
 
 
 scene::scene(GLFWwindow* window, const glm::vec2& window_size) : m_window(window), m_window_size(window_size)
@@ -13,6 +13,8 @@ scene::scene(GLFWwindow* window, const glm::vec2& window_size) : m_window(window
 
 scene::~scene()
 {
+	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKYBOX>(m_skybox.id);
+
 	for (auto& m : m_meshes)
 		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_MESH>(m.id);
 	for (auto& mat : m_mats)
@@ -117,7 +119,7 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//self
-	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, 2.f, 0.f });
+	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, 0.f, -4.f });
 	tr.data.scale = glm::vec3(0.015f);
 	tr.data.tex_scale = glm::vec2(5.f);
 	tr.id = ENTITY_SHELF;
@@ -136,7 +138,7 @@ void scene::build()
 	rcq::light_omni_data old;
 	old.pos = glm::vec3(2.f);
 	old.flags = rcq::LIGHT_FLAG_SHADOW_MAP;
-	old.radiance = glm::vec3(6.f);
+	old.radiance = glm::vec3(3.f);
 
 	light_omni lo;
 	lo.data = old;
@@ -144,26 +146,44 @@ void scene::build()
 	m_light_omni.push_back(lo);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT_OMNI>(lo.id, lo.data, rcq::USAGE_STATIC);
 
-	/*old.pos = glm::vec3(-2.f, -2.f, 2.f);
+	old.pos = glm::vec3(-2.f, -2.f, 2.f);
 	old.radiance = glm::vec3(8.f);
-	l_res.data = old;
-	l_res.id = 1;
-	m_light_res.push_back(l_res);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT>(l_res.id, l_res.data, rcq::USAGE_STATIC, false);*/
+	old.flags = 0;
+	lo.data = old;
+	lo.id = 1;
+	m_light_omni.push_back(lo);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT_OMNI>(lo.id, lo.data, rcq::USAGE_STATIC);
 
 	//create lights
 	entity l;
-	l.m_id = ENTITY_LIGHT;
+	l.m_id = ENTITY_LIGHT0;
 	l.m_life_exp = rcq::LIFE_EXPECTANCY_LONG;
 	l.m_material_light_id = 0;
 	l.m_rend_type = rcq::RENDERABLE_TYPE_LIGHT_OMNI;
 	m_entities.push_back(l);
 	rcq::engine::instance()->cmd_build_renderable(l.m_id, 0, 0, l.m_material_light_id, l.m_rend_type, l.m_life_exp);
 
-	/*l.id = 1;
-	l.light_res_id = 1;
-	m_lights.push_back(l);
-	rcq::engine::instance()->cmd_build_light_renderable(l.id, l.light_res_id, rcq::LIFE_EXPECTANCY_LONG);*/
+	l.m_id = ENTITY_LIGHT1;
+	l.m_life_exp = rcq::LIFE_EXPECTANCY_LONG;
+	l.m_material_light_id = 1;
+	l.m_rend_type = rcq::RENDERABLE_TYPE_LIGHT_OMNI;
+	m_entities.push_back(l);
+	rcq::engine::instance()->cmd_build_renderable(l.m_id, 0, 0, l.m_material_light_id, l.m_rend_type, l.m_life_exp);
+
+	//create skybox res
+	m_skybox.resource = "textures/skybox";
+	m_skybox.id = SKYBOX_WATER;
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_SKYBOX>(m_skybox.id, m_skybox.resource);
+
+	//create skybox
+	entity sb;
+	sb.m_id = ENTITY_SKYBOX;
+	sb.m_material_light_id = SKYBOX_WATER;
+	sb.m_life_exp = rcq::LIFE_EXPECTANCY_LONG;
+	sb.m_rend_type = rcq::RENDERABLE_TYPE_SKYBOX;
+	m_entities.push_back(sb);
+	rcq::engine::instance()->cmd_build_renderable(sb.m_id, 0, 0, sb.m_material_light_id, sb.m_rend_type, sb.m_life_exp);
+
 
 	//create entities
 	entity e;

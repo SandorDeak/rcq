@@ -9,6 +9,7 @@ core* core::m_instance = nullptr;
 core::core()
 {
 	m_should_end = false;
+	m_begin_s = VK_NULL_HANDLE;
 	m_looping_thread = std::thread([this]()
 	{
 		/*try
@@ -55,17 +56,15 @@ void core::loop()
 	std::bitset<renderables_size> record_mask;
 	record_mask.reset();
 
-	while (!m_should_end || !m_package_queue.empty())
+	while (!m_should_end || m_package)
 	{
-		if (!m_package_queue.empty())
+		if (m_package)
 		{
 			std::unique_ptr<core_package> package;
 			{
-				std::unique_lock<std::mutex> lock(m_package_queue_mutex);
-				package = std::move(m_package_queue.front());
-				m_package_queue.pop();
-				if (m_package_queue.size() == CORE_COMMAND_QUEUE_MAX_SIZE - 1)
-					m_package_queue_condvar.notify_one();
+				std::unique_lock<std::mutex> lock(m_package_mutex);
+				package = std::move(m_package);
+				m_package_condvar.notify_one();
 			}
 			
 			//destroy renderables
@@ -109,25 +108,32 @@ void core::loop()
 			if (!package->update_tr.empty())
 			{
 				//wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
-				basic_pass::instance()->wait_for_finish();
+				//basic_pass::instance()->wait_for_finish();
 				resource_manager::instance()->update_tr(package->update_tr);
 			}
 
 			if (package->render)
 			{
-				record_and_render(package->update_cam, record_mask, std::make_index_sequence<RENDER_PASS_COUNT>());
+				record_and_render(package->update_cam, record_mask);
 				record_mask.reset();
 			}
 
 			if (package->confirm_destroy)
 			{
 				//wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
-				basic_pass::instance()->wait_for_finish();
+				//basic_pass::instance()->wait_for_finish();
 				package->confirm_destroy->set_value();
 			}
 		}
 	}
-	
+	wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+
+}
+
+void rcq::core::record_and_render(const std::optional<camera_data>&cam, std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask)
+{
+	auto shadow_map_s = omni_light_shadow_pass::instance()->record_and_render(cam, record_mask, m_begin_s);
+	m_begin_s=basic_pass::instance()->record_and_render(cam, record_mask, shadow_map_s);
 }
 
 template<size_t rend_type>

@@ -26,6 +26,8 @@ private:
 	std::vector<mesh> m_meshes;
 	std::vector<transform> m_trs;
 	std::vector<light_omni> m_light_omni;
+	skybox m_skybox;
+
 	GLFWwindow* m_window;
 };
 

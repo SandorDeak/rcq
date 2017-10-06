@@ -23,7 +23,6 @@
     <ClCompile Include="basic_pass.cpp" />
     <ClCompile Include="core.cpp" />
     <ClCompile Include="device_memory.cpp" />
-    <ClCompile Include="disassembler.cpp" />
     <ClCompile Include="entity.cpp" />
     <ClCompile Include="foundation.cpp" />
     <ClCompile Include="omni_light_shadow_pass.cpp" />
@@ -37,7 +36,6 @@
     <ClInclude Include="basic_pass.h" />
     <ClInclude Include="core.h" />
     <ClInclude Include="device_memory.h" />
-    <ClInclude Include="disassembler.h" />
     <ClInclude Include="foundation.h" />
     <ClInclude Include="entity.h" />
     <ClInclude Include="engine.h" />
@@ -105,10 +103,10 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\stb;C:\tinyobj;C:\glm;C:\glfw-3.2.1.bin.WIN32\include;C:\VulkanSDK\1.0.57.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\stb;C:\tinyobj;C:\glm;C:\glfw-3.2.1.bin.WIN32\include;C:\VulkanSDK\1.0.61.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>C:\glfw-3.2.1.bin.WIN32\lib-vc2015;C:\VulkanSDK\1.0.57.0\Lib32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\glfw-3.2.1.bin.WIN32\lib-vc2015;C:\VulkanSDK\1.0.61.1\Lib32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
@@ -127,12 +125,12 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <LanguageStandard>stdcpplatest</LanguageStandard>
-      <AdditionalIncludeDirectories>C:\stb;C:\tinyobj;C:\glm;C:\glfw-3.2.1.bin.WIN32\include;C:\VulkanSDK\1.0.57.0\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>C:\stb;C:\tinyobj;C:\glm;C:\glfw-3.2.1.bin.WIN32\include;C:\VulkanSDK\1.0.61.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>C:\glfw-3.2.1.bin.WIN32\lib-vc2015;C:\VulkanSDK\1.0.57.0\Lib32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>C:\glfw-3.2.1.bin.WIN32\lib-vc2015;C:\VulkanSDK\1.0.61.1\Lib32;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>vulkan-1.lib;glfw3.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>

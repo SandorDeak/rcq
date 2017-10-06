@@ -14,15 +14,17 @@ namespace rcq
 		static void destroy();
 		static basic_pass* instance() { return m_instance; }
 
-		void record_and_render(const std::optional<camera_data>& cam, 
-			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask);
+		VkSemaphore record_and_render(const std::optional<camera_data>& cam, 
+			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, VkSemaphore wait_s);
 		void wait_for_finish();
 
 	private:
 		enum SUBPASS
 		{
 			SUBPASS_MAT,
-			SUBPASS_LIGHT
+			SUBPASS_LIGHT,
+			SUBPASS_SKYBOX,
+			SUBPASS_COUNT
 		};
 
 		basic_pass(const base_info& info, const renderable_container& renderables);
@@ -44,8 +46,9 @@ namespace rcq
 		const base_info m_base;
 		VkRenderPass m_pass;
 
-		texture m_depth_tex;
 
+		//resources
+		texture m_depth_tex;
 		VkImage m_gbuffer_image; 
 		VkDeviceMemory m_gbuffer_mem;
 		std::array<VkImageView, 5> m_gbuffer_views;
@@ -76,6 +79,7 @@ namespace rcq
 
 		VkSemaphore m_image_available_s;
 		VkSemaphore m_render_finished_s;
+		VkSemaphore m_render_finished_s2;
 		
 		std::vector<VkFence> m_primary_cb_finished_fs;
 		std::vector<std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>> m_record_masks;

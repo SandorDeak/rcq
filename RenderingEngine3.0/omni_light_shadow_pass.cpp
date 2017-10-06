@@ -20,6 +20,7 @@ omni_light_shadow_pass::omni_light_shadow_pass(const base_info& info, const rend
 
 omni_light_shadow_pass::~omni_light_shadow_pass()
 {
+	wait_for_finish();
 	vkDestroyFence(m_base.device, m_render_finished_f, host_memory_manager);
 	vkDestroySemaphore(m_base.device, m_render_finished_s, host_memory_manager);
 	vkDestroyPipelineLayout(m_base.device, m_pl, host_memory_manager);
@@ -54,7 +55,7 @@ void omni_light_shadow_pass::create_render_pass()
 	VkAttachmentDescription depth_attachment = {};
 	depth_attachment.format = VK_FORMAT_D32_SFLOAT;
 	depth_attachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-	depth_attachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	depth_attachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	depth_attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	depth_attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 	depth_attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -217,9 +218,17 @@ void omni_light_shadow_pass::allocate_command_buffer()
 		throw std::runtime_error("failed to allocate command buffer!");
 }
 
-void omni_light_shadow_pass::record_and_render(const std::optional<camera_data>& cam, 
-	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask)
+VkSemaphore omni_light_shadow_pass::record_and_render(const std::optional<camera_data>& cam, 
+	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, VkSemaphore wait_s)
 {
+	timer t;
+	t.start();
+	if (vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE,
+		std::numeric_limits<uint64_t>::max()) != VK_SUCCESS)
+		throw std::runtime_error("failed to wait for fence!");
+	t.stop();
+	std::cout << "shadow pass wait: " << t.get() << "\n";
+
 	//record cb
 	VkCommandBufferBeginInfo cb_begin = {};
 	cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -290,7 +299,7 @@ void omni_light_shadow_pass::record_and_render(const std::optional<camera_data>&
 				}
 				vkCmdEndRenderPass(m_cb);
 
-				VkImageMemoryBarrier barrier1 = {};
+				/*VkImageMemoryBarrier barrier1 = {};
 				barrier1.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 				barrier1.image = l.shadow_map.image;
 				barrier1.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -306,7 +315,7 @@ void omni_light_shadow_pass::record_and_render(const std::optional<camera_data>&
 				barrier1.subresourceRange.levelCount = 1;
 
 				vkCmdPipelineBarrier(m_cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-					0, nullptr, 0, nullptr, 1, &barrier1);
+					0, nullptr, 0, nullptr, 1, &barrier1);*/
 			}
 		}
 	}
@@ -319,13 +328,23 @@ void omni_light_shadow_pass::record_and_render(const std::optional<camera_data>&
 	submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submit.commandBufferCount = 1;
 	submit.pCommandBuffers = &m_cb;
+	VkPipelineStageFlags wait_stages[1] = { VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT };
+	if (wait_s != VK_NULL_HANDLE)
+	{	
+		submit.pWaitDstStageMask = wait_stages;
+		submit.pWaitSemaphores = &wait_s;
+		submit.waitSemaphoreCount = 1;
+	}
+	submit.pSignalSemaphores = &m_render_finished_s;
+	submit.signalSemaphoreCount = 1;
 	/*submit.pSignalSemaphores = &m_render_finished_s;
 	submit.signalSemaphoreCount = 1;*/
+
+	vkResetFences(m_base.device, 1, &m_render_finished_f);
 	if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, m_render_finished_f) != VK_SUCCESS)
 		throw std::runtime_error("failed to submit cb!");
-	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
-	
-	vkResetFences(m_base.device, 1, &m_render_finished_f);
+
+	return m_render_finished_s;
 }
 
 void omni_light_shadow_pass::create_semaphore()
@@ -355,7 +374,13 @@ void omni_light_shadow_pass::create_fence()
 {
 	VkFenceCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 	
 	if (vkCreateFence(m_base.device, &info, host_memory_manager, &m_render_finished_f) != VK_SUCCESS)
 		throw std::runtime_error("failed to create fence!");
+}
+
+void omni_light_shadow_pass::wait_for_finish()
+{
+	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
 }

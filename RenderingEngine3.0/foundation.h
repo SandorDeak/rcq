@@ -103,7 +103,7 @@ namespace rcq
 	enum SAMPLER_TYPE
 	{
 		SAMPLER_TYPE_SIMPLE,
-		SAMPLER_TYPE_OMNI_LIGHT_SHADOW_MAP,
+		SAMPLER_TYPE_CUBE,
 		SAMPLER_TYPE_COUNT
 	};
 
@@ -112,6 +112,7 @@ namespace rcq
 		DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE,
 		DESCRIPTOR_SET_LAYOUT_TYPE_TR,
 		DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_OMNI,
+		DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX,
 		DESCRIPTOR_SET_LAYOUT_TYPE_COUNT
 	};
 
@@ -394,6 +395,7 @@ namespace rcq
 	{
 		texture tex;
 		VkDescriptorSet ds;
+		uint32_t pool_index;
 	};
 
 	
@@ -616,11 +618,17 @@ namespace rcq
 		void stop()
 		{
 			auto end_time = std::chrono::high_resolution_clock::now();
-			duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - time).count() / 1000.f;
+			duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - time).count() / 1000000.f;
 		}
 		float get()
 		{
 			return duration;
+		}
+		void wait_until(std::chrono::milliseconds d)
+		{
+			duration = d.count() / 1000.f;
+			std::this_thread::sleep_until(time + d);
+			
 		}
 	private:
 		std::chrono::time_point<std::chrono::steady_clock> time;

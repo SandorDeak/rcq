@@ -42,6 +42,9 @@ namespace rcq
 		template<DESCRIPTOR_SET_LAYOUT_TYPE dsl_type>
 		inline void extend_descriptor_pool_pool();
 
+		template<size_t... render_passes>
+		inline void wait_for_finish(std::index_sequence<render_passes...>);
+
 		static resource_manager* m_instance;
 
 		const base_info m_base;
@@ -130,7 +133,7 @@ namespace rcq
 		transform build(const transform_data& data, USAGE usage);
 		light_omni build(const light_omni_data& data, USAGE usage);
 		memory build(const std::vector<VkMemoryAllocateInfo>& requirements);
-		skybox build(const std::string& filename) { return skybox(); }
+		skybox build(const std::string& filename);
 		texture load_texture(const std::string& filename);
 
 		//destroy thread
@@ -171,7 +174,7 @@ namespace rcq
 		void destroy(transform&& _tr);
 		void destroy(light_omni&& _light);
 		void destroy(memory&& _memory);
-		void destroy(skybox&& _sb) {}
+		void destroy(skybox&& _sb);
 
 	};
 

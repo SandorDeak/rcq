@@ -15,6 +15,7 @@ basic_pass::basic_pass(const base_info& info, const renderable_container& render
 	create_descriptors();
 	create_opaque_mat_pipeline();
 	create_omni_light_pipeline();
+	create_skybox_pipeline();
 	create_framebuffers();
 	allocate_command_buffers();
 	create_semaphores();
@@ -28,10 +29,13 @@ basic_pass::basic_pass(const base_info& info, const renderable_container& render
 
 basic_pass::~basic_pass()
 {
+	wait_for_finish();
+
 	for (auto f : m_primary_cb_finished_fs)
 		vkDestroyFence(m_base.device, f, host_memory_manager);
 
 	vkDestroySemaphore(m_base.device, m_render_finished_s, host_memory_manager);
+	vkDestroySemaphore(m_base.device, m_render_finished_s2, host_memory_manager);
 	vkDestroySemaphore(m_base.device, m_image_available_s, host_memory_manager);
 
 	for (auto& dsl : m_per_frame_dsls)
@@ -158,8 +162,15 @@ void basic_pass::create_render_pass()
 	light_subpass.pDepthStencilAttachment = &depth_ref;
 	light_subpass.pInputAttachments = gbuffer_light_refs;
 	light_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+
+	//skybox subpass
+	VkSubpassDescription skybox_subpass = {};
+	skybox_subpass.colorAttachmentCount = 1;
+	skybox_subpass.pColorAttachments = &color_out_ref;
+	skybox_subpass.pDepthStencilAttachment = &depth_ref;
+	skybox_subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 	
-	VkSubpassDescription subpasses[] = { material_subpass, light_subpass };
+	VkSubpassDescription subpasses[] = { material_subpass, light_subpass, skybox_subpass };
 
 	//dependencies
 	VkSubpassDependency ext_dependency = {};
@@ -174,21 +185,28 @@ void basic_pass::create_render_pass()
 	mat_light_dependency.srcSubpass = SUBPASS_MAT;
 	mat_light_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 	mat_light_dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
 	mat_light_dependency.dstSubpass = SUBPASS_LIGHT;
 	mat_light_dependency.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 	mat_light_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
 
-	VkSubpassDependency dependencies[2] = { ext_dependency, mat_light_dependency };
+	VkSubpassDependency light_skybox_dependency = {};
+	light_skybox_dependency.srcSubpass = SUBPASS_LIGHT;
+	light_skybox_dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	light_skybox_dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+	light_skybox_dependency.dstSubpass = SUBPASS_SKYBOX;
+	light_skybox_dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	light_skybox_dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+	VkSubpassDependency dependencies[3] = { ext_dependency, mat_light_dependency, light_skybox_dependency };
 
 	VkRenderPassCreateInfo info = {};
 	info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 	info.attachmentCount = 7;
-	info.dependencyCount = 2;
+	info.dependencyCount = 3;
 	info.pAttachments = attachments;
 	info.pDependencies = dependencies;
 	info.pSubpasses = subpasses;
-	info.subpassCount = 2;
+	info.subpassCount = 3;
 
 	if (vkCreateRenderPass(m_base.device, &info, host_memory_manager, &m_pass) != VK_SUCCESS)
 	{
@@ -459,25 +477,38 @@ void basic_pass::create_opaque_mat_pipeline()
 void basic_pass::create_skybox_pipeline()
 {
 	auto vert_code = read_file("shaders/basic_pass/mat_subpass/skybox/vert.spv");
+	auto geom_code = read_file("shaders/basic_pass/mat_subpass/skybox/geom.spv");
 	auto frag_code = read_file("shaders/basic_pass/mat_subpass/skybox/frag.spv");
 
 	VkShaderModule vert_module = create_shader_module(m_base.device, vert_code);
+	VkShaderModule geom_module = create_shader_module(m_base.device, geom_code);
 	VkShaderModule frag_module = create_shader_module(m_base.device, frag_code);
 
-	VkPipelineShaderStageCreateInfo shaders[2] = {};
+	VkPipelineShaderStageCreateInfo shaders[3] = {};
 	shaders[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	shaders[0].module = vert_module;
 	shaders[0].pName = "main";
 	shaders[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-	shaders[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-	shaders[0].module = frag_module;
-	shaders[0].pName = "main";
-	shaders[0].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+	shaders[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaders[1].module = geom_module;
+	shaders[1].pName = "main";
+	shaders[1].stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+	shaders[2].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaders[2].module = frag_module;
+	shaders[2].pName = "main";
+	shaders[2].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkPipelineVertexInputStateCreateInfo vertex_input = {};
+	vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertex_input.pVertexAttributeDescriptions = nullptr;
+	vertex_input.pVertexBindingDescriptions = 0;
+	vertex_input.vertexAttributeDescriptionCount = 0;
+	vertex_input.vertexBindingDescriptionCount = 0;
 
 	VkPipelineInputAssemblyStateCreateInfo assembly = {};
 	assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
 	assembly.primitiveRestartEnable = VK_TRUE;
-	assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+	assembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
 
 	VkViewport vp = {};
 	vp.height = (float)m_base.swap_chain_image_extent.height;
@@ -532,10 +563,39 @@ void basic_pass::create_skybox_pipeline()
 	color_blend.attachmentCount = 1;
 	color_blend.logicOpEnable = VK_FALSE;
 	color_blend.pAttachments = &color_blend_attachment;
-
 	
+	VkDescriptorSetLayout dsls[2] = { m_per_frame_dsls[RENDERABLE_TYPE_MAT_OPAQUE], resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX) };
+
+	VkPipelineLayoutCreateInfo layout = {};
+	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	layout.pSetLayouts = dsls;
+	layout.setLayoutCount = 2;
+
+	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_pls[RENDERABLE_TYPE_SKYBOX]) != VK_SUCCESS)
+		throw std::runtime_error("failed to create pipeline layout!");
+
+	VkGraphicsPipelineCreateInfo info = {};
+	info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	info.basePipelineHandle = VK_NULL_HANDLE;
+	info.basePipelineIndex = -1;
+	info.layout = m_pls[RENDERABLE_TYPE_SKYBOX];
+	info.pColorBlendState = &color_blend;
+	info.pDepthStencilState = &depth;
+	info.pMultisampleState = &multisample;
+	info.pRasterizationState = &rasterizer;
+	info.pStages = shaders;
+	info.pInputAssemblyState = &assembly;
+	info.pVertexInputState = &vertex_input;
+	info.pViewportState = &viewport;
+	info.renderPass = m_pass;
+	info.stageCount = 3;
+	info.subpass = SUBPASS_SKYBOX;
+
+	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &info, host_memory_manager, &m_gps[RENDERABLE_TYPE_SKYBOX]) != VK_SUCCESS)
+		throw std::runtime_error("failed to create skybox pipeline!");	
 
 	vkDestroyShaderModule(m_base.device, vert_module, host_memory_manager);
+	vkDestroyShaderModule(m_base.device, geom_module, host_memory_manager);
 	vkDestroyShaderModule(m_base.device, frag_module, host_memory_manager);
 }
 
@@ -591,6 +651,7 @@ void basic_pass::create_resources()
 	buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 	if (vkCreateBuffer(m_base.device, &buffer_create_info, host_memory_manager, &m_per_frame_b) != VK_SUCCESS)
 		throw std::runtime_error("failed to create per frame buffer!");
+
 
 	//send memory build package to resource manager
 	VkMemoryRequirements depth_image_mr, gbuffer_image_mr, per_frame_buffer_mr;
@@ -750,11 +811,15 @@ void basic_pass::create_framebuffers()
 	}
 }
 
-void basic_pass::record_and_render(const std::optional<camera_data>& cam, 
-	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask)
+VkSemaphore basic_pass::record_and_render(const std::optional<camera_data>& cam, 
+	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, VkSemaphore wait_s)
 {
 	for (auto& rm : m_record_masks)
 		rm |= record_mask;
+
+	// copy camera data
+	if (cam)
+		memcpy(m_per_frame_b_data, &cam.value(), sizeof(camera_data));
 
 	//acquire swap chain image
 	uint32_t image_index;
@@ -765,9 +830,13 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam,
 		throw std::runtime_error("failed to acquire swap chain image!");
 	}
 
+	timer t;
+	t.start();
 	if (vkWaitForFences(m_base.device, 1, &m_primary_cb_finished_fs[image_index], VK_TRUE,
 		std::numeric_limits<uint64_t>::max()) != VK_SUCCESS)
 		throw std::runtime_error("failed to wait for fence!");
+	t.stop();
+	std::cout << "swap chain pass wait: " << t.get() << "\n";
 
 	//record secondary command buffers (if necessary)
 
@@ -792,7 +861,7 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam,
 
 			VkCommandBufferBeginInfo cb_begin = {};
 			cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			cb_begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+			cb_begin.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
 			cb_begin.pInheritanceInfo = &inheritance;
 
 			vkBeginCommandBuffer(cb, &cb_begin);
@@ -839,7 +908,7 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam,
 
 			VkCommandBufferBeginInfo cb_begin = {};
 			cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-			cb_begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT | VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+			cb_begin.flags =  VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
 			cb_begin.pInheritanceInfo = &inheritance;
 
 			vkBeginCommandBuffer(cb, &cb_begin);
@@ -854,18 +923,52 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam,
 				throw std::runtime_error("failed to record light command buffer!");
 		}
 	}
+
+	constexpr std::array<uint32_t, 2> skybox_pass_rend_types = {
+		LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_SKYBOX,
+		LIFE_EXPECTANCY_COUNT*RENDERABLE_TYPE_SKYBOX + 1
+	};
+	for (auto i : skybox_pass_rend_types)
+	{
+		if (m_record_masks[image_index][i] && !m_renderables[i].empty())
+		{
+			auto cb = m_secondary_cbs[i][image_index];
+			int rend_type = i / LIFE_EXPECTANCY_COUNT;
+
+			VkCommandBufferInheritanceInfo inheritance = {};
+			inheritance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+			inheritance.framebuffer = m_fbs[image_index];
+			inheritance.occlusionQueryEnable = VK_FALSE;
+			inheritance.renderPass = m_pass;
+			inheritance.subpass = 2;
+
+			VkCommandBufferBeginInfo cb_begin = {};
+			cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+			cb_begin.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+			cb_begin.pInheritanceInfo = &inheritance;
+
+			vkBeginCommandBuffer(cb, &cb_begin);
+			vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[rend_type]);
+			VkDescriptorSet sets[2] = { m_per_frame_dss[RENDERABLE_TYPE_MAT_OPAQUE], m_renderables[i][0].mat_light_ds};
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_pls[RENDERABLE_TYPE_SKYBOX],
+				0, 2, sets, 0, nullptr);
+			vkCmdDraw(cb, 1, 1, 0, 0);
+
+			if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+				throw std::runtime_error("failed to record light command buffer!");
+		
+		}
+	}
+
 	m_record_masks[image_index].reset();
 
-	// copy camera data
-	if (cam)
-		memcpy(m_per_frame_b_data, &cam.value(), sizeof(camera_data));
 
 	//record primary cb
 
 	auto cb = m_primary_cbs[image_index];
 	VkCommandBufferBeginInfo cb_begin = {};
 	cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	cb_begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+	cb_begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
 	vkBeginCommandBuffer(cb, &cb_begin);
 
@@ -896,6 +999,13 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam,
 			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[j][image_index]);
 	}
 
+	vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+	for (auto j : skybox_pass_rend_types)
+	{
+		if (!m_renderables[j].empty())
+			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[j][image_index]);
+	}
+
 	vkCmdEndRenderPass(cb);
 		
 	if (vkEndCommandBuffer(cb) != VK_SUCCESS)
@@ -907,12 +1017,14 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam,
 	submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submit.commandBufferCount = 1;
 	submit.pCommandBuffers = &cb;
-	submit.pSignalSemaphores = &m_render_finished_s;
-	submit.signalSemaphoreCount = 1;
-	submit.pWaitSemaphores = &m_image_available_s;
-	submit.waitSemaphoreCount = 1;
-	VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	submit.pWaitDstStageMask = &wait_stage;
+	VkSemaphore signal_semaphores[2] = { m_render_finished_s, m_render_finished_s2 };
+	submit.pSignalSemaphores = signal_semaphores;
+	submit.signalSemaphoreCount = 2;
+	VkSemaphore wait_semaphores[2] = { wait_s, m_image_available_s };
+	submit.pWaitSemaphores = wait_semaphores;
+	submit.waitSemaphoreCount = 2;
+	VkPipelineStageFlags wait_stage[2] = { VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT ,VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	submit.pWaitDstStageMask = wait_stage;
 
 	vkResetFences(m_base.device, 1, &m_primary_cb_finished_fs[image_index]);
 	if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, m_primary_cb_finished_fs[image_index]) != VK_SUCCESS)
@@ -928,12 +1040,13 @@ void basic_pass::record_and_render(const std::optional<camera_data>& cam,
 
 	if (vkQueuePresentKHR(m_base.present_queue, &present) != VK_SUCCESS)
 		throw std::runtime_error("failed to present image!");
-		
+	
+	return m_render_finished_s2;
 }
 
 void basic_pass::allocate_command_buffers()
 {
-	//allocate material and light cbs
+	//allocate secondary cbs
 	VkCommandBufferAllocateInfo alloc_info = {};
 	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	alloc_info.commandBufferCount = static_cast<uint32_t>(m_fbs.size());
@@ -961,7 +1074,7 @@ void basic_pass::create_descriptors()
 	cam_binding.binding = 0;
 	cam_binding.descriptorCount = 1;
 	cam_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	cam_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+	cam_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_GEOMETRY_BIT;
 
 	VkDescriptorSetLayoutCreateInfo dsl_info = {};
 	dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1064,7 +1177,8 @@ void basic_pass::create_semaphores()
 	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 	
 	if (vkCreateSemaphore(m_base.device, &info, host_memory_manager, &m_image_available_s) != VK_SUCCESS ||
-		vkCreateSemaphore(m_base.device, &info, host_memory_manager, &m_render_finished_s) != VK_SUCCESS)
+		vkCreateSemaphore(m_base.device, &info, host_memory_manager, &m_render_finished_s) != VK_SUCCESS ||
+		vkCreateSemaphore(m_base.device, &info, host_memory_manager, &m_render_finished_s2) != VK_SUCCESS)
 		throw std::runtime_error("failed to create semaphores!");
 }
 

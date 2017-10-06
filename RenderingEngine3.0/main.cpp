@@ -16,11 +16,12 @@ int main()
 		t.start();
 		while (!glfwWindowShouldClose(window))
 		{
-			glfwPollEvents();
+			//t.wait_until(std::chrono::milliseconds(33));
 			t.stop();
 			float dt = t.get();
 			//std::cout << dt << std::endl;
 			t.start();
+			glfwPollEvents();
 			sc->update(dt);
 		}
 		delete sc;

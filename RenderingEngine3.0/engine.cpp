@@ -1,6 +1,5 @@
 #include "engine.h"
 #include "base.h"
-#include "disassembler.h"
 #include "core.h"
 #include "resource_manager.h"
 #include "basic_pass.h"
@@ -14,8 +13,6 @@ engine* engine::m_instance = nullptr;
 
 engine::engine()
 {
-	m_command_p.reset(new command_package);
-
 	base_create_info base_info = {};
 	base_info.device_extensions=
 	{
@@ -48,13 +45,10 @@ engine::engine()
 	basic_pass::init(m_base, core::instance()->get_renderable_container());
 	omni_light_shadow_pass::init(m_base, core::instance()->get_renderable_container());
 
-	disassembler::init();
-
 }
 
 engine::~engine()
 {
-	disassembler::destroy();
 	core::destroy();
 	basic_pass::destroy();
 	omni_light_shadow_pass::destroy();
@@ -84,6 +78,20 @@ void engine::destroy()
 
 void engine::cmd_dispatch()
 {
-	disassembler::instance()->push_package(std::move(m_command_p));
-	m_command_p.reset(new command_package);
+	if (m_build_p)
+	{
+		resource_manager::instance()->process_build_package(std::move(*m_build_p.get()));
+		m_build_p.release();
+	}
+	if (m_destroy_p)
+	{
+		if (!m_core_p)
+			m_core_p.reset(new core_package);
+		m_core_p->confirm_destroy.emplace();
+		m_destroy_p->destroy_confirmation.emplace(m_core_p->confirm_destroy->get_future());
+
+		resource_manager::instance()->push_destroy_package(std::move(m_destroy_p));
+	}
+	if (m_core_p)
+		core::instance()->push_package(std::move(m_core_p));
 }

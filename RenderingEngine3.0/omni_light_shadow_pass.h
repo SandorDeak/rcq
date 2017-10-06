@@ -16,8 +16,8 @@ namespace rcq
 		static void destroy();
 		static omni_light_shadow_pass* instance() { return m_instance; }
 
-		void record_and_render(const std::optional<camera_data>& cam, 
-			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask);
+		VkSemaphore record_and_render(const std::optional<camera_data>& cam, 
+			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, VkSemaphore wait_s);
 		void wait_for_finish();
 
 		void create_framebuffer(light_omni& l);

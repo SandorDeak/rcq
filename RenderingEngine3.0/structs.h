@@ -19,11 +19,11 @@ enum MAT : rcq::unique_id
 	MAT_COUNT
 };
 
-/*enum TR : rcq::unique_id
+enum SKYBOX : rcq::unique_id
 {
-	TR_GOLD_BUDDHA,
-	TR_COUNT
-};*/
+	SKYBOX_WATER,
+	SKYBOX_COUNT
+};
 
 enum ENTITIY : rcq::unique_id
 {
@@ -31,7 +31,9 @@ enum ENTITIY : rcq::unique_id
 	ENTITY_SHELF,
 	ENTITY_WALLS,
 	ENTITY_GOLD_BUDDHA,
-	ENTITY_LIGHT,
+	ENTITY_LIGHT0,
+	ENTITY_LIGHT1,
+	ENTITY_SKYBOX,
 	ENTITY_COUNT
 };
 
@@ -54,6 +56,12 @@ struct mesh
 {
 	std::string resource;
 	bool calc_tb;
+	rcq::unique_id id;
+};
+
+struct skybox
+{
+	std::string resource;
 	rcq::unique_id id;
 };
 
