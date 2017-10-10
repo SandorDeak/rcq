@@ -212,14 +212,14 @@ namespace rcq
 		float penumbra_angle;
 		glm::vec3 radiance;
 		float umbra_angle;
-	};
+	};*/
 
 	struct dir_light_data
 	{
 		glm::vec3 dir;
-		uint32_t padding0;
+		uint32_t flags;
 		glm::vec3 irradiance;
-	};*/
+	};
 
 	struct transform_data
 	{
@@ -292,6 +292,9 @@ namespace rcq
 	extern const size_t DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE;
 	extern const size_t CORE_COMMAND_QUEUE_MAX_SIZE;
 	extern const size_t SHADOW_MAP_SIZE;
+	extern const size_t DIR_SHADOW_MAP_SIZE;
+
+	extern const size_t FRUSTUM_SPLIT_COUNT;
 
 	struct base_create_info
 	{
@@ -379,6 +382,13 @@ namespace rcq
 		cell_info cell;
 	};
 
+	struct update_proj
+	{
+		glm::mat4 proj;
+		float near;
+		float far;
+	};
+
 	struct light_omni
 	{
 		VkDescriptorSet ds;
@@ -389,6 +399,18 @@ namespace rcq
 		cell_info cell;
 		texture shadow_map;
 		VkFramebuffer shadow_map_fb;
+	};
+	struct light_dir
+	{
+		VkDescriptorSet ds;
+		uint32_t pool_index;
+		USAGE usage;
+		VkBuffer buffer;
+		void* data;
+		cell_info cell;
+		texture shadow_map;
+		VkFramebuffer shadow_map_fb;
+		std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> projs;
 	};
 
 	struct skybox
@@ -412,6 +434,12 @@ namespace rcq
 		VkFramebuffer shadow_map_fb;
 	};
 
+	struct cascade_shadow_map_data
+	{
+		glm::mat4 projs[FRUSTUM_SPLIT_COUNT];
+		float split_values[FRUSTUM_SPLIT_COUNT];
+	};
+
 	typedef std::array<std::vector<renderable>, RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> renderable_container;
 
 	struct core_package
@@ -419,9 +447,10 @@ namespace rcq
 		std::array<std::vector<build_renderable_info>, RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> build_renderable;
 		std::array<std::vector<unique_id>, RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> destroy_renderable;
 		std::vector<update_tr_info> update_tr;
-		std::optional<camera_data> update_cam;
 		std::optional<std::promise<void>> confirm_destroy;
 		bool render = false;
+		glm::mat4 view;
+		std::optional<update_proj> proj_info;
 	};
 
 

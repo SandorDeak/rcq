@@ -12,14 +12,14 @@ core::core()
 	m_begin_s = VK_NULL_HANDLE;
 	m_looping_thread = std::thread([this]()
 	{
-		/*try
-		{*/
+		try
+		{ 
 			loop();
-		/*}
+		}
 		catch (const std::runtime_error& e)
 		{
 			std::cerr << e.what() << std::endl;
-		}*/
+		}
 	});
 }
 
@@ -114,7 +114,7 @@ void core::loop()
 
 			if (package->render)
 			{
-				record_and_render(package->update_cam, record_mask);
+				record_and_render(package->view, package->proj_info, record_mask);
 				record_mask.reset();
 			}
 
@@ -130,10 +130,11 @@ void core::loop()
 
 }
 
-void rcq::core::record_and_render(const std::optional<camera_data>&cam, std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask)
+void rcq::core::record_and_render(const glm::mat4& view, const std::optional<update_proj>& proj_info,
+	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask)
 {
-	auto shadow_map_s = omni_light_shadow_pass::instance()->record_and_render(cam, record_mask, m_begin_s);
-	m_begin_s=basic_pass::instance()->record_and_render(cam, record_mask, shadow_map_s);
+	auto shadow_map_s = omni_light_shadow_pass::instance()->record_and_render(view, proj_info, record_mask, m_begin_s);
+	m_begin_s=basic_pass::instance()->record_and_render(view, proj_info, record_mask, shadow_map_s);
 }
 
 template<size_t rend_type>

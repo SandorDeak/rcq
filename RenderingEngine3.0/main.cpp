@@ -7,8 +7,8 @@
 
 int main()
 {
-	/*try
-	{ */
+	try
+	{ 
 		rcq::engine::init();
 		GLFWwindow* window = rcq::engine::instance()->get_window();
 		auto sc = new scene(window, rcq::engine::instance()->get_window_size());
@@ -27,11 +27,11 @@ int main()
 		delete sc;
 		rcq::engine::destroy();
  		return EXIT_SUCCESS;
-	/*}
+	}
 	catch (const std::runtime_error& e)
 	{
 		std::cerr << e.what() << std::endl;
 		return EXIT_FAILURE;
-	}*/
+	}
 
 }

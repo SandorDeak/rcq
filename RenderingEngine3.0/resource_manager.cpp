@@ -29,27 +29,27 @@ resource_manager::resource_manager(const base_info& info) : m_base(info)
 	m_should_end_destroy = false;
 	m_build_thread = std::thread([this]()
 	{
-		/*try
-		{*/
+		try
+		{
 			build_loop();
-		/*}
+		}
 
 		catch (const std::runtime_error& e)
 		{
 			std::cerr << e.what() << std::endl;
-		}*/
+		}
 	});
 
 	m_destroy_thread = std::thread([this]()
 	{
-		/*try
-		{*/
+		try
+		{
 			destroy_loop();
-		/*}
+		}
 		catch (const std::runtime_error& e)
 		{
 			std::cerr << e.what() << std::endl;
-		}*/
+		}
 	});
 
 	create_staging_buffers();

@@ -50,9 +50,15 @@ void scene::build()
 	m_meshes.push_back(m);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
 
-	m.resource = "meshes/cube_inside_out/cube_inside_out.obj";
+	m.resource = "meshes/warehouse/Warehouse.obj";
 	m.calc_tb = false;
-	m.id = MESH_CUBE_INSIDE_OUT;
+	m.id = MESH_WAREHOUSE;
+	m_meshes.push_back(m);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
+
+	m.resource = "meshes/terrain/terrain.obj";
+	m.calc_tb = true;
+	m.id = MESH_TERRAIN;
 	m_meshes.push_back(m);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
 
@@ -93,6 +99,26 @@ void scene::build()
 	m_mats.push_back(mat);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
+	//terrain
+	mat.data.flags = rcq::TEX_TYPE_FLAG_AO | rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_NORMAL;
+	mat.data.metal = 0.f;
+	mat.data.roughness = 0.9f;
+	mat.id = MAT_TERRAIN;
+	mat.tex_resources[rcq::TEX_TYPE_AO] = "textures/terrain/AO2.png";
+	mat.tex_resources[rcq::TEX_TYPE_NORMAL]= "textures/terrain/nrm.png";
+	mat.tex_resources[rcq::TEX_TYPE_COLOR]= "textures/terrain/diff2.jpg";
+	m_mats.push_back(mat);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
+
+	//white wall
+	mat.data.flags = 0;
+	mat.data.color = glm::vec3(0.95f);
+	mat.data.metal = 0.f;
+	mat.data.roughness = 0.5f;
+	mat.id = MAT_WHITE_WALL;
+	m_mats.push_back(mat);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
+
 	//create transforms
 	transform tr;
 	//buddha
@@ -127,17 +153,26 @@ void scene::build()
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
-	//walls
+	//warehouse
 	tr.data.model = glm::translate(glm::mat4(1.f), { 0.f, 1.f, 0.f });
 	tr.data.scale = glm::vec3(6.f, 2.f, 6.f);
-	tr.id = ENTITY_WALLS;
+	tr.id = ENTITY_WAREHOUSE;
+	m_trs.push_back(tr);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
+
+	//terrain
+	tr.data.model = glm::translate(glm::mat4(1.f), { -600.f, -18.f, 400.f });
+	tr.data.scale = glm::vec3(1.f);
+	tr.data.tex_scale = glm::vec2(1.f);
+	tr.id = ENTITY_TERRAIN;
+	tr.usage = rcq::USAGE_STATIC;
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//create light res
 	rcq::light_omni_data old;
 	old.pos = glm::vec3(2.f);
-	old.flags = rcq::LIGHT_FLAG_SHADOW_MAP;
+	old.flags = 0;// rcq::LIGHT_FLAG_SHADOW_MAP;
 	old.radiance = glm::vec3(3.f);
 
 	light_omni lo;
@@ -220,14 +255,24 @@ void scene::build()
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
 		e.m_life_exp);
 
-	//wall
-	e.m_material_light_id = MAT_GOLD;
-	e.m_mesh_id = MESH_CUBE_INSIDE_OUT;
-	e.m_transform_id = ENTITY_WALLS;
-	e.m_id = ENTITY_WALLS;
+	//warehouse
+	e.m_material_light_id = MAT_WHITE_WALL;
+	e.m_mesh_id = MESH_WAREHOUSE;
+	e.m_transform_id = ENTITY_WAREHOUSE;
+	e.m_id = ENTITY_WAREHOUSE;
 	m_entities.push_back(e);
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
 		e.m_life_exp);
+
+	//terrain
+	e.m_material_light_id = MAT_TERRAIN;
+	e.m_mesh_id = MESH_TERRAIN;
+	e.m_transform_id = ENTITY_TERRAIN;
+	e.m_id = ENTITY_TERRAIN;
+	m_entities.push_back(e);
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
+		e.m_life_exp);
+
 
 	//dispatch
 	rcq::engine::instance()->cmd_dispatch();
@@ -235,7 +280,7 @@ void scene::build()
 	//set camera
 	m_camera.pos = glm::vec3(2.f);
 	m_camera.look_dir = glm::normalize(glm::vec3(-2.f));
-	m_camera.proj = glm::perspective(glm::radians(45.f), m_window_size.x / m_window_size.y, 0.1f, 50.f);
+	m_camera.proj = glm::perspective(glm::radians(45.f), m_window_size.x / m_window_size.y, 0.1f, 1000.f);
 	m_camera.proj[1][1] *= (-1);
 	//m_camera.proj[3][2] *= (-1);
 	m_camera.view = glm::lookAt(glm::vec3(2.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));

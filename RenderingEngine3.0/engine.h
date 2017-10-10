@@ -51,14 +51,6 @@ namespace rcq
 			m_core_p->destroy_renderable[type*LIFE_EXPECTANCY_COUNT + life_exp].push_back(uid);
 		}
 
-
-		void cmd_update_camera(const camera_data& cam)
-		{
-			if (!m_core_p)
-				m_core_p.reset(new core_package);
-			m_core_p->update_cam = cam;
-		}
-
 		void cmd_update_transform(unique_id id, const transform_data& tr_data)
 		{
 			if (!m_core_p)
@@ -66,11 +58,13 @@ namespace rcq
 			m_core_p->update_tr.emplace_back(id, tr_data);
 		}
 
-		void cmd_render()
+		void cmd_render(const glm::mat4& view, const std::optional<update_proj>& proj_info)
 		{
 			if (!m_core_p)
 				m_core_p.reset(new core_package);
 			m_core_p->render = true;
+			m_core_p->view = view;
+			m_core_p->proj_info = proj_info;
 		}
 
 		void cmd_dispatch();

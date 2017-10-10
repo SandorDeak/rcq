@@ -52,13 +52,14 @@ namespace rcq
 		{
 			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(cam, record_mask), 0)... };
 		}*/
-		void record_and_render(const std::optional<camera_data>& cam, std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask);
+		void record_and_render(const glm::mat4& view, const std::optional<update_proj>& proj_info, 
+			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask);
 		VkSemaphore m_begin_s;
 
 		template<size_t... render_passes>
 		void wait_for_finish(std::index_sequence<render_passes...>)
 		{
-			auto l = { (render_pass_typename<render_passes>::type::instance()->wait_for_finish(), 0)... };
+			auto l = { (render_pass_typename<render_passes>::type::instance()->wait_for_finish(), 0)... }; 
 		}
 
 		template<size_t... renderable_types>

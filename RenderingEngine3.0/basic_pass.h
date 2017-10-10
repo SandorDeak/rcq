@@ -14,7 +14,7 @@ namespace rcq
 		static void destroy();
 		static basic_pass* instance() { return m_instance; }
 
-		VkSemaphore record_and_render(const std::optional<camera_data>& cam, 
+		VkSemaphore record_and_render(const glm::mat4& view, const std::optional<update_proj>& proj_info,
 			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, VkSemaphore wait_s);
 		void wait_for_finish();
 
@@ -34,6 +34,7 @@ namespace rcq
 		void create_opaque_mat_pipeline();
 		void create_omni_light_pipeline();
 		void create_skybox_pipeline();
+		void create_dir_shadow_map_pipeline();
 		void create_command_pool();
 		void create_resources();	
 		void create_framebuffers();
@@ -83,6 +84,17 @@ namespace rcq
 		
 		std::vector<VkFence> m_primary_cb_finished_fs;
 		std::vector<std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>> m_record_masks;
+
+		//special pipelines
+		VkPipeline m_gp_dir_shadow;
+		VkPipelineLayout m_pl_dir_shadow;
+
+		//cascade shadow map
+		update_proj m_proj;
+		std::array<std::array<glm::vec3, 4>, FRUSTUM_SPLIT_COUNT> m_frustum_points;
+
+		void update_frustum_points();
+
 
 	};
 

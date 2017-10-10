@@ -276,7 +276,7 @@ void basic_pass::create_omni_light_pipeline()
 	depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 	depth.depthBoundsTestEnable = VK_TRUE;
 	depth.minDepthBounds = 0.f;
-	depth.maxDepthBounds = 0.999f;
+	depth.maxDepthBounds = 0.9999999999999f;
 	depth.depthTestEnable = VK_FALSE;
 	depth.depthWriteEnable = VK_FALSE;
 	depth.stencilTestEnable = VK_FALSE;
@@ -476,9 +476,9 @@ void basic_pass::create_opaque_mat_pipeline()
 
 void basic_pass::create_skybox_pipeline()
 {
-	auto vert_code = read_file("shaders/basic_pass/mat_subpass/skybox/vert.spv");
-	auto geom_code = read_file("shaders/basic_pass/mat_subpass/skybox/geom.spv");
-	auto frag_code = read_file("shaders/basic_pass/mat_subpass/skybox/frag.spv");
+	auto vert_code = read_file("shaders/basic_pass/after_light_subpass/skybox/vert.spv");
+	auto geom_code = read_file("shaders/basic_pass/after_light_subpass/skybox/geom.spv");
+	auto frag_code = read_file("shaders/basic_pass/after_light_subpass/skybox/frag.spv");
 
 	VkShaderModule vert_module = create_shader_module(m_base.device, vert_code);
 	VkShaderModule geom_module = create_shader_module(m_base.device, geom_code);
@@ -811,15 +811,22 @@ void basic_pass::create_framebuffers()
 	}
 }
 
-VkSemaphore basic_pass::record_and_render(const std::optional<camera_data>& cam, 
+VkSemaphore basic_pass::record_and_render(const glm::mat4& view, const std::optional<update_proj>& proj_info,
 	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask, VkSemaphore wait_s)
 {
 	for (auto& rm : m_record_masks)
 		rm |= record_mask;
 
-	// copy camera data
-	if (cam)
-		memcpy(m_per_frame_b_data, &cam.value(), sizeof(camera_data));
+	// update camera
+	if (proj_info)
+	{
+		m_proj = proj_info.value();
+		update_csm_data();
+	}
+	camera_data cam;
+	cam.proj_x_view = m_proj.proj*view;
+	cam.pos = { view[3][0], view[3][1], view[3][2] };
+	memcpy(m_per_frame_b_data, &cam, sizeof(camera_data));
 
 	//acquire swap chain image
 	uint32_t image_index;
@@ -1201,3 +1208,133 @@ void basic_pass::wait_for_finish()
 		std::numeric_limits<uint64_t>::max()) != VK_SUCCESS)
 		throw std::runtime_error("failed to wait for fences!");
 }
+
+void basic_pass::update_frustum_points()
+{
+	for (float i = 0; i < FRUSTUM_SPLIT_COUNT+1; ++i)
+	{
+		for (uint32_t j = 0; j < 4; ++j)
+		{
+			glm::vec3 p;
+			p.z = (i / FRUSTUM_SPLIT_COUNT)*(i / FRUSTUM_SPLIT_COUNT)*(m_proj.far - m_proj.near) + m_proj.near;
+			p.x = m_proj.proj[0][0] * p.z*((j|1)*2-1);
+			p.y = m_proj.proj[1][1] * p.z*((j|2)-1);
+			m_frustum_points[i][j] = p;
+		}
+	}
+}
+
+void basic_pass::create_dir_shadow_map_pipeline()
+{
+	auto vert_code = read_file("shaders/special_shaders/dir_shadow_map/dirs_shadow_map.vert");
+	auto geom_code = read_file("shaders/special_shaders/dir_shadow_map/dir_shadow_map.geom");
+
+	VkShaderModule vert_module = create_shader_module(m_base.device, vert_code);
+	VkShaderModule geom_module = create_shader_module(m_base.device, geom_code);
+
+	VkPipelineShaderStageCreateInfo shaders[2] = {};
+	shaders[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaders[0].module = vert_module;
+	shaders[0].pName = "main";
+	shaders[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+	shaders[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	shaders[1].module = geom_module;
+	shaders[1].pName = "main";
+	shaders[1].stage = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+	VkPipelineVertexInputStateCreateInfo input = {};
+	input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	constexpr auto binding_description = vertex::get_binding_description();
+	constexpr auto attribute_description = vertex::get_attribute_descriptions()[0];
+	input.pVertexAttributeDescriptions = &attribute_description;
+	input.pVertexBindingDescriptions = &binding_description;
+	input.vertexAttributeDescriptionCount = 1;
+	input.vertexBindingDescriptionCount = 1;
+
+	VkPipelineInputAssemblyStateCreateInfo assembly = {};
+	assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+	assembly.primitiveRestartEnable = VK_FALSE;
+	assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+	VkViewport vp = {};
+	vp.height = (float)DIR_SHADOW_MAP_SIZE;
+	vp.width = (float)DIR_SHADOW_MAP_SIZE;
+	vp.minDepth = 0.f;
+	vp.maxDepth = 1.f;
+
+	VkRect2D scissor = {};
+	scissor.extent = { DIR_SHADOW_MAP_SIZE, DIR_SHADOW_MAP_SIZE };
+	scissor.offset = { 0,0 };
+
+	VkPipelineViewportStateCreateInfo viewport = {};
+	viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+	viewport.pScissors = &scissor;
+	viewport.pViewports = &vp;
+	viewport.scissorCount = 1;
+	viewport.viewportCount = 1;
+
+	VkPipelineRasterizationStateCreateInfo rasterizer = {};
+	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+	rasterizer.depthBiasClamp = 0.f;
+	rasterizer.depthBiasConstantFactor = 0.f;
+	rasterizer.depthBiasEnable = VK_FALSE;
+	rasterizer.depthBiasSlopeFactor = 0.f;
+	rasterizer.depthClampEnable = VK_FALSE;
+	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.lineWidth = 1.f;
+	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
+	rasterizer.rasterizerDiscardEnable = VK_FALSE;
+
+	VkPipelineMultisampleStateCreateInfo multisample = {};
+	multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+	multisample.alphaToCoverageEnable = VK_FALSE;
+	multisample.alphaToOneEnable = VK_FALSE;
+	multisample.sampleShadingEnable = VK_FALSE;
+	multisample.minSampleShading = 0.f;
+	multisample.sampleShadingEnable = VK_FALSE;
+	multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+	VkPipelineDepthStencilStateCreateInfo depth = {};
+	depth.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+	depth.depthBoundsTestEnable = VK_FALSE;
+	depth.depthCompareOp = VK_COMPARE_OP_LESS;
+	depth.depthTestEnable = VK_TRUE;
+	depth.depthWriteEnable = VK_TRUE;
+	depth.stencilTestEnable = VK_FALSE;
+	depth.maxDepthBounds = 1.f;
+	depth.minDepthBounds = 0.f;
+
+	VkPipelineLayoutCreateInfo layout = {};
+	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	VkDescriptorSetLayout dss[2] = { resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_DIR),
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR) };
+	layout.setLayoutCount = 2;
+	layout.pSetLayouts = dss;
+
+	if (vkCreatePipelineLayout(m_base.device, &layout, host_memory_manager, &m_pl_dir_shadow) != VK_SUCCESS)
+		throw std::runtime_error("failed to create pipeline layout!"); 
+
+	VkGraphicsPipelineCreateInfo gp_info = {};
+	gp_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	gp_info.basePipelineHandle = VK_NULL_HANDLE;
+	gp_info.basePipelineIndex = -1;
+	gp_info.layout = m_pl_dir_shadow;
+	gp_info.pDepthStencilState = &depth;
+	gp_info.pInputAssemblyState = &assembly;
+	gp_info.pMultisampleState = &multisample;
+	gp_info.pRasterizationState = &rasterizer;
+	gp_info.pStages = shaders;
+	gp_info.pVertexInputState = &input;
+	gp_info.pViewportState = &viewport;
+	gp_info.renderPass = m_pass;
+	gp_info.stageCount = 2;
+	gp_info.subpass = 0;
+
+	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &gp_info, host_memory_manager, &m_gp_dir_shadow) != VK_SUCCESS)
+		throw std::runtime_error("failed to create dir light shadow pipeline!");
+
+	vkDestroyShaderModule(m_base.device, vert_module, host_memory_manager);
+	vkDestroyShaderModule(m_base.device, geom_module, host_memory_manager);
+}
+
