@@ -25,6 +25,7 @@
     <ClCompile Include="device_memory.cpp" />
     <ClCompile Include="entity.cpp" />
     <ClCompile Include="foundation.cpp" />
+    <ClCompile Include="gta5_pass.cpp" />
     <ClCompile Include="omni_light_shadow_pass.cpp" />
     <ClCompile Include="resource_manager.cpp" />
     <ClCompile Include="main.cpp" />
@@ -39,6 +40,7 @@
     <ClInclude Include="foundation.h" />
     <ClInclude Include="entity.h" />
     <ClInclude Include="engine.h" />
+    <ClInclude Include="gta5_pass.h" />
     <ClInclude Include="omni_light_shadow_pass.h" />
     <ClInclude Include="resource_manager.h" />
     <ClInclude Include="structs.h" />

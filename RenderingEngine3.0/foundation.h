@@ -245,7 +245,7 @@ namespace rcq
 	//engine related
 
 
-	std::vector<char> read_file(const std::string& filename);
+	std::vector<char> read_file(const std::string_view& filename);
 
 	VkShaderModule create_shader_module(VkDevice device, const std::vector<char>& code);
 
@@ -534,6 +534,223 @@ namespace rcq
 	template<> struct render_pass_typename<RENDER_PASS_BASIC> { typedef  basic_pass type; };
 	template<> struct render_pass_typename<RENDER_PASS_OMNI_LIGHT_SHADOW> { typedef omni_light_shadow_pass type; };
 
+	struct graphics_pipeline_create_info
+	{
+		std::vector<VkShaderModule> shader_modules = {};
+		std::vector<VkPipelineShaderStageCreateInfo> shaders = {};
+		std::vector<VkVertexInputAttributeDescription> vertex_attribs = {};
+		std::vector<VkVertexInputBindingDescription> vertex_bindings = {};
+		VkPipelineVertexInputStateCreateInfo vertex_input = {};
+		VkPipelineInputAssemblyStateCreateInfo assembly = {};
+		std::vector<VkViewport> vps = {};
+		std::vector<VkRect2D> scissors = {};
+		VkPipelineViewportStateCreateInfo viewport = {};
+		VkPipelineDepthStencilStateCreateInfo depthstencil = {};
+		VkPipelineRasterizationStateCreateInfo rasterizer = {};
+		VkPipelineMultisampleStateCreateInfo multisample = {};
+		std::vector<VkPipelineColorBlendAttachmentState> color_attachnemts = {};
+		VkPipelineColorBlendStateCreateInfo blend = {};
+		std::vector<VkDescriptorSetLayout> dsls = {};
+		VkPipelineLayout layout = {};
+		VkGraphicsPipelineCreateInfo create = {};
+		VkDevice device=VK_NULL_HANDLE;
+		bool has_depthstencil = false;
+		bool has_blend = false;
+		uint64_t sample_mask=0;
+
+		constexpr graphics_pipeline_create_info()
+		{
+			vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+			assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+			viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+			depthstencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+			rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+			multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+			blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+			create.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+		}
+		void set_device(VkDevice d)
+		{
+			device = d;
+		}
+		void create_shader_modules(const std::vector<std::string_view>& filenames)
+		{
+			shader_modules.resize(filenames.size());
+			for (uint32_t i = 0; i < shader_modules.size(); ++i)
+			{
+				auto code = read_file(filenames[i]);
+				VkShaderModuleCreateInfo info = {};
+				info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+				info.codeSize = code.size();
+				info.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+				if (vkCreateShaderModule(device, &info, rcq::host_memory_manager, &shader_modules[i]) != VK_SUCCESS)
+					throw std::runtime_error("failed to create shader module!");
+			}
+		}
+		void destroy_modules()
+		{
+			for (auto mod : shader_modules)
+				vkDestroyShaderModule(device, mod, host_memory_manager);
+		}
+		void fill_shader_create_infos(const std::vector<VkShaderStageFlagBits>& stages)
+		{
+			assert(stages.size() == shader_modules.size());
+			shaders.resize(shader_modules.size());
+			for (uint32_t i = 0; i < stages.size(); ++i)
+			{
+				shaders[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+				shaders[i].module = shader_modules[i];
+				shaders[i].pName = "main";
+				shaders[i].stage = stages[i];
+			}
+		}
+		void add_vertex_binding(const VkVertexInputBindingDescription& binding)
+		{
+			vertex_bindings.push_back(binding);
+		}
+		void add_vertex_attrib(const VkVertexInputAttributeDescription& attrib)
+		{
+			vertex_attribs.push_back(attrib);
+		}
+		void set_vertex_input_pointers()
+		{
+			if (!vertex_bindings.empty())
+			{
+				vertex_input.pVertexBindingDescriptions = vertex_bindings.data();
+				vertex_input.vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_bindings.size());
+			}
+			if (!vertex_attribs.empty())
+			{
+				vertex_input.pVertexAttributeDescriptions = vertex_attribs.data();
+				vertex_input.vertexAttributeDescriptionCount = vertex_attribs.size();
+			}
+		}
+		void set_assembly(VkBool32 primitive_restart_enable, VkPrimitiveTopology topology)
+		{
+			assembly.primitiveRestartEnable = primitive_restart_enable;
+			assembly.topology = topology;
+		}
+		void set_default_viewport(uint32_t width, uint32_t height)
+		{
+			VkViewport vp;
+			constexpr static VkVertexInputBindingDescription binding;
+			vp.height = static_cast<float>(height);
+			vp.width = static_cast<float>(width);
+			vp.x = 0.f;
+			vp.y = 0.f;
+			vp.minDepth = 0.f;
+			vp.maxDepth = 1.f;
+			vps.push_back(vp);
+
+			VkRect2D scissor;
+			scissor.extent.width = width;
+			scissor.extent.height = height;
+			scissor.offset = { 0,0 };
+			scissors.push_back(scissor);
+		}
+		void set_viewport_pointers()
+		{
+			viewport.pViewports = vps.data();
+			viewport.viewportCount = vps.size();
+			viewport.pScissors = scissors.data();
+			viewport.scissorCount = scissors.size();
+		}
+		void set_rasterizer(VkBool32 depth_clamp_enable, VkBool32 rasterization_discard_enable, VkPolygonMode polygon_mode,
+			VkCullModeFlags cull_mode, VkFrontFace front_face, VkBool32 depth_bias_enable, float depth_bias_constant_factor,
+			float depth_bias_clamp, float depth_bias_slope_factor)
+		{
+			rasterizer.depthClampEnable = depth_clamp_enable;
+			rasterizer.rasterizerDiscardEnable = rasterization_discard_enable;
+			rasterizer.polygonMode = polygon_mode;
+			rasterizer.cullMode = cull_mode;
+			rasterizer.frontFace = front_face;
+			rasterizer.depthBiasEnable = depth_bias_enable;
+			rasterizer.depthBiasConstantFactor = depth_bias_constant_factor;
+			rasterizer.depthBiasClamp = depth_bias_clamp;
+			rasterizer.depthBiasSlopeFactor = depth_bias_slope_factor;
+		}
+		void set_depthstencil(VkBool32 depth_test_enable, VkBool32 depth_write_enable, VkCompareOp depth_compare_op,
+			VkBool32 depth_bounds_test_enable, VkBool32 stencil_test_enable, std::optional<VkStencilOpState> stencil_op_state_front,
+			std::optional<VkStencilOpState> stencil_op_state_back, float min_depth_bounds, float max_depth_bounds)
+		{
+			has_depthstencil = true;
+			depthstencil.depthTestEnable = depth_test_enable;
+			depthstencil.depthWriteEnable = depth_write_enable;
+			depthstencil.depthCompareOp = depth_compare_op;
+			depthstencil.depthBoundsTestEnable = depth_bounds_test_enable;
+			depthstencil.stencilTestEnable = stencil_test_enable;
+			if (stencil_op_state_front)
+				depthstencil.front = stencil_op_state_front.value();
+			if (stencil_op_state_back)
+				depthstencil.back = stencil_op_state_back.value();
+			depthstencil.minDepthBounds = min_depth_bounds;
+			depthstencil.maxDepthBounds = max_depth_bounds;
+		}
+		void set_multisample(VkSampleCountFlagBits rasterization_samples, VkBool32 sample_shading_enable, float min_sample_shading,
+			uint64_t sample_mask, VkBool32 alpha_to_coverage_enable, VkBool32 alpha_to_one_enable)
+		{
+			multisample.rasterizationSamples = rasterization_samples;
+			multisample.sampleShadingEnable = sample_shading_enable;
+			multisample.minSampleShading = min_sample_shading;
+			this->sample_mask = sample_mask;
+			multisample.pSampleMask = reinterpret_cast<uint32_t*>(&sample_mask);
+			multisample.alphaToCoverageEnable = alpha_to_coverage_enable;
+			multisample.alphaToOneEnable = alpha_to_one_enable;
+		}
+		void add_color_attachment(const VkPipelineColorBlendAttachmentState& att)
+		{
+			color_attachnemts.push_back(att);
+		}
+		void set_blend(VkBool32 logic_op_enable, VkLogicOp logic_op)
+		{
+			has_blend = true;
+			blend.logicOpEnable = logic_op_enable;
+			blend.logicOp = logic_op;
+		}
+		void set_blend_pointers()
+		{
+			blend.pAttachments = color_attachnemts.data();
+			blend.attachmentCount = color_attachnemts.size();
+		}
+		void add_dsl(VkDescriptorSetLayout dsl)
+		{
+			dsls.push_back(dsl);
+		}
+		VkPipelineLayout create_layout()
+		{
+			VkPipelineLayoutCreateInfo info = {};
+			info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+			info.pSetLayouts = dsls.data();
+			info.setLayoutCount = dsls.size();
+
+			if (vkCreatePipelineLayout(device, &info, host_memory_manager, &layout) != VK_SUCCESS)
+				throw std::runtime_error("failed to create pipeline layout!");
+			create.layout = layout;
+			return layout;
+		}
+		void set_create_info(VkRenderPass render_pass, uint32_t subpass, VkPipeline base_pipeline_handle, int32_t base_pipeline_index)
+		{
+			create.basePipelineHandle = base_pipeline_handle;
+			create.basePipelineIndex = base_pipeline_index;
+			create.renderPass = render_pass;
+			create.subpass = subpass;
+		}
+		void set_create_info_pointers()
+		{
+			create.pInputAssemblyState = &assembly;
+			create.pVertexInputState = &vertex_input;
+			create.pViewportState = &viewport;
+			create.pRasterizationState = &rasterizer;
+			create.pMultisampleState = &multisample;
+			create.pStages = shaders.data();
+			create.stageCount = shaders.size();
+			if (has_depthstencil)
+				create.pDepthStencilState = &depthstencil;
+			if (has_blend)
+				create.pColorBlendState = &blend;
+		}
+	};
 
 	struct vertex
 	{
@@ -570,6 +787,7 @@ namespace rcq
 
 			return attribute_description;
 		}
+
 
 		bool operator==(const vertex& other) const
 		{

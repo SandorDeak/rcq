@@ -14,9 +14,9 @@ const size_t rcq::FRUSTUM_SPLIT_COUNT = 2;
 
 
 
-std::vector<char> rcq::read_file(const std::string& filename)
+std::vector<char> rcq::read_file(const std::string_view& filename)
 {
-	std::ifstream file(filename.c_str(), std::ios::ate | std::ios::binary);
+	std::ifstream file(filename.data(), std::ios::ate | std::ios::binary);
 
 	if (!file.is_open())
 		throw std::runtime_error("failed to open file!");
