@@ -2,7 +2,7 @@
 #extension GL_ARB_separate_shader_objects : enable
 
 
-layout(set=1, binding=0) uniform sampler2DArray skybox_tex;
+layout(set=0, binding=1) uniform samplerCube skybox_tex;
 
 layout(location=0) in vec3 tex_coord_in;
 

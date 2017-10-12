@@ -86,6 +86,7 @@ namespace rcq
 	{
 		RENDER_PASS_OMNI_LIGHT_SHADOW,
 		RENDER_PASS_BASIC,
+		RENDER_PASS_GTA5,
 		RENDER_PASS_COUNT
 	};
 
@@ -410,7 +411,6 @@ namespace rcq
 		cell_info cell;
 		texture shadow_map;
 		VkFramebuffer shadow_map_fb;
-		std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> projs;
 	};
 
 	struct skybox
@@ -432,12 +432,6 @@ namespace rcq
 		//for lights
 		texture shadow_map;
 		VkFramebuffer shadow_map_fb;
-	};
-
-	struct cascade_shadow_map_data
-	{
-		glm::mat4 projs[FRUSTUM_SPLIT_COUNT];
-		float split_values[FRUSTUM_SPLIT_COUNT];
 	};
 
 	typedef std::array<std::vector<renderable>, RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> renderable_container;
@@ -552,7 +546,6 @@ namespace rcq
 		VkPipelineColorBlendStateCreateInfo blend = {};
 		std::vector<VkDescriptorSetLayout> dsls = {};
 		VkPipelineLayout layout = {};
-		VkGraphicsPipelineCreateInfo create = {};
 		VkDevice device=VK_NULL_HANDLE;
 		bool has_depthstencil = false;
 		bool has_blend = false;
@@ -567,7 +560,6 @@ namespace rcq
 			rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
 			multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
 			blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-			create.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 		}
 		void set_device(VkDevice d)
 		{
@@ -626,7 +618,7 @@ namespace rcq
 				vertex_input.vertexAttributeDescriptionCount = vertex_attribs.size();
 			}
 		}
-		void set_assembly(VkBool32 primitive_restart_enable, VkPrimitiveTopology topology)
+		void fill_assembly(VkBool32 primitive_restart_enable, VkPrimitiveTopology topology)
 		{
 			assembly.primitiveRestartEnable = primitive_restart_enable;
 			assembly.topology = topology;
@@ -634,7 +626,6 @@ namespace rcq
 		void set_default_viewport(uint32_t width, uint32_t height)
 		{
 			VkViewport vp;
-			constexpr static VkVertexInputBindingDescription binding;
 			vp.height = static_cast<float>(height);
 			vp.width = static_cast<float>(width);
 			vp.x = 0.f;
@@ -656,7 +647,7 @@ namespace rcq
 			viewport.pScissors = scissors.data();
 			viewport.scissorCount = scissors.size();
 		}
-		void set_rasterizer(VkBool32 depth_clamp_enable, VkBool32 rasterization_discard_enable, VkPolygonMode polygon_mode,
+		void fill_rasterizer(VkBool32 depth_clamp_enable, VkBool32 rasterization_discard_enable, VkPolygonMode polygon_mode,
 			VkCullModeFlags cull_mode, VkFrontFace front_face, VkBool32 depth_bias_enable, float depth_bias_constant_factor,
 			float depth_bias_clamp, float depth_bias_slope_factor)
 		{
@@ -670,7 +661,7 @@ namespace rcq
 			rasterizer.depthBiasClamp = depth_bias_clamp;
 			rasterizer.depthBiasSlopeFactor = depth_bias_slope_factor;
 		}
-		void set_depthstencil(VkBool32 depth_test_enable, VkBool32 depth_write_enable, VkCompareOp depth_compare_op,
+		void fill_depthstencil(VkBool32 depth_test_enable, VkBool32 depth_write_enable, VkCompareOp depth_compare_op,
 			VkBool32 depth_bounds_test_enable, VkBool32 stencil_test_enable, std::optional<VkStencilOpState> stencil_op_state_front,
 			std::optional<VkStencilOpState> stencil_op_state_back, float min_depth_bounds, float max_depth_bounds)
 		{
@@ -687,7 +678,7 @@ namespace rcq
 			depthstencil.minDepthBounds = min_depth_bounds;
 			depthstencil.maxDepthBounds = max_depth_bounds;
 		}
-		void set_multisample(VkSampleCountFlagBits rasterization_samples, VkBool32 sample_shading_enable, float min_sample_shading,
+		void fill_multisample(VkSampleCountFlagBits rasterization_samples, VkBool32 sample_shading_enable, float min_sample_shading,
 			uint64_t sample_mask, VkBool32 alpha_to_coverage_enable, VkBool32 alpha_to_one_enable)
 		{
 			multisample.rasterizationSamples = rasterization_samples;
@@ -702,7 +693,7 @@ namespace rcq
 		{
 			color_attachnemts.push_back(att);
 		}
-		void set_blend(VkBool32 logic_op_enable, VkLogicOp logic_op)
+		void fill_blend(VkBool32 logic_op_enable, VkLogicOp logic_op)
 		{
 			has_blend = true;
 			blend.logicOpEnable = logic_op_enable;
@@ -726,17 +717,17 @@ namespace rcq
 
 			if (vkCreatePipelineLayout(device, &info, host_memory_manager, &layout) != VK_SUCCESS)
 				throw std::runtime_error("failed to create pipeline layout!");
-			create.layout = layout;
 			return layout;
 		}
-		void set_create_info(VkRenderPass render_pass, uint32_t subpass, VkPipeline base_pipeline_handle, int32_t base_pipeline_index)
+		void fill_create_info(VkGraphicsPipelineCreateInfo& create, VkRenderPass render_pass, uint32_t subpass, 
+			VkPipeline base_pipeline_handle, int32_t base_pipeline_index)
 		{
 			create.basePipelineHandle = base_pipeline_handle;
 			create.basePipelineIndex = base_pipeline_index;
 			create.renderPass = render_pass;
 			create.subpass = subpass;
 		}
-		void set_create_info_pointers()
+		void set_create_info_pointers(VkGraphicsPipelineCreateInfo& create)
 		{
 			create.pInputAssemblyState = &assembly;
 			create.pVertexInputState = &vertex_input;
@@ -751,6 +742,7 @@ namespace rcq
 				create.pColorBlendState = &blend;
 		}
 	};
+
 
 	struct vertex
 	{

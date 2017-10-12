@@ -121,7 +121,7 @@ namespace rcq
 		inline void do_build_tasks(TaskTuple&& p, std::index_sequence<types...>);
 
 		template<size_t res_type, typename Id, typename... Infos>
-		inline void create_build_tasks_impl(std::vector<std::tuple<Id, Infos...>>& build_infos);
+		inline void create_build_tasks_impl(std::vector<std::tuple<Id, Infos...>>&& build_infos);
 
 
 		template<size_t... res_types, typename BuildPackage>
@@ -207,7 +207,7 @@ namespace rcq
 	}
 
 	template<size_t res_type, typename Id, typename... Infos>
-	void resource_manager::create_build_tasks_impl(std::vector<std::tuple<Id, Infos...>>& build_infos)
+	void resource_manager::create_build_tasks_impl(std::vector<std::tuple<Id, Infos...>>&& build_infos)
 	{
 		auto& task_vector = std::get<res_type>(*m_current_build_task_p.get());
 		task_vector.reserve(build_infos.size());
@@ -216,9 +216,9 @@ namespace rcq
 
 		for (auto& build_info : build_infos)
 		{
-			TaskType task([=/*this, std::get<Infos>(build_info)...*/]()
+			TaskType task([t=std::make_tuple(this, std::move(std::get<Infos>(build_info))...)]()
 			{
-				return build(std::get<Infos>(build_info)...);
+				return std::apply(&resource_manager::build, std::move(t));
 			});
 			m.insert_or_assign(std::get<Id>(build_info), task.get_future()).second;
 			task_vector.push_back(std::move(task));
@@ -235,7 +235,7 @@ namespace rcq
 	template<size_t... res_types, typename BuildPackage>
 	void resource_manager::create_build_tasks(BuildPackage&& p, std::index_sequence<res_types...>)
 	{
-		auto l = { (create_build_tasks_impl<res_types>(std::get<res_types>(p)), 0)... };
+		auto l = { (create_build_tasks_impl<res_types>(std::move(std::get<res_types>(p))), 0)... };
 	}
 
 	/*template<size_t res_type>

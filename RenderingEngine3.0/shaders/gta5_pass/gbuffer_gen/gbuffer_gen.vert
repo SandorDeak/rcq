@@ -5,7 +5,6 @@ layout(set=0, binding=0) uniform gbuffer_gen_data
 {
 	mat4 proj;
 	mat4 view;
-	uint padding0;
 } data;
 
 layout(set=1, binding=0) uniform transform_data

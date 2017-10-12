@@ -3,13 +3,13 @@
 
 layout(set=0, binding=0) uniform em_gen_mat
 {
-	vec3 light_dir;
+	mat4 view;
+	vec3 dir;
 	uint padding0;
 	vec3 irradiance;
 	uint padding1;
 	vec3 ambient_irradiance;
 	uint padding2;
-	vec3 cam_pos;
 	
 } data;
 
@@ -32,7 +32,7 @@ layout(location=1) out vec2 tex_coord_out;
 
 void main()
 {
-	normal_out=normal_in;
+	normal_out=mat3(tr.model)*normal_in;
 	tex_coord_out=tr.tex_scale*tex_coord_in;
-	gl_Position=(tr.model*vec4(pos_in*tr.scale, 1.f))-vec4(data.cam_pos, 0.f);
+	gl_Position=data.view*tr.model*vec4(pos_in*tr.scale, 1.f);
 }

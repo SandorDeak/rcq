@@ -91,7 +91,6 @@ namespace rcq
 
 		//cascade shadow map
 		update_proj m_proj;
-		std::array<std::array<glm::vec3, 4>, FRUSTUM_SPLIT_COUNT> m_frustum_points;
 
 		void update_frustum_points();
 

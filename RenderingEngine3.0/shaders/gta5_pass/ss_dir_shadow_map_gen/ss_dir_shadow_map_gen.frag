@@ -13,7 +13,7 @@ layout(set=0, binding=0) uniform ss_dir_shadow_map_gen_data
 
 layout(set=0, binding=1) uniform sampler2DArray csm_tex;
 
-layout(input_attachment_index=0, set=1, binding=0) uniform subpassInput pos_in;
+layout(input_attachment_index=0, set=0, binding=2) uniform subpassInput pos_in;
 
 layout(location=0) out float shadow_out;
 

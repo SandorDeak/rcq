@@ -130,7 +130,7 @@ void resource_manager::build_loop()
 void rcq::resource_manager::process_build_package(build_package&& package)
 {
 
-	create_build_tasks(package, std::make_index_sequence<RESOURCE_TYPE_COUNT>());
+	create_build_tasks(std::move(package), std::make_index_sequence<RESOURCE_TYPE_COUNT>());
 
 	{
 		std::lock_guard<std::mutex> lock(m_build_task_p_queue_mutex);
