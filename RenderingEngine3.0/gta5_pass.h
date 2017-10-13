@@ -3,17 +3,44 @@
 
 namespace rcq::gta5
 {
-	enum SUBPASS
+	
+
+
+
+	enum FRAME_IMAGE_GEN_SUBPASS
 	{
-		SUBPASS_ENVIRONMENT_MAP_GEN,
-		SUBPASS_GBUFFER_GEN,
-		SUBPASS_DIR_SHADOW_MAP_GEN,
-		SUBPASS_SS_DIR_SHADOW_MAP_GEN,
-		SUBPASS_SS_DIR_SHADOW_MAP_BLUR,
-		SUBPASS_SSAO_GEN,
-		SUBPASS_SSAO_BLUR,
-		SUBPASS_IMAGE_ASSEMBLER,
-		SUBPASS_COUNT
+		FRAME_IMAGE_GEN_SUBPASS_GBUFFER_GEN,
+		FRAME_IMAGE_GEN_SUBPASS_SS_DIR_SHADOW_MAP_GEN,
+		FRAME_IMAGE_GEN_SUBPASS_SS_DIR_SHADOW_MAP_BLUR,
+		FRAME_IMAGE_GEN_SUBPASS_SSAO_MAP_GEN,
+		FRAME_IMAGE_GEN_SUBPASS_SSAO_MAP_BLUR,
+		FRAME_IMAGE_GEN_SUBPASS_IMAGE_ASSEMBLER,
+		FRAME_IMAGE_GEN_SUBPASS_COUNT,
+	};
+
+	enum ENVIRONMENT_MAP_GEN_ATTACHMENT
+	{
+		ENVIRONMENT_MAP_GEN_ATTACHMENT_DEPTH,
+		ENVIRONMENT_MAP_GEN_ATTACHMENT_COLOR,
+		ENVIRONMENT_MAP_GEN_ATTACHMENT_COUNT
+	};
+
+	enum DIR_SHADOW_MAP_GEN_ATTACHMENT
+	{
+		DIR_SHADOW_MAP_GEN_ATTACHMENT_DEPTH,
+		DIR_SHADOW_MAP_GEN_ATTACHMENT_COUNT,
+	};
+
+	enum FRAME_IMAGE_GEN_ATTACHMENT
+	{
+		FRAME_IMAGE_GEN_ATTACHMENT_GB_DEPTHSTENCIL,
+		FRAME_IMAGE_GEN_ATTACHMENT_GB_POS_ROUGHNESS,
+		FRAME_IMAGE_GEN_ATTACHMENT_GB_F0_SSAO,
+		FRAME_IMAGE_GEN_ATTACHMENT_GB_ALBEDO_SSDS,
+		FRAME_IMAGE_GEN_ATTACHMENT_SS_DIR_SHADOW_MAP,
+		FRAME_IMAGE_GEN_ATTACHMENT_SSAO_MAP,
+		FRAME_IMAGE_GEN_ATTACHMENT_PREIMAGE,
+		FRAME_IMAGE_GEN_ATTACHMENT_COUNT
 	};
 
 	enum GP
@@ -28,22 +55,6 @@ namespace rcq::gta5
 		GP_SSAO_BLUR,
 		GP_IMAGE_ASSEMBLER,
 		GP_COUNT
-	};
-
-	enum ATTACHMENT
-	{
-		ATTACHMENT_GB_POS_ROUGHNESS,
-		ATTACHMENT_GB_F0_SSAO,
-		ATTACHMENT_GB_ALBEDO_SSDS,
-		ATTACHMENT_GB_NORMAL_AO,
-		ATTACHMENT_GB_DEPTH,
-		ATTACHMENT_EM_COLOR,
-		ATTACHMENT_EM_DEPTH,
-		ATTACHMENT_DS_MAP,
-		ATTACHMENT_SSDS_MAP,
-		ATTACHMENT_SSAO_MAP,
-		ATTACHMENT_PREIMAGE,
-		ATTACHMENT_COUNT
 	};
 
 	enum RES_DATA
@@ -91,9 +102,27 @@ namespace rcq::gta5
 		MEMORY_COUNT
 	};
 
+	enum SAMPLER
+	{
+		SAMPLER_UNNORMALIZED_COORD,
+		SAMPLER_GENERAL,
+		SAMPLER_COUNT
+	};
+
+	enum SECONDARY_CB
+	{
+		SECONDARY_CB_MAT_OPAQUE_LIFE_EXP_SHORT = RENDERABLE_TYPE_MAT_OPAQUE*LIFE_EXPECTANCY_COUNT + LIFE_EXPECTANCY_SHORT,
+		SECONDARY_CB_MAT_OPAQUE_LIFE_EXP_LONG = RENDERABLE_TYPE_MAT_OPAQUE*LIFE_EXPECTANCY_COUNT + LIFE_EXPECTANCY_LONG,
+		SECONDARY_CB_MAT_EM_LIFE_EXP_SHORT = RENDERABLE_TYPE_MAT_EM*LIFE_EXPECTANCY_COUNT + LIFE_EXPECTANCY_SHORT,
+		SECONDARY_CB_MAT_EM_LIFE_EXP_LONG = RENDERABLE_TYPE_MAT_EM*LIFE_EXPECTANCY_COUNT + LIFE_EXPECTANCY_LONG,
+		SECONDARY_CB_SKYBOX_EM = RENDERABLE_TYPE_SKYBOX*LIFE_EXPECTANCY_COUNT + LIFE_EXPECTANCY_LONG,
+		SECONDARY_CB_COUNT = 6
+	};
+
 	const uint32_t ENVIRONMENT_MAP_SIZE = 128;
 	const uint32_t DIR_SHADOW_MAP_SIZE = 1024;
 	const uint32_t FRUSTUM_SPLIT_COUNT = 2;
+
 
 	struct pipeline
 	{
@@ -106,7 +135,6 @@ namespace rcq::gta5
 	struct res_image
 	{
 		VkImage image;
-		VkImage memory;
 		VkImageView view;
 	};
 
@@ -161,13 +189,12 @@ namespace rcq::gta5
 		> data;
 
 		VkBuffer buffer;
-		VkDeviceMemory buffer_mem;
 		VkBuffer staging_buffer;
 		VkDeviceMemory staging_buffer_mem;
 		size_t size;
 		std::array<size_t, RES_DATA_COUNT> offsets;
 
-		static constexpr std::array<size_t, RES_DATA_COUNT> get_sizes(std::index_sequence<indices...>)
+		static constexpr std::array<size_t, RES_DATA_COUNT> get_sizes()
 		{
 			return { 
 				sizeof(environment_map_gen_mat_data),
@@ -180,7 +207,7 @@ namespace rcq::gta5
 
 		void calcoffset_and_size(size_t alignment)
 		{
-			constexpr auto res_data_sizes = res_data::get_sizes(std::make_index_sequence<RES_DATA_COUNT>());
+			constexpr auto res_data_sizes = res_data::get_sizes();
 			size = 0;
 			for (uint32_t i = 0; i < RES_DATA_COUNT; ++i)
 			{
@@ -217,22 +244,37 @@ namespace rcq::gta5
 		static gta5_pass* m_instance;
 		const base_info m_base;
 
-		void create_render_pass();
-		void create_descriptos_set_layouts();
+		void create_render_passes();
+		void create_dsls_and_allocate_dss();
 		void create_graphics_pipelines();
 		void send_memory_requirements();
 		void get_memory_and_build_resources();
-		void create_descriptor_sets();
+		void update_descriptor_sets();
+		void create_command_pool();
+		void create_samplers();
+		void create_framebuffers();
+		void create_sync_objects();
 
-		VkRenderPass m_pass;
+		std::array<VkRenderPass, GP_COUNT> m_passes;
 		std::array<pipeline, GP_COUNT> m_gps;
 
 		//resources
+		VkDescriptorPool m_dp;
 		res_data m_res_data;
 		std::array<res_image, RES_IMAGE_COUNT> m_res_image;
+		std::array<VkSampler, SAMPLER_COUNT> m_samplers;
 
-		//command buffers
+		//render
+		const renderable_container& renderables;
+		std::vector<std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>> m_record_masks;
+
 		VkCommandPool m_cp;
+		std::vector<VkFramebuffer> m_fbs;
+		std::vector<VkCommandBuffer> m_primary_cbs;
+		std::vector<std::array<VkCommandBuffer, SECONDARY_CB_COUNT>> m_secondary_cbs;
+		VkSemaphore m_image_available_s;
+		VkSemaphore m_render_finished_s;
+		VkFence m_render_finished_f;
 	};
 }
 

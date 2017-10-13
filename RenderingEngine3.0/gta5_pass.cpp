@@ -1,5 +1,6 @@
 #include "gta5_pass.h"
 
+#include "gta5_foundation.h"
 #include "resource_manager.h"
 
 using namespace rcq;
@@ -10,8 +11,8 @@ gta5_pass* gta5_pass::m_instance = nullptr;
 gta5_pass::gta5_pass(const base_info& info) : m_base(info)
 {
 	send_memory_requirements();
-	create_render_pass();
-	create_descriptos_set_layouts();
+	create_render_passes();
+	create_dsls_and_allocate_dss();
 	create_graphics_pipelines();
 
 }
@@ -19,6 +20,29 @@ gta5_pass::gta5_pass(const base_info& info) : m_base(info)
 
 gta5_pass::~gta5_pass()
 {
+	vkDestroyFence(m_base.device, m_render_finished_f, host_memory_manager);
+	vkDestroySemaphore(m_base.device, m_render_finished_s, host_memory_manager);
+	vkDestroySemaphore(m_base.device, m_image_available_s, host_memory_manager);
+	
+	for (auto s : m_samplers)
+		vkDestroySampler(m_base.device, s, host_memory_manager);
+
+	for (auto& im : m_res_image)
+	{
+		vkDestroyImageView(m_base.device, im.view, host_memory_manager);
+		vkDestroyImage(m_base.device, im.image, host_memory_manager);
+	}
+
+	vkUnmapMemory(m_base.device, m_res_data.staging_buffer_mem);
+	vkDestroyBuffer(m_base.device, m_res_data.staging_buffer, host_memory_manager);
+	vkDestroyBuffer(m_base.device, m_res_data.buffer, host_memory_manager);
+
+	vkDestroyDescriptorPool(m_base.device, m_dp, host_memory_manager);
+
+	auto package = std::make_unique<destroy_package>();
+	package->ids[RESOURCE_TYPE_MEMORY].push_back(RENDER_ENGINE_GTA5);
+	resource_manager::instance()->push_destroy_package(std::move(package));
+
 	for (auto& gp : m_gps)
 	{
 		vkDestroyPipeline(m_base.device, gp.gp, host_memory_manager);
@@ -47,8 +71,41 @@ void gta5_pass::destroy()
 	delete m_instance;
 }
 
-void gta5_pass::create_render_pass()
+void gta5_pass::create_render_passes()
 {
+	auto info=
+
+
+
+
+
+
+	//environment map gen
+	{
+		std::array<VkAttachmentDescription, ENVIRONMENT_MAP_GEN_ATTACHMENT_COUNT> atts = {};
+
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_DEPTH].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_DEPTH].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_DEPTH].format = VK_FORMAT_D32_SFLOAT;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_DEPTH].samples = VK_SAMPLE_COUNT_1_BIT;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_DEPTH].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_DEPTH].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_COLOR].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_COLOR].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_COLOR].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_COLOR].samples = VK_SAMPLE_COUNT_1_BIT;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_COLOR].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+		atts[ENVIRONMENT_MAP_GEN_ATTACHMENT_COLOR].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+		std::array<VkSubpassDescription, ENVIRONMENT_MAP_GEN_SUBPASS_COUNT> subpasses = {};
+
+
+
+		subpasses[ENVIRONMENT_MAP_GEN_SUBPASS_UNIQUE].
+		
+	}
+
 	//create attachments
 	VkAttachmentDescription attachments[ATTACHMENT_COUNT];
 	attachments[ATTACHMENT_GB_POS_ROUGHNESS].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -602,8 +659,12 @@ void gta5_pass::create_graphics_pipelines()
 	}
 }
 
-void gta5_pass::create_descriptos_set_layouts()
+void gta5_pass::create_dsls_and_allocate_dss()
 {
+	uint32_t ub_count = 0; //uniform buffer
+	uint32_t cis_count=0; //combined image sampler
+	uint32_t ia_count = 0; //input attachment
+
 	//environment map gen mat
 	{
 		VkDescriptorSetLayoutBinding binding_data = {};
@@ -611,6 +672,7 @@ void gta5_pass::create_descriptos_set_layouts()
 		binding_data.descriptorCount = 1;
 		binding_data.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		binding_data.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+		++ub_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -628,6 +690,7 @@ void gta5_pass::create_descriptos_set_layouts()
 		binding.descriptorCount = 1;
 		binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		binding.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+		++ub_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -646,6 +709,7 @@ void gta5_pass::create_descriptos_set_layouts()
 		binding.descriptorCount = 1;
 		binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		++ub_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -664,6 +728,7 @@ void gta5_pass::create_descriptos_set_layouts()
 		binding.descriptorCount = 1;
 		binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		binding.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+		++ub_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -682,16 +747,19 @@ void gta5_pass::create_descriptos_set_layouts()
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++ub_count;
 
 		bindings[1].binding = 1;
 		bindings[1].descriptorCount = 1;
 		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++cis_count;
 
 		bindings[2].binding = 2;
 		bindings[2].descriptorCount = 1;
 		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 		bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++ia_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -710,16 +778,19 @@ void gta5_pass::create_descriptos_set_layouts()
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++cis_count;
 
 		bindings[1].binding = 1;
 		bindings[1].descriptorCount = 1;
 		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++cis_count;
 
 		bindings[2].binding = 2;
 		bindings[2].descriptorCount = 1;
 		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 		bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++ia_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -738,11 +809,13 @@ void gta5_pass::create_descriptos_set_layouts()
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++cis_count;
 
 		bindings[1].binding = 1;
 		bindings[1].descriptorCount = 1;
 		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 		bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++ia_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -761,6 +834,7 @@ void gta5_pass::create_descriptos_set_layouts()
 		binding.descriptorCount = 1;
 		binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		binding.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+		++cis_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -774,25 +848,28 @@ void gta5_pass::create_descriptos_set_layouts()
 
 	//image assembler
 	{
-		std::array<VkDescriptorSetLayoutBinding, 8> bindings = {};
+		std::array<VkDescriptorSetLayoutBinding, 6> bindings = {};
 
-		for (uint32_t i = 0; i < 6; ++i)
+		for (uint32_t i = 0; i < 4; ++i)
 		{
 			bindings[i].binding = 0;
 			bindings[i].descriptorCount = 1;
 			bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 			bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 		}
+		ia_count += 4;
 
-		bindings[6].binding = 6;
-		bindings[6].descriptorCount = 1;
-		bindings[6].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		bindings[6].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		bindings[4].binding = 6;
+		bindings[4].descriptorCount = 1;
+		bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++cis_count;
 
-		bindings[7].binding = 6;
-		bindings[7].descriptorCount = 1;
-		bindings[7].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		bindings[7].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		bindings[5].binding = 6;
+		bindings[5].descriptorCount = 1;
+		bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		++ub_count;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -803,6 +880,45 @@ void gta5_pass::create_descriptos_set_layouts()
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create dsl!");
 	}
+
+	//create descriptor pool
+	{
+		VkDescriptorPoolSize sizes[3];
+		sizes[0].descriptorCount = ub_count;
+		sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		sizes[1].descriptorCount = cis_count;
+		sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		sizes[2].descriptorCount = ia_count;
+		sizes[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+
+		VkDescriptorPoolCreateInfo pool = {};
+		pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		pool.maxSets = GP_COUNT;
+		pool.poolSizeCount = 3;
+		pool.pPoolSizes = sizes;
+
+		if (vkCreateDescriptorPool(m_base.device, &pool, host_memory_manager, &m_dp) != VK_SUCCESS)
+			throw std::runtime_error("failed to create descriptor pool!");
+	}
+
+	//allocate dss
+	std::array<VkDescriptorSet, GP_COUNT> dss;
+	std::array<VkDescriptorSetLayout, GP_COUNT> dsls;
+
+	VkDescriptorSetAllocateInfo alloc = {};
+	alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	alloc.descriptorPool = m_dp;
+	alloc.descriptorSetCount = GP_COUNT;
+	alloc.pSetLayouts = dsls.data();
+
+	for (uint32_t i = 0; i < GP_COUNT; ++i)
+		dsls[i] = m_gps[i].dsl;
+	
+	if (vkAllocateDescriptorSets(m_base.device, &alloc, dss.data()) != VK_SUCCESS)
+		throw std::runtime_error("failed to allocate descriptor sets!");
+
+	for (uint32_t i = 0; i < GP_COUNT; ++i)
+		m_gps[i].ds = dss[i];
 }
 
 void gta5_pass::send_memory_requirements()
@@ -1150,14 +1266,14 @@ void gta5_pass::send_memory_requirements()
 	}
 
 	build_package package;
-	std::get<RESOURCE_TYPE_MEMORY>(package).emplace_back(RENDER_PASS_GTA5, std::move(alloc_infos));
+	std::get<RESOURCE_TYPE_MEMORY>(package).emplace_back(RENDER_ENGINE_GTA5, std::move(alloc_infos));
 
 	resource_manager::instance()->process_build_package(std::move(package));
 }
 
 void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 {
-	memory mem = resource_manager::instance()->get<RESOURCE_TYPE_MEMORY>(RENDER_PASS_GTA5);
+	memory mem = resource_manager::instance()->get<RESOURCE_TYPE_MEMORY>(RENDER_ENGINE_GTA5);
 
 	//staging buffer
 	{
@@ -1172,15 +1288,13 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//buffer
 	{
-		m_res_data.buffer_mem = mem[MEMORY_BUFFER];
-		vkBindBufferMemory(m_base.device, m_res_data.buffer, m_res_data.buffer_mem, 0);
+		vkBindBufferMemory(m_base.device, m_res_data.buffer, mem[MEMORY_BUFFER], 0);
 	}
 
 	//environment map gen depthstencil
 	{
-		m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].memory = mem[MEMORY_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image,
-			m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].memory, 0);
+			mem[MEMORY_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1200,9 +1314,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//environment map 
 	{
-		m_res_image[RES_IMAGE_ENVIRONMENT_MAP].memory = mem[MEMORY_ENVIRONMENT_MAP];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image,
-			m_res_image[RES_IMAGE_ENVIRONMENT_MAP].memory, 0);
+			mem[MEMORY_ENVIRONMENT_MAP], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1222,9 +1335,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//gbuffer pos roughness
 	{
-		m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].memory = mem[MEMORY_GB_POS_ROUGHNESS];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image,
-			m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].memory, 0);
+			mem[MEMORY_GB_POS_ROUGHNESS], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1244,9 +1356,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//gbuffer F0 ssao
 	{
-		m_res_image[RES_IMAGE_GB_F0_SSAO].memory = mem[MEMORY_GB_F0_SSAO];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_F0_SSAO].image,
-			m_res_image[RES_IMAGE_GB_F0_SSAO].memory, 0);
+			mem[MEMORY_GB_F0_SSAO], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1266,9 +1377,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//gbuffer albedo ssds
 	{
-		m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].memory = mem[MEMORY_GB_ALBEDO_SSDS];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].image,
-			m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].memory, 0);
+			mem[MEMORY_GB_ALBEDO_SSDS], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1288,9 +1398,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//gbuffer normal ao
 	{
-		m_res_image[RES_IMAGE_GB_NORMAL_AO].memory = mem[MEMORY_GB_NORMAL_AO];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_NORMAL_AO].image,
-			m_res_image[RES_IMAGE_GB_NORMAL_AO].memory, 0);
+			mem[MEMORY_GB_NORMAL_AO], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1310,9 +1419,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//gbuffer depth
 	{
-		m_res_image[RES_IMAGE_GB_DEPTH].memory = mem[MEMORY_GB_DEPTH];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_DEPTH].image,
-			m_res_image[RES_IMAGE_GB_DEPTH].memory, 0);
+			mem[MEMORY_GB_DEPTH], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1332,9 +1440,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//dir shadow map
 	{
-		m_res_image[RES_IMAGE_DIR_SHADOW_MAP].memory = mem[MEMORY_DIR_SHADOW_MAP];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image,
-			m_res_image[RES_IMAGE_DIR_SHADOW_MAP].memory, 0);
+			mem[MEMORY_DIR_SHADOW_MAP], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1354,9 +1461,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//ss dir shadow map
 	{
-		m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].memory = mem[MEMORY_SS_DIR_SHADOW_MAP];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image,
-			m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].memory, 0);
+			mem[MEMORY_SS_DIR_SHADOW_MAP], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1376,9 +1482,8 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 
 	//ssao map
 	{
-		m_res_image[RES_IMAGE_SSAO_MAP].memory = mem[MEMORY_SSAO_MAP];
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SSAO_MAP].image,
-			m_res_image[RES_IMAGE_SSAO_MAP].memory, 0);
+			mem[MEMORY_SSAO_MAP], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -1396,9 +1501,487 @@ void rcq::gta5::gta5_pass::get_memory_and_build_resources()
 			throw std::runtime_error("failed to create image view!");
 	}
 
-	//transition images to proper layout
-	{
+	/*//transition images to proper layout
+	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp);
+	std::array<VkImageMemoryBarrier, RES_IMAGE_COUNT> barriers = {};
 
+	//environment map depthstencil
+	{
+		auto& b = barriers[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL];
+		b.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 6;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
 	}
 
+	//environment map
+	{
+		auto& b = barriers[RES_IMAGE_ENVIRONMENT_MAP];
+		b.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 6;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer pos roughness
+	{
+		auto& b = barriers[RES_IMAGE_GB_POS_ROUGHNESS];
+		b.image = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 1;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer F0 ssao
+	{
+		auto& b = barriers[RES_IMAGE_GB_F0_SSAO];
+		b.image = m_res_image[RES_IMAGE_GB_F0_SSAO].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 1;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer albedo ssds
+	{
+		auto& b = barriers[RES_IMAGE_GB_ALBEDO_SSDS];
+		b.image = m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 1;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer normal ao
+	{
+		auto& b = barriers[RES_IMAGE_GB_NORMAL_AO];
+		b.image = m_res_image[RES_IMAGE_GB_NORMAL_AO].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 1;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer depth
+	{
+		auto& b = barriers[RES_IMAGE_GB_DEPTH];
+		b.image = m_res_image[RES_IMAGE_GB_DEPTH].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 1;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+	}
+
+	//dir shadow map
+	{
+		auto& b = barriers[RES_IMAGE_DIR_SHADOW_MAP];
+		b.image = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 1;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+	}
+
+	//ss dir shadow map
+	{
+		auto& b = barriers[RES_IMAGE_SS_DIR_SHADOW_MAP];
+		b.image = m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 1;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+	}*/
+}
+
+void gta5_pass::create_command_pool()
+{
+	VkCommandPoolCreateInfo pool = {};
+	pool.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	pool.queueFamilyIndex = m_base.queue_families.graphics_family;
+
+	if (vkCreateCommandPool(m_base.device, &pool, host_memory_manager, &m_cp) != VK_SUCCESS)
+		throw std::runtime_error("failed to create command pool!");
+}
+
+void gta5_pass::update_descriptor_sets()
+{
+	std::vector<VkWriteDescriptorSet> w;
+	
+	//environment map gen mat
+	{
+		VkDescriptorBufferInfo ub = {};
+		ub.buffer = m_res_data.buffer;
+		ub.offset = m_res_data.offsets[RES_DATA_ENVIRONMENT_MAP_GEN_MAT_DATA];
+		ub.range = sizeof(environment_map_gen_mat_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].ds;
+		w[0].pBufferInfo = &ub;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//environment map gen skybox
+	{
+		VkDescriptorBufferInfo ub = {};
+		ub.buffer = m_res_data.buffer;
+		ub.offset = m_res_data.offsets[RES_DATA_ENVIRONMENT_MAP_GEN_SKYBOX_DATA];
+		ub.range = sizeof(environment_map_gen_skybox_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_ENVIRONMENT_MAP_GEN_SKYBOX].ds;
+		w[0].pBufferInfo = &ub;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//gbuffer gen
+	{
+		VkDescriptorBufferInfo ub = {};
+		ub.buffer = m_res_data.buffer;
+		ub.offset = m_res_data.offsets[RES_DATA_GBUFFER_GEN_DATA];
+		ub.range = sizeof(gbuffer_gen_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_GBUFFER_GEN].ds;
+		w[0].pBufferInfo = &ub;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//dir shadow map gen
+	{
+
+		VkDescriptorBufferInfo ub = {};
+		ub.buffer = m_res_data.buffer;
+		ub.offset = m_res_data.offsets[RES_DATA_DIR_SHADOW_MAP_GEN_DATA];
+		ub.range = sizeof(dir_shadow_map_gen_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_DIR_SHADOW_MAP_GEN].ds;
+		w[0].pBufferInfo = &ub;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//ss dir shadow map gen
+	{
+		VkDescriptorBufferInfo ub = {};
+		ub.buffer = m_res_data.buffer;
+		ub.offset = m_res_data.offsets[RES_DATA_SS_DIR_SHADOW_MAP_GEN_DATA];
+		ub.range = sizeof(ss_dir_shadow_map_gen_data);
+
+		VkDescriptorImageInfo shadow_tex = {};
+		shadow_tex.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+		shadow_tex.imageView = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].view;
+		shadow_tex.sampler = m_samplers[SAMPLER_GENERAL];
+		
+		VkDescriptorImageInfo pos = {};
+		pos.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		pos.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
+
+		w.resize(3);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_GEN].ds;
+		w[0].pBufferInfo = &ub;
+
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 1;
+		w[1].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_GEN].ds;
+		w[1].pImageInfo = &shadow_tex;
+
+		w[2].descriptorCount = 1;
+		w[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[2].dstArrayElement = 0;
+		w[2].dstBinding = 2;
+		w[2].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_GEN].ds;
+		w[2].pImageInfo = &pos;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//ss dir shadow map blur
+	{
+		VkDescriptorImageInfo pos;
+		pos.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		pos.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
+		pos.sampler=m_samplers[SAMPLER_UNNORMALIZED_COORD];
+
+		VkDescriptorImageInfo shadow;
+		shadow.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		shadow.imageView = m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].view;
+		shadow.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+
+		VkDescriptorImageInfo normal;
+		normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		normal.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+
+		w.resize(3);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].ds;
+		w[0].pImageInfo = &pos;
+
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 1;
+		w[1].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].ds;
+		w[1].pImageInfo = &shadow;
+
+		w[2].descriptorCount = 1;
+		w[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[2].dstArrayElement = 0;
+		w[2].dstBinding = 2;
+		w[2].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].ds;
+		w[2].pImageInfo = &normal;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//ssao gen
+	{
+		VkDescriptorImageInfo pos;
+		pos.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		pos.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
+		pos.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+
+		VkDescriptorImageInfo normal;
+		normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		normal.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+
+		w.resize(2);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_SSAO_GEN].ds;
+		w[0].pImageInfo = &pos;
+
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 1;
+		w[1].dstSet = m_gps[GP_SSAO_GEN].ds;
+		w[1].pImageInfo = &normal;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//ssao blur
+	{
+		VkDescriptorImageInfo ssao;
+		ssao.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		ssao.imageView = m_res_image[RES_IMAGE_SSAO_MAP].view;
+		ssao.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_SSAO_BLUR].ds;
+		w[0].pImageInfo = &ssao;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+	
+	//image assembler
+	{
+		VkDescriptorImageInfo gb_pos_roughness;
+		gb_pos_roughness.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		gb_pos_roughness.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
+
+		VkDescriptorImageInfo gb_F0_ssao;
+		gb_F0_ssao.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		gb_F0_ssao.imageView = m_res_image[RES_IMAGE_GB_F0_SSAO].view;
+
+		VkDescriptorImageInfo gb_albedo_ssds;
+		gb_albedo_ssds.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		gb_albedo_ssds.imageView = m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].view;
+		
+		VkDescriptorImageInfo gb_normal_ao;
+		gb_normal_ao.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		gb_normal_ao.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+
+		VkDescriptorImageInfo em;
+		em.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		em.imageView = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].view;
+		em.sampler = m_samplers[SAMPLER_GENERAL];
+
+		VkDescriptorBufferInfo ub;
+		ub.buffer = m_res_data.buffer;
+		ub.offset = m_res_data.offsets[RES_DATA_IMAGE_ASSEMBLER_DATA];
+		ub.range = sizeof(image_assembler_data);
+
+		w.resize(6);
+
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
+		w[0].pImageInfo = &gb_pos_roughness;
+
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 1;
+		w[1].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
+		w[1].pImageInfo = &gb_F0_ssao;
+
+		w[2].descriptorCount = 1;
+		w[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[2].dstArrayElement = 0;
+		w[2].dstBinding = 2;
+		w[2].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
+		w[2].pImageInfo = &gb_albedo_ssds;
+
+		w[3].descriptorCount = 1;
+		w[3].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[3].dstArrayElement = 0;
+		w[3].dstBinding = 3;
+		w[3].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
+		w[3].pImageInfo = &gb_normal_ao;
+
+		w[4].descriptorCount = 1;
+		w[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[4].dstArrayElement = 0;
+		w[4].dstBinding = 4;
+		w[4].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
+		w[4].pImageInfo = &em;
+
+		w[5].descriptorCount = 1;
+		w[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[5].dstArrayElement = 0;
+		w[5].dstBinding = 5;
+		w[5].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
+		w[5].pBufferInfo = &ub;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+}
+
+void gta5_pass::create_samplers()
+{
+	//general
+	{
+		VkSamplerCreateInfo sampler = {};
+		sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.anisotropyEnable = VK_TRUE;
+		sampler.compareEnable = VK_FALSE;
+		sampler.unnormalizedCoordinates = VK_FALSE;
+		sampler.magFilter = VK_FILTER_LINEAR;
+		sampler.minFilter = VK_FILTER_LINEAR;
+		sampler.maxAnisotropy = 16.f;
+		sampler.minLod = 0.f;
+		sampler.maxLod = 0.f;
+		sampler.mipLodBias = 0.f;
+		sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+		if (vkCreateSampler(m_base.device, &sampler, host_memory_manager, &m_samplers[SAMPLER_GENERAL]) != VK_SUCCESS)
+			throw std::runtime_error("failed to create sampler!");
+	}
+
+	//unnormalized coord
+	{
+		VkSamplerCreateInfo sampler = {};
+		sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.anisotropyEnable = VK_FALSE;
+		sampler.compareEnable = VK_FALSE;
+		sampler.unnormalizedCoordinates = VK_TRUE;
+		sampler.magFilter = VK_FILTER_NEAREST;
+		sampler.minFilter = VK_FILTER_NEAREST;
+		sampler.minLod = 0.f;
+		sampler.maxLod = 0.f;
+		sampler.mipLodBias = 0.f;
+		sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+		if (vkCreateSampler(m_base.device, &sampler, host_memory_manager, &m_samplers[SAMPLER_UNNORMALIZED_COORD]) != VK_SUCCESS)
+			throw std::runtime_error("failed to create sampler!");
+	}
+}
+
+void gta5_pass::create_sync_objects()
+{
+	VkSemaphoreCreateInfo s = {};
+	s.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	if (vkCreateSemaphore(m_base.device, &s, host_memory_manager, &m_image_available_s) != VK_SUCCESS ||
+		vkCreateSemaphore(m_base.device, &s, host_memory_manager, &m_render_finished_s) != VK_SUCCESS)
+		throw std::runtime_error("failed to create semaphores!");
+
+	VkFenceCreateInfo f = {};
+	f.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	f.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+	if (vkCreateFence(m_base.device, &f, host_memory_manager, &m_render_finished_f) != VK_SUCCESS)
+		throw std::runtime_error("failed to create fence!");
+}
+
+void gta5_pass::create_framebuffers()
+{
+	m_fbs.resize(m_base.swap_chain_image_views.size());
+
+	VkFramebufferCreateInfo fb = {};
+	fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	fb.attachmentCount = ATTACHMENT_COUNT;
+	fb.height=
 }

@@ -40,6 +40,8 @@
     <ClInclude Include="foundation.h" />
     <ClInclude Include="entity.h" />
     <ClInclude Include="engine.h" />
+    <ClInclude Include="gta5_infos_impl.h" />
+    <ClInclude Include="gta5_foundation.h" />
     <ClInclude Include="gta5_pass.h" />
     <ClInclude Include="omni_light_shadow_pass.h" />
     <ClInclude Include="resource_manager.h" />

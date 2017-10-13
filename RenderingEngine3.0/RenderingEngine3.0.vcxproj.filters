@@ -89,5 +89,11 @@
     <ClInclude Include="gta5_pass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="gta5_foundation.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gta5_infos_impl.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
