@@ -204,7 +204,7 @@ namespace rcq::gta5::infos_impl
 		std::array<VkSubpassDescription, SUBPASS_COUNT> subpasses;
 		VkRenderPassCreateInfo create_info;
 	public:
-		render_pass_dir_shadow_map_gen() :
+		 render_pass_dir_shadow_map_gen() :
 			deps(get_dependencies()),
 			atts(get_attachments())
 		{
@@ -232,6 +232,7 @@ namespace rcq::gta5::infos_impl
 			ATT_POS_ROUGHNESS,
 			ATT_F0_SSAO,
 			ATT_ALBEDO_SSDS,
+			ATT_NORMAL_AO,
 			ATT_SS_DIR_SHADOW_MAP,
 			ATT_SSAO_MAP,
 			ATT_PREIMAGE,
@@ -253,11 +254,58 @@ namespace rcq::gta5::infos_impl
 			DEP_COUNT
 		};
 
-		struct subpass_gbuffer_gen
-		{
+		template<size_t subpass_type>
+		struct subpass;
 
-			std::array<VkAttachmentReference, 4> refs_color;
-			VkAttachmentDescription ref_dept;
+		template<>
+		struct subpass<SUBPASS_GBUFFER_GEN>
+		{
+			enum REF
+			{
+				REF_POS_ROUGHNESS,
+				REF_FO_SSAO,
+				REF_ALBEDO_SSDS,
+				REF_NORMAL_AO,
+				REF_COUNT
+			};
+
+			subpass()
+			{
+				refs_color[REF_POS_ROUGHNESS].attachment = ATT_POS_ROUGHNESS;
+				refs_color[REF_POS_ROUGHNESS].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+				refs_color[REF_FO_SSAO].attachment = ATT_F0_SSAO;
+				refs_color[REF_FO_SSAO].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+				refs_color[REF_ALBEDO_SSDS].attachment = ATT_ALBEDO_SSDS;
+				refs_color[REF_ALBEDO_SSDS].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+				refs_color[REF_NORMAL_AO].attachment = ATT_NORMAL_AO;
+				refs_color[REF_NORMAL_AO].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				
+				ref_depth.attachment = ATT_DEPTHSTENCIL;
+				ref_depth.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			}
+
+			VkSubpassDescription create_subpass()
+			{
+				VkSubpassDescription s = {};
+				s.colorAttachmentCount = REF_COUNT;
+				s.pColorAttachments = refs_color.data();
+				s.pDepthStencilAttachment = &ref_depth;
+				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				return s;
+			}
+
+			std::array<VkAttachmentReference, REF_COUNT> refs_color;
+			VkAttachmentReference ref_depth;
+		}; 
+
+		template<>
+		struct subpass<SUBPASS_SS_DIR_SHADOW_MAP_GEN>
+		{
+			
+
 		};
 	};
 }
