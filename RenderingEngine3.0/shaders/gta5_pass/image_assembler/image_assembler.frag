@@ -3,16 +3,15 @@
 
 #define PI 3.1415926535897f
 
-layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput pos_in;
-layout(input_attachment_index=1, set=0, binding=1) uniform subpassInput F0_roughness_in;
-layout(input_attachment_index=2, set=0, binding=2) uniform subpassInput albedo_ao_in;
-layout(input_attachment_index=3, set=0, binding=3) uniform subpassInput normal_in;
-layout(input_attachment_index=4, set=0, binding=4) uniform subpassInput ssds_in;
-layout(input_attachment_index=5, set=0, binding=5) uniform subpassInput ssao_in;
+layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput pos_roughness_in;
+layout(input_attachment_index=1, set=0, binding=1) uniform subpassInput F0_ssao_in;
+layout(input_attachment_index=2, set=0, binding=2) uniform subpassInput albedo_ssds_in;
+layout(input_attachment_index=3, set=0, binding=3) uniform subpassInput normal_ao_in;
 
-layout(set=0, binding=6) uniform samplerCube em_tex;
 
-layout(set=0, binding=7) uniform image_assembler_data
+layout(set=0, binding=4) uniform samplerCube em_tex;
+
+layout(set=0, binding=5) uniform image_assembler_data
 {
 	vec3 dir; //should be in view space!!!
 	uint padding0;

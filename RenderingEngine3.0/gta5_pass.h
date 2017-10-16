@@ -2,60 +2,9 @@
 #include "foundation.h"
 
 namespace rcq::gta5
-{
+{	
+
 	
-
-
-
-	enum FRAME_IMAGE_GEN_SUBPASS
-	{
-		FRAME_IMAGE_GEN_SUBPASS_GBUFFER_GEN,
-		FRAME_IMAGE_GEN_SUBPASS_SS_DIR_SHADOW_MAP_GEN,
-		FRAME_IMAGE_GEN_SUBPASS_SS_DIR_SHADOW_MAP_BLUR,
-		FRAME_IMAGE_GEN_SUBPASS_SSAO_MAP_GEN,
-		FRAME_IMAGE_GEN_SUBPASS_SSAO_MAP_BLUR,
-		FRAME_IMAGE_GEN_SUBPASS_IMAGE_ASSEMBLER,
-		FRAME_IMAGE_GEN_SUBPASS_COUNT,
-	};
-
-	enum ENVIRONMENT_MAP_GEN_ATTACHMENT
-	{
-		ENVIRONMENT_MAP_GEN_ATTACHMENT_DEPTH,
-		ENVIRONMENT_MAP_GEN_ATTACHMENT_COLOR,
-		ENVIRONMENT_MAP_GEN_ATTACHMENT_COUNT
-	};
-
-	enum DIR_SHADOW_MAP_GEN_ATTACHMENT
-	{
-		DIR_SHADOW_MAP_GEN_ATTACHMENT_DEPTH,
-		DIR_SHADOW_MAP_GEN_ATTACHMENT_COUNT,
-	};
-
-	enum FRAME_IMAGE_GEN_ATTACHMENT
-	{
-		FRAME_IMAGE_GEN_ATTACHMENT_GB_DEPTHSTENCIL,
-		FRAME_IMAGE_GEN_ATTACHMENT_GB_POS_ROUGHNESS,
-		FRAME_IMAGE_GEN_ATTACHMENT_GB_F0_SSAO,
-		FRAME_IMAGE_GEN_ATTACHMENT_GB_ALBEDO_SSDS,
-		FRAME_IMAGE_GEN_ATTACHMENT_SS_DIR_SHADOW_MAP,
-		FRAME_IMAGE_GEN_ATTACHMENT_SSAO_MAP,
-		FRAME_IMAGE_GEN_ATTACHMENT_PREIMAGE,
-		FRAME_IMAGE_GEN_ATTACHMENT_COUNT
-	};
-
-	enum GP
-	{
-		GP_ENVIRONMENT_MAP_GEN_MAT,
-		GP_ENVIRONMENT_MAP_GEN_SKYBOX,
-		GP_GBUFFER_GEN,
-		GP_DIR_SHADOW_MAP_GEN,
-		GP_SS_DIR_SHADOW_MAP_GEN,
-		GP_SS_DIR_SHADOW_MAP_BLUR,
-		GP_SSAO_GEN,
-		GP_SSAO_BLUR,
-		GP_IMAGE_ASSEMBLER,
-		GP_COUNT
-	};
 
 	enum RES_DATA
 	{
@@ -130,6 +79,18 @@ namespace rcq::gta5
 		VkPipelineLayout pl;
 		VkDescriptorSet ds;
 		VkDescriptorSetLayout dsl;
+		void create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls)
+		{
+			std::vector<VkDescriptorSet> all_dsl(1 + dsls.size());
+			all_dsl[0] = dsl;
+			std::copy(dsls.begin(), dsls.end(), all_dsl.begin() + 1);
+			pl = rcq::create_layout(device, all_dsl);
+		}
+		void create_dsl(VkDevice device, const VkDescriptorSetLayoutCreateInfo& create_info)
+		{
+			if (vkCreateDescriptorSetLayout(device, &create_info, host_memory_manager, &dsl) != VK_SUCCESS)
+				throw std::runtime_error("failed to create dsl!");
+		}
 	};
 
 	struct res_image
@@ -234,12 +195,12 @@ namespace rcq::gta5
 		gta5_pass(gta5_pass&&) = delete;
 		~gta5_pass();
 
-		static void init(const base_info& info);
+		static void init(const base_info& info, const renderable_container& rends);
 		static void destroy();
 		static gta5_pass* instance() { return m_instance; }
 	private:
 
-		gta5_pass(const base_info& info);
+		gta5_pass(const base_info& info, const renderable_container& rends);
 
 		static gta5_pass* m_instance;
 		const base_info m_base;
@@ -265,7 +226,7 @@ namespace rcq::gta5
 		std::array<VkSampler, SAMPLER_COUNT> m_samplers;
 
 		//render
-		const renderable_container& renderables;
+		const renderable_container& m_renderables;
 		std::vector<std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>> m_record_masks;
 
 		VkCommandPool m_cp;

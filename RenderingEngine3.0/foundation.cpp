@@ -43,6 +43,35 @@ VkShaderModule rcq::create_shader_module(VkDevice device, const std::vector<char
 	return shader_m;
 }
 
+void rcq::create_shaders(VkDevice device, const std::vector<std::string_view> & files, const std::vector<VkShaderStageFlagBits>& stages, 
+	VkPipelineShaderStageCreateInfo * shaders)
+{
+	for (uint32_t i = 0; i < files.size(); ++i)
+	{
+		auto code = rcq::read_file(files[i]);
+		VkShaderModule sm = rcq::create_shader_module(device, code);
+
+		shaders[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+		shaders[i].module = sm;
+		shaders[i].pName = "main";
+		shaders[i].stage = stages[i];
+	}
+}
+
+VkPipelineLayout rcq::create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls)
+{
+	VkPipelineLayoutCreateInfo l = {};
+	l.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	l.pSetLayouts = dsls.data();
+	l.setLayoutCount = dsls.size();
+
+	VkPipelineLayout layout;
+	if (vkCreatePipelineLayout(device, &l, rcq::host_memory_manager, &layout) != VK_SUCCESS)
+		throw std::runtime_error("failed to create layout!");
+
+	return layout;
+}
+
 VkFormat rcq::find_support_format(VkPhysicalDevice device, const std::vector<VkFormat>& candidates, 
 	VkImageTiling tiling, VkFormatFeatureFlags features)
 {

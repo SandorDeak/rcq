@@ -248,6 +248,9 @@ namespace rcq
 	std::vector<char> read_file(const std::string_view& filename);
 
 	VkShaderModule create_shader_module(VkDevice device, const std::vector<char>& code);
+	VkPipelineLayout create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls);
+	void create_shaders(VkDevice device, const std::vector<std::string_view>& files, const std::vector<VkShaderStageFlags>& stages,
+		VkPipelineShaderStageCreateInfo* shaders);
 
 	VkFormat find_support_format(VkPhysicalDevice device, const std::vector<VkFormat>& candidates,
 		VkImageTiling tiling, VkFormatFeatureFlags features);
