@@ -25,7 +25,7 @@ namespace rcq
 
 
 		template<size_t res_type>
-		const auto& get(unique_id id);
+		const auto& get_res(unique_id id);
 
 		void update_tr(const std::vector<update_tr_info>& trs);
 		VkDescriptorSetLayout get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE type) { return m_dsls[type]; }
@@ -72,7 +72,8 @@ namespace rcq
 
 		std::tuple<
 			std::map<unique_id, material_opaque>,
-			std::map <unique_id, light_omni>,
+			std::map<unique_id, material_em>,
+			std::map<unique_id, light_omni>,
 			std::map<unique_id, skybox>,
 			std::map<unique_id, mesh>,
 			std::map<unique_id, transform>,
@@ -82,6 +83,7 @@ namespace rcq
 
 		std::tuple<
 			std::map<unique_id, std::future<material_opaque>>,
+			std::map<unique_id, std::future<material_em>>,
 			std::map<unique_id, std::future<light_omni>>,
 			std::map<unique_id, std::future<skybox>>,
 			std::map<unique_id, std::future<mesh>>,
@@ -120,21 +122,44 @@ namespace rcq
 		template<typename TaskTuple, size_t... types>
 		inline void do_build_tasks(TaskTuple&& p, std::index_sequence<types...>);
 
-		template<size_t res_type, typename Id, typename... Infos>
-		inline void create_build_tasks_impl(std::vector<std::tuple<Id, Infos...>>&& build_infos);
+		template<size_t res_type, typename VectOfTuple, size_t IdIndex, size_t... indices>
+		inline void create_build_tasks_impl(VectOfTuple&& build_infos, std::index_sequence<IdIndex, indices...>);
 
 
-		template<size_t... res_types, typename BuildPackage>
-		inline void create_build_tasks(BuildPackage&& p, std::index_sequence<res_types...>);
+		template<size_t... res_types>
+		inline void create_build_tasks(build_package&& p, std::index_sequence<res_types...>);
+
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<mesh, typename resource_typename<res_type>::type>, mesh>
+			build(const std::string& filename, bool calc_tb);
+
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<material_opaque, typename resource_typename<res_type>::type>, material_opaque>
+		 build(const material_opaque_data& data, const texfiles& files);
+
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<transform, typename resource_typename<res_type>::type>, transform>
+			build(const transform_data& data, USAGE usage);
+
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<light_omni, typename resource_typename<res_type>::type>, light_omni>
+			build(const light_omni_data& data, USAGE usage);
+
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<memory, typename resource_typename<res_type>::type>, memory>
+			build(const std::vector<VkMemoryAllocateInfo>& requirements);
+
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<skybox, typename resource_typename<res_type>::type>, skybox>
+			build(const std::string& filename);
+
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<material_em, typename resource_typename<res_type>::type>, material_em>
+			build(const std::string& x) { return material_em(); }
 
 
-		mesh build(const std::string& filename, bool calc_tb);
-		material_opaque build(const material_opaque_data& data, const texfiles& files);
-		transform build(const transform_data& data, USAGE usage);
-		light_omni build(const light_omni_data& data, USAGE usage);
-		memory build(const std::vector<VkMemoryAllocateInfo>& requirements);
-		skybox build(const std::string& filename);
 		texture load_texture(const std::string& filename);
+
 
 		//destroy thread
 		std::thread m_destroy_thread;
@@ -145,6 +170,7 @@ namespace rcq
 		bool m_should_end_destroy;
 		std::tuple<
 			std::vector<material_opaque>,
+			std::vector<material_em>,
 			std::vector<light_omni>,
 			std::vector<skybox>,
 			std::vector<mesh>,
@@ -175,13 +201,14 @@ namespace rcq
 		void destroy(light_omni&& _light);
 		void destroy(memory&& _memory);
 		void destroy(skybox&& _sb);
+		void destroy(material_em&& _mat) {}
 
 	};
 
 
 	//implementations
 	template<size_t res_type>
-	const auto& resource_manager::get(unique_id id)
+	const auto& resource_manager::get_res(unique_id id)
 	{
 		auto& res_ready = std::get<res_type>(m_resources_ready);
 		auto& res_proc = std::get<res_type>(m_resources_proc);
@@ -206,21 +233,23 @@ namespace rcq
 		throw std::runtime_error("invalid id!");
 	}
 
-	template<size_t res_type, typename Id, typename... Infos>
-	void resource_manager::create_build_tasks_impl(std::vector<std::tuple<Id, Infos...>>&& build_infos)
+	template<size_t res_type, typename VectOfTuple, size_t IdIndex, size_t... indices>
+	void resource_manager::create_build_tasks_impl(VectOfTuple&& build_infos, std::index_sequence<IdIndex, indices...>)
 	{
 		auto& task_vector = std::get<res_type>(*m_current_build_task_p.get());
 		task_vector.reserve(build_infos.size());
-		std::map<unique_id, std::future<resource_typename<res_type>::type>> m;
+		//std::map<unique_id, std::future<resource_typename<res_type>::type>> m;
+		//std::remove_reference_t<decltype(std::get<res_type>(m_resources_proc))> m;
+		std::tuple_element_t<res_type, decltype(m_resources_proc)> m;
 		using TaskType = std::remove_reference_t<decltype(*task_vector.data())>;
 
 		for (auto& build_info : build_infos)
 		{
-			TaskType task([t=std::make_tuple(this, std::move(std::get<Infos>(build_info))...)]()
+			TaskType task([t=std::make_tuple(this, std::move(std::get<indices>(build_info))...)]() 
 			{
-				return std::apply(&resource_manager::build, std::move(t));
+				return std::apply(&resource_manager::build<res_type>, std::move(t));
 			});
-			m.insert_or_assign(std::get<Id>(build_info), task.get_future()).second;
+			m.insert_or_assign(std::get<IdIndex>(build_info), task.get_future());
 			task_vector.push_back(std::move(task));
 		}
 		std::lock_guard<std::mutex> lock(m_resources_proc_mutex);
@@ -232,10 +261,12 @@ namespace rcq
 		}
 	}
 
-	template<size_t... res_types, typename BuildPackage>
-	void resource_manager::create_build_tasks(BuildPackage&& p, std::index_sequence<res_types...>)
+	template<size_t... res_types>
+	void resource_manager::create_build_tasks(build_package&& p, std::index_sequence<res_types...>)
 	{
-		auto l = { (create_build_tasks_impl<res_types>(std::move(std::get<res_types>(p))), 0)... };
+		auto l = { (create_build_tasks_impl<res_types>(std::get<res_types>(p), 
+			std::make_index_sequence<std::tuple_size_v<std::tuple_element_t<res_types, build_package>::value_type>>()), 0)... };
+
 	}
 
 	/*template<size_t res_type>

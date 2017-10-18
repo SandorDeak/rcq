@@ -5,9 +5,9 @@
 layout(set=0, binding=0) uniform sampler2D ao_tex;
 
 
-layout(location=0) out float ao_out;
+layout(location=0) out vec4 ao_out;
 
 void main()
 {	
-	ao_out=texture(ao_tex, gl_FragCoord.xy).x;
+	ao_out.w=texture(ao_tex, gl_FragCoord.xy).x;
 }

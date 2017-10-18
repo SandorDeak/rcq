@@ -31,10 +31,10 @@ layout(location=0) in vec2 tex_coord_in;
 layout(location=1) in mat3 TBN_in;
 layout(location=4) in vec3 pos_in;
 
-layout(location=0) out vec4 pos_out;
-layout(location=1) out vec4 F0_roughness_out;
-layout(location=2) out vec4 albedo_ao_out;
-layout(location=3) out vec4 normal_out;
+layout(location=0) out vec4 pos_roughness_out;
+layout(location=1) out vec4 F0_ssao_out;
+layout(location=2) out vec4 albedo_ssds_out;
+layout(location=3) out vec4 normal_ao_out;
 
 mat3 gram_schmidt(mat3 m)
 {
@@ -136,8 +136,8 @@ void main()
 	vec3 F0=mix(vec3(0.04f), color, metal);
 	vec3 albedo=mix(color, vec3(0.0f) , metal);
 	
-	pos_out=vec4(pos_in, 1.f);
-	F0_roughness_out=vec4(F0, roughness);
-	albedo_ao_out=vec4(albedo, ao_factor);
-	normal_out=vec4(n, 1.f);
+	pos_roughness_out=vec4(pos_in, roughness);
+	F0_ssao_out=vec4(F0, 1.f);
+	albedo_ssds_out=vec4(albedo, 1.f);
+	normal_ao_out=vec4(n, ao_factor);
 }

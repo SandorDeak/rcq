@@ -1,7 +1,7 @@
 #pragma once
 #include "foundation.h"
-#include "basic_pass.h"
-#include "omni_light_shadow_pass.h"
+/*#include "basic_pass.h"
+#include "omni_light_shadow_pass.h"*/
 
 
 namespace rcq
@@ -45,6 +45,8 @@ namespace rcq
 		std::unique_ptr<core_package> m_package;
 
 		renderable_container m_renderables;
+
+		render_settings m_render_settings;
 		
 		/*template<size_t... render_passes>
 		void record_and_render(const std::optional<camera_data>& cam, std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask,
@@ -52,7 +54,7 @@ namespace rcq
 		{
 			auto l = { (render_pass_typename<render_passes>::type::instance()->record_and_render(cam, record_mask), 0)... };
 		}*/
-		void record_and_render(const glm::mat4& view, const std::optional<update_proj>& proj_info, 
+		/*void record_and_render(const glm::mat4& view, const std::optional<update_proj>& proj_info, 
 			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask);
 		VkSemaphore m_begin_s;
 
@@ -60,11 +62,11 @@ namespace rcq
 		void wait_for_finish(std::index_sequence<render_passes...>)
 		{
 			auto l = { (render_pass_typename<render_passes>::type::instance()->wait_for_finish(), 0)... }; 
-		}
+		}*/
 
 		template<size_t... renderable_types>
 		void build_renderables(const std::array<std::vector<build_renderable_info>, 
-			RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT>& build_infos,
+			RENDERABLE_TYPE_COUNT>& build_infos,
 			std::index_sequence<renderable_types...>)
 		{
 			auto l = { (build_renderables_impl<renderable_types>(build_infos[renderable_types]),0)... };

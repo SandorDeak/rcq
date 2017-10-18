@@ -28,6 +28,8 @@ private:
 	std::vector<light_omni> m_light_omni;
 	skybox m_skybox;
 
+	rcq::render_settings m_render_settings;
+
 	GLFWwindow* m_window;
 };
 

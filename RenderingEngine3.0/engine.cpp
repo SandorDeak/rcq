@@ -2,8 +2,9 @@
 #include "base.h"
 #include "core.h"
 #include "resource_manager.h"
-#include "basic_pass.h"
-#include "omni_light_shadow_pass.h"
+//#include "basic_pass.h"
+//#include "omni_light_shadow_pass.h"
+#include "gta5_pass.h"
 #include "device_memory.h"
 
 using namespace rcq;
@@ -42,16 +43,17 @@ engine::engine()
 	device_memory::init(m_base);
 	resource_manager::init(m_base);
 	core::init();
-	basic_pass::init(m_base, core::instance()->get_renderable_container());
-	omni_light_shadow_pass::init(m_base, core::instance()->get_renderable_container());
-
+	gta5_pass::init(m_base, core::instance()->get_renderable_container());
+	/*basic_pass::init(m_base, core::instance()->get_renderable_container());
+	omni_light_shadow_pass::init(m_base, core::instance()->get_renderable_container());*/
 }
 
 engine::~engine()
 {
 	core::destroy();
-	basic_pass::destroy();
-	omni_light_shadow_pass::destroy();
+	gta5_pass::destroy();
+	//basic_pass::destroy();
+	//omni_light_shadow_pass::destroy();
 	resource_manager::destroy();
 	device_memory::destroy();
 	base::destroy();

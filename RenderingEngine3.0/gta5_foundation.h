@@ -1,28 +1,28 @@
 #pragma once
 
-#include "gta5_infos_impl.h"
+#include "foundation.h"
 
-namespace rcq::gta5
+namespace rcq
 {
-	enum RENDER_PASS
-	{
-		RENDER_PASS_ENVIRONMENT_MAP_GEN,
-		RENDER_PASS_DIR_SHADOW_MAP_GEN,
-		RENDER_PASS_FRAME_IMAGE_GEN,
-		RENDER_PASS_COUNT
-	};
+	const uint32_t ENVIRONMENT_MAP_SIZE = 128;
+	const uint32_t DIR_SHADOW_MAP_SIZE = 1024;
+	const uint32_t FRUSTUM_SPLIT_COUNT = 2;
 
 	enum GP
 	{
 		GP_ENVIRONMENT_MAP_GEN_MAT,
 		GP_ENVIRONMENT_MAP_GEN_SKYBOX,
-		GP_GBUFFER_GEN,
+
 		GP_DIR_SHADOW_MAP_GEN,
+
+		GP_GBUFFER_GEN,
 		GP_SS_DIR_SHADOW_MAP_GEN,
 		GP_SS_DIR_SHADOW_MAP_BLUR,
 		GP_SSAO_GEN,
 		GP_SSAO_BLUR,
 		GP_IMAGE_ASSEMBLER,
+
+		GP_POSTPROCESSING,
 		GP_COUNT
 	};
 
@@ -44,6 +44,9 @@ namespace rcq::gta5
 
 		namespace subpass_unique
 		{
+			constexpr VkAttachmentReference ref_color = { ATT_COLOR, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr VkAttachmentReference ref_depth = { ATT_DEPTH, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription subpass = {};
@@ -53,9 +56,6 @@ namespace rcq::gta5
 				subpass.pDepthStencilAttachment = &ref_depth;
 				return subpass;
 			}
-
-			constexpr VkAttachmentReference ref_color = { ATT_COLOR, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			constexpr VkAttachmentReference ref_depth = { ATT_DEPTH, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
 			namespace pipelines
 			{			
@@ -74,7 +74,7 @@ namespace rcq::gta5
 						input.vertexBindingDescriptionCount = 1;
 						return input;
 					}
-					constexpr auto vertex_input = get_vertex_input();
+					constexpr auto vertex_input = create_vertex_input();
 
 					constexpr auto create_input_assembly()
 					{
@@ -264,7 +264,7 @@ namespace rcq::gta5
 						input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 						return input;
 					}
-					constexpr auto vertex_input = get_vertex_input();
+					constexpr auto vertex_input = create_vertex_input();
 
 					constexpr auto create_input_assembly()
 					{
@@ -532,6 +532,8 @@ namespace rcq::gta5
 
 		namespace subpass_unique
 		{
+			constexpr VkAttachmentReference ref_depth = { ATT_DEPTH,  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription subpass = {};
@@ -539,7 +541,6 @@ namespace rcq::gta5
 				subpass.pDepthStencilAttachment = &ref_depth;
 				return subpass;
 			}
-			constexpr VkAttachmentReference ref_depth= { ATT_DEPTH,  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 
 			namespace pipeline
 			{
@@ -556,7 +557,7 @@ namespace rcq::gta5
 					input.vertexBindingDescriptionCount = 1;
 					return input;
 				}
-				constexpr auto vertex_input = get_vertex_input();
+				constexpr auto vertex_input = create_vertex_input();
 
 				constexpr auto create_input_assembly()
 				{
@@ -868,7 +869,7 @@ namespace rcq::gta5
 					input.vertexBindingDescriptionCount = bindings.size();
 					return input;
 				}
-				constexpr auto vertex_input = get_vertex_input();
+				constexpr auto vertex_input = create_vertex_input();
 
 				constexpr auto create_input_assembly()
 				{
@@ -1033,6 +1034,10 @@ namespace rcq::gta5
 
 		namespace subpass_ss_dir_shadow_map_gen
 		{
+			constexpr std::array<uint32_t, 3> pres = { ATT_F0_SSAO, ATT_ALBEDO_SSDS, ATT_NORMAL_AO };
+			constexpr VkAttachmentReference color_out = { ATT_SS_DIR_SHADOW_MAP,  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr VkAttachmentReference pos_in = { ATT_POS_ROUGHNESS, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription s = {};
@@ -1046,10 +1051,6 @@ namespace rcq::gta5
 				return s;
 			}
 
-			constexpr std::array<uint32_t, 3> pres= { ATT_F0_SSAO, ATT_ALBEDO_SSDS, ATT_NORMAL_AO };
-			constexpr VkAttachmentReference color_out = { ATT_SS_DIR_SHADOW_MAP,  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			constexpr VkAttachmentReference pos_in = { ATT_POS_ROUGHNESS, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-
 			namespace pipeline
 			{
 
@@ -1059,7 +1060,7 @@ namespace rcq::gta5
 					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 					return input;
 				}
-				constexpr auto vertex_input = get_vertex_input();
+				constexpr auto vertex_input = create_vertex_input();
 
 				constexpr auto create_input_assembly()
 				{
@@ -1219,6 +1220,10 @@ namespace rcq::gta5
 
 		namespace subpass_ss_dir_shadow_map_blur
 		{
+			constexpr VkAttachmentReference ssds_out = { ATT_ALBEDO_SSDS, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr VkAttachmentReference normal_in = { ATT_NORMAL_AO, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+			constexpr std::array<uint32_t, 2> pres = { ATT_F0_SSAO, ATT_POS_ROUGHNESS };
+
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription s = {};
@@ -1231,9 +1236,6 @@ namespace rcq::gta5
 				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				return s;
 			}
-			constexpr VkAttachmentReference ssds_out = { ATT_ALBEDO_SSDS, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			constexpr VkAttachmentReference normal_in = { ATT_NORMAL_AO, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-			constexpr std::array<uint32_t, 2> pres = { ATT_F0_SSAO, ATT_POS_ROUGHNESS };
 
 			namespace pipeline
 			{
@@ -1244,7 +1246,7 @@ namespace rcq::gta5
 					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 					return input;
 				}
-				constexpr auto vertex_input = get_vertex_input();
+				constexpr auto vertex_input = create_vertex_input();
 
 				constexpr auto create_input_assembly()
 				{
@@ -1403,6 +1405,10 @@ namespace rcq::gta5
 
 		namespace subpass_ssao_map_gen
 		{
+			constexpr VkAttachmentReference normal_in = { ATT_NORMAL_AO, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+			constexpr VkAttachmentReference ssao_out = { ATT_SSAO_MAP, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr std::array<uint32_t, 3> pres = { ATT_ALBEDO_SSDS, ATT_POS_ROUGHNESS, ATT_F0_SSAO };
+
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription s = {};
@@ -1415,9 +1421,7 @@ namespace rcq::gta5
 				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				return s;
 			}
-			constexpr VkAttachmentReference normal_in = { ATT_NORMAL_AO, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-			constexpr VkAttachmentReference ssao_out = { ATT_SSAO_MAP, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			constexpr std::array<uint32_t, 3> pres= { ATT_ALBEDO_SSDS, ATT_POS_ROUGHNESS, ATT_F0_SSAO };
+			
 
 			namespace pipeline
 			{
@@ -1428,7 +1432,7 @@ namespace rcq::gta5
 					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 					return input;
 				}
-				constexpr auto vertex_input = get_vertex_input();
+				constexpr auto vertex_input = create_vertex_input();
 
 				constexpr auto create_input_assembly()
 				{
@@ -1582,6 +1586,9 @@ namespace rcq::gta5
 
 		namespace subpass_ssao_map_blur
 		{
+			VkAttachmentReference ssao_out = { ATT_F0_SSAO, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			std::array<uint32_t, 3> pres = { ATT_POS_ROUGHNESS, ATT_ALBEDO_SSDS, ATT_NORMAL_AO };
+
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription s = {};
@@ -1592,10 +1599,7 @@ namespace rcq::gta5
 				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				return s;
 			}
-			VkAttachmentReference ssao_out = { ATT_F0_SSAO, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-
-			std::array<uint32_t, 3> pres= { ATT_POS_ROUGHNESS, ATT_ALBEDO_SSDS, ATT_NORMAL_AO };
-
+			
 			namespace pipeline
 			{
 
@@ -1605,7 +1609,7 @@ namespace rcq::gta5
 					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 					return input;
 				}
-				constexpr auto vertex_input = get_vertex_input();
+				constexpr auto vertex_input = create_vertex_input();
 
 				constexpr auto create_input_assembly()
 				{
@@ -1776,6 +1780,8 @@ namespace rcq::gta5
 				ref[REF_IN_F0_SSAO].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				return ref;
 			}
+			constexpr std::array<VkAttachmentReference, REF_IN_COUNT>  ref_in = create_refs_in();
+			constexpr VkAttachmentReference color_out = { ATT_PREIMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
 			constexpr VkSubpassDescription create_subpass()
 			{
@@ -1788,8 +1794,6 @@ namespace rcq::gta5
 				return s;
 			}
 
-			constexpr std::array<VkAttachmentReference, REF_IN_COUNT>  ref_in = create_refs_in();
-			constexpr VkAttachmentReference color_out = { ATT_PREIMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
 			namespace pipeline
 			{
@@ -1800,7 +1804,7 @@ namespace rcq::gta5
 					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
 					return input;
 				}
-				constexpr auto vertex_input = get_vertex_input();
+				constexpr auto vertex_input = create_vertex_input();
 
 				constexpr auto create_input_assembly()
 				{
@@ -2117,6 +2121,240 @@ namespace rcq::gta5
 
 		constexpr VkRenderPassCreateInfo create_info=create_create_info();
 	}//namespace render_pass_frame_image_gen
+
+	namespace render_pass_postprocessing
+	{
+		enum ATT
+		{
+			ATT_SWAP_CHAIN_IMAGE,
+			ATT_COUNT
+		};
+		enum DEP
+		{
+			DEP_BEGIN,
+			DEP_COUNT
+		};
+
+		namespace subpass_bypass
+		{
+			VkAttachmentReference swap_chain_image = { ATT_SWAP_CHAIN_IMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+
+			constexpr VkSubpassDescription create_subpass()
+			{
+				VkSubpassDescription s = {};
+				s.colorAttachmentCount = 1;
+				s.pColorAttachments = &swap_chain_image;
+				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				return s;
+			}
+
+			namespace pipeline
+			{
+
+				constexpr auto create_vertex_input()
+				{
+					VkPipelineVertexInputStateCreateInfo input = {};
+					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+					return input;
+				}
+				constexpr auto vertex_input = create_vertex_input();
+
+				constexpr auto create_input_assembly()
+				{
+
+					VkPipelineInputAssemblyStateCreateInfo assembly = {};
+					assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+					assembly.primitiveRestartEnable = VK_FALSE;
+					assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+					return assembly;
+				}
+				constexpr auto input_assembly = create_input_assembly();
+
+				constexpr auto create_rasterizer()
+				{
+					VkPipelineRasterizationStateCreateInfo r = {};
+					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+					r.cullMode = VK_CULL_MODE_NONE;
+					r.depthBiasEnable = VK_FALSE;
+					r.depthClampEnable = VK_FALSE;
+					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+					r.lineWidth = 1.f;
+					r.polygonMode = VK_POLYGON_MODE_FILL;
+					r.rasterizerDiscardEnable = VK_FALSE;
+					return r;
+				}
+				constexpr auto rasterizer = create_rasterizer();
+
+				constexpr auto create_multisample()
+				{
+					VkPipelineMultisampleStateCreateInfo m = {};
+					m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+					m.alphaToCoverageEnable = VK_FALSE;
+					m.alphaToOneEnable = VK_FALSE;
+					m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+					m.sampleShadingEnable = VK_FALSE;
+					return m;
+				}
+				constexpr auto multisample = create_multisample();
+
+				constexpr auto create_blend_att()
+				{
+					VkPipelineColorBlendAttachmentState b = {};
+
+					b.blendEnable = VK_FALSE;
+					b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+						VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+					return b;
+				}
+				constexpr auto blend_att = create_blend_att();
+
+				constexpr auto create_blend()
+				{
+					VkPipelineColorBlendStateCreateInfo b = {};
+					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+					b.attachmentCount = 1;
+					b.pAttachments = &blend_att;
+					b.logicOpEnable = VK_FALSE;
+					return b;
+				}
+				constexpr auto blend = create_blend();
+
+				struct runtime_info
+				{
+					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
+					{
+
+						create_shaders(device,
+						{
+							"shaders/gta5_pass/ssao_blur/vert.spv",
+							"shaders/gta5_pass/ssao_blur/frag.spv"
+						},
+						{
+							VK_SHADER_STAGE_VERTEX_BIT,
+							VK_SHADER_STAGE_FRAGMENT_BIT
+						},
+							shaders.data()
+						);
+
+						viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+						viewport.pScissors = &scissor;
+						viewport.scissorCount = 1;
+						viewport.pViewports = &vp;
+						viewport.viewportCount = 1;
+						scissor.extent = e;
+						scissor.offset = { 0,0 };
+						vp.height = static_cast<float>(e.height);
+						vp.width = static_cast<float>(e.width);
+						vp.maxDepth = 1.f;
+						vp.minDepth = 0.f;
+						vp.x = 0.f;
+						vp.y = 0.f;
+					}
+
+					~runtime_info()
+					{
+						for (auto s : shaders)
+							vkDestroyShaderModule(device, s.module, host_memory_manager);
+					}
+
+					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
+					{
+						c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+						c.basePipelineHandle = VK_NULL_HANDLE;
+						c.basePipelineIndex = -1;
+						c.pInputAssemblyState = &input_assembly;
+						c.pMultisampleState = &multisample;
+						c.pRasterizationState = &rasterizer;
+						c.pStages = shaders.data();
+						c.stageCount = 2;
+						c.pVertexInputState = &vertex_input;
+						c.pViewportState = &viewport;
+						c.subpass = 0;
+					}
+
+					VkDevice device;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					VkViewport vp;
+					VkRect2D scissor;
+					VkPipelineViewportStateCreateInfo viewport;
+				};
+				namespace dsl
+				{
+					constexpr auto create_binding()
+					{
+						VkDescriptorSetLayoutBinding binding = {};
+						binding.binding = 0;
+						binding.descriptorCount = 1;
+						binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						binding.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+						return binding;
+					}
+					constexpr auto binding = create_binding();
+
+					constexpr auto create_create_info()
+					{
+						VkDescriptorSetLayoutCreateInfo dsl = {};
+						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+						dsl.bindingCount = 1;
+						dsl.pBindings = &binding;
+						return dsl;
+					}
+					constexpr auto create_info = create_create_info();
+				}//namespace dsl
+			}//namespace pipeline
+
+
+		}// namespace subpass_bypass
+
+		constexpr std::array<VkAttachmentDescription, ATT_COUNT> get_attachments()
+		{
+
+			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
+			atts[ATT_SWAP_CHAIN_IMAGE].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_SWAP_CHAIN_IMAGE].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			atts[ATT_SWAP_CHAIN_IMAGE].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_SWAP_CHAIN_IMAGE].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_SWAP_CHAIN_IMAGE].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_SWAP_CHAIN_IMAGE].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			atts[ATT_SWAP_CHAIN_IMAGE].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_SWAP_CHAIN_IMAGE].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+			return atts;
+		}
+
+		constexpr auto get_dependencies()
+		{
+			std::array<VkSubpassDependency, DEP_COUNT> d = {};
+			d[DEP_BEGIN].srcSubpass = VK_SUBPASS_EXTERNAL;
+			d[DEP_BEGIN].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_BEGIN].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			d[DEP_BEGIN].dstSubpass = 0;
+			d[DEP_BEGIN].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_BEGIN].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			return d;
+		}
+
+		constexpr std::array<VkSubpassDependency, DEP_COUNT> deps = get_dependencies();
+		constexpr std::array<VkAttachmentDescription, ATT_COUNT> atts = get_attachments();
+		constexpr VkSubpassDescription sp_bypass = subpass_bypass::create_subpass();
+
+		constexpr VkRenderPassCreateInfo create_create_info()
+		{
+			VkRenderPassCreateInfo pass = {};
+			pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+			pass.attachmentCount = ATT_COUNT;
+			pass.dependencyCount = DEP_COUNT;
+			pass.pAttachments = atts.data();
+			pass.subpassCount = 1;
+			pass.pSubpasses = &sp_bypass;
+			pass.pDependencies = deps.data();
+			return pass;
+		}
+		constexpr VkRenderPassCreateInfo create_info = create_create_info();
+
+	}// namespace render_pass_postprocessing
 
 	namespace dp
 	{

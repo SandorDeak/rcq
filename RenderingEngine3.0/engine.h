@@ -41,14 +41,14 @@ namespace rcq
 		{
 			if (!m_core_p)
 				m_core_p.reset(new core_package);
-			m_core_p->build_renderable[type*LIFE_EXPECTANCY_COUNT+life_exp].emplace_back(id, tr_id, mesh_id, mat_id);
+			m_core_p->build_renderable[type].emplace_back(id, tr_id, mesh_id, mat_id);
 		}
 
 		void cmd_destroy_renderable(unique_id uid, RENDERABLE_TYPE type, LIFE_EXPECTANCY life_exp)
 		{
 			if (!m_core_p)
 				m_core_p.reset(new core_package);
-			m_core_p->destroy_renderable[type*LIFE_EXPECTANCY_COUNT + life_exp].push_back(uid);
+			m_core_p->destroy_renderable[type].push_back(uid);
 		}
 
 		void cmd_update_transform(unique_id id, const transform_data& tr_data)
@@ -58,13 +58,13 @@ namespace rcq
 			m_core_p->update_tr.emplace_back(id, tr_data);
 		}
 
-		void cmd_render(const glm::mat4& view, const std::optional<update_proj>& proj_info)
+		void cmd_render(const render_settings& settings)
 		{
 			if (!m_core_p)
 				m_core_p.reset(new core_package);
+			m_core_p->settings = settings;
 			m_core_p->render = true;
-			m_core_p->view = view;
-			m_core_p->proj_info = proj_info;
+
 		}
 
 		void cmd_dispatch();

@@ -7,8 +7,9 @@
 #include <stb_image.h>
 
 #include "device_memory.h"
-#include "omni_light_shadow_pass.h"
-#include "basic_pass.h"
+//#include "gta5_pass.h"
+//#include "omni_light_shadow_pass.h"
+//#include "basic_pass.h"
 
 using namespace rcq;
 
@@ -171,7 +172,8 @@ void resource_manager::destroy_loop()
 			if (package->destroy_confirmation.has_value())
 			{
 				package->destroy_confirmation.value().wait();
-				wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
+				//gta5_pass::instance()->wait_for_finish();
+				//wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
 			}
 			/*bool has_user_resource = false;
 			for (int i = 0; i < RESOURCE_TYPE_COUNT - 1; ++i)
@@ -279,7 +281,8 @@ void load_mesh(const std::string& file_name, std::vector<vertex>& vertices, std:
 	}
 }
 
-mesh resource_manager::build(const std::string& filename, bool calc_tb)
+template<>
+mesh resource_manager::build<RESOURCE_TYPE_MESH>(const std::string& filename, bool calc_tb)
 {
 
 	std::vector<vertex> vertices;
@@ -415,8 +418,8 @@ mesh resource_manager::build(const std::string& filename, bool calc_tb)
 
 	return _mesh;
 }
-
-material_opaque resource_manager::build(const material_opaque_data& data, const texfiles& files)
+template<>
+material_opaque resource_manager::build<RESOURCE_TYPE_MAT_OPAQUE>(const material_opaque_data& data, const texfiles& files)
 {
 	material_opaque mat;
 
@@ -520,7 +523,8 @@ material_opaque resource_manager::build(const material_opaque_data& data, const 
 	return mat;
 }
 
-transform resource_manager::build(const transform_data& data, USAGE usage)
+template<>
+transform resource_manager::build<RESOURCE_TYPE_TR>(const transform_data& data, USAGE usage)
 {
 	transform tr;
 	tr.usage = usage;
@@ -593,7 +597,8 @@ transform resource_manager::build(const transform_data& data, USAGE usage)
 	return tr;
 }
 
-memory resource_manager::build(const std::vector<VkMemoryAllocateInfo>& alloc_infos)
+template<>
+memory resource_manager::build<RESOURCE_TYPE_MEMORY>(const std::vector<VkMemoryAllocateInfo>& alloc_infos)
 {
 	memory mem(alloc_infos.size());
 
@@ -673,7 +678,7 @@ void rcq::resource_manager::update_tr(const std::vector<update_tr_info>& trs)
 
 	for (const auto& tr_info : trs)
 	{
-		auto& tr = get<RESOURCE_TYPE_TR>(std::get<UPDATE_TR_INFO_TR_ID>(tr_info));
+		auto& tr = get_res<RESOURCE_TYPE_TR>(std::get<UPDATE_TR_INFO_TR_ID>(tr_info));
 		if (tr.usage==USAGE_DYNAMIC)
 			memcpy(tr.data, &std::get<UPDATE_TR_INFO_TR_DATA>(tr_info), sizeof(transform_data));
 		else
@@ -952,7 +957,7 @@ void resource_manager::create_staging_buffers()
 	build_package build;
 	std::get<RESOURCE_TYPE_MEMORY>(build).emplace_back(id, std::move(alloc_infos));
 	process_build_package(std::move(build));
-	memory mem = get<RESOURCE_TYPE_MEMORY>(id);
+	memory mem = get_res<RESOURCE_TYPE_MEMORY>(id);
 	m_single_cell_sb_mem = mem[0];
 	m_sb_mem = mem[1];
 	vkBindBufferMemory(m_base.device, m_single_cell_sb, m_single_cell_sb_mem, 0);
@@ -1119,7 +1124,8 @@ void resource_manager::create_command_pool()
 		throw std::runtime_error("failed to create command pool!");
 }
 
-light_omni resource_manager::build(const light_omni_data& data, USAGE usage)
+template<>
+light_omni resource_manager::build<RESOURCE_TYPE_LIGHT_OMNI>(const light_omni_data& data, USAGE usage)
 {
 	light_omni l;
 	l.usage = usage;
@@ -1180,8 +1186,8 @@ light_omni resource_manager::build(const light_omni_data& data, USAGE usage)
 		image_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 		image_info.arrayLayers = 6;
 		image_info.extent.depth = 1;
-		image_info.extent.height = SHADOW_MAP_SIZE;
-		image_info.extent.width = SHADOW_MAP_SIZE;
+		image_info.extent.height = OMNI_SHADOW_MAP_SIZE;
+		image_info.extent.width = OMNI_SHADOW_MAP_SIZE;
 		image_info.format = VK_FORMAT_D32_SFLOAT;
 		image_info.imageType = VK_IMAGE_TYPE_2D;
 		image_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -1247,7 +1253,7 @@ light_omni resource_manager::build(const light_omni_data& data, USAGE usage)
 
 		l.shadow_map.sampler_type = SAMPLER_TYPE_CUBE;
 
-		omni_light_shadow_pass::instance()->create_framebuffer(l);
+		//omni_light_shadow_pass::instance()->create_framebuffer(l);
 
 	}
 	else
@@ -1311,7 +1317,8 @@ void resource_manager::destroy(skybox&& sb)
 	vkFreeMemory(m_base.device, sb.tex.memory, host_memory_manager);
 }
 
-skybox resource_manager::build(const std::string & filename)
+template<>
+skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filename)
 {
 	static const std::string postfix[6] = { "/posx.jpg", "/negx.jpg", "/posy.jpg", "/negy.jpg", "/negz.jpg", "/posz.jpg" };
 

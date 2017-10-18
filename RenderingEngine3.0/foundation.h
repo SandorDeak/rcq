@@ -27,7 +27,7 @@
 #include <tuple>
 #include <bitset>
 #include <iostream>
-#include <variant>
+#include <utility>
 
 
 namespace rcq
@@ -92,6 +92,7 @@ namespace rcq
 	enum RESOURCE_TYPE
 	{
 		RESOURCE_TYPE_MAT_OPAQUE,
+		RESOURCE_TYPE_MAT_EM,
 		RESOURCE_TYPE_LIGHT_OMNI,
 		RESOURCE_TYPE_SKYBOX,
 		RESOURCE_TYPE_MESH,
@@ -135,6 +136,13 @@ namespace rcq
 		BUILD_MAT_OPAQUE_INFO_MAT_ID,
 		BUILD_MAT_OPAQUE_INFO_MAT_DATA,
 		BUILD_MAT_OPAQUE_INFO_TEXINFOS,
+	};
+
+	typedef std::tuple<unique_id, std::string> build_mat_em_info;
+	enum
+	{
+		BUILD_MAT_EM_INFO_ID,
+		BUILD_MAT_EM_INFO_STRING
 	};
 
 	typedef std::tuple<unique_id, std::string, bool> build_mesh_info;
@@ -249,7 +257,7 @@ namespace rcq
 
 	VkShaderModule create_shader_module(VkDevice device, const std::vector<char>& code);
 	VkPipelineLayout create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls);
-	void create_shaders(VkDevice device, const std::vector<std::string_view>& files, const std::vector<VkShaderStageFlags>& stages,
+	void create_shaders(VkDevice device, const std::vector<std::string_view>& files, const std::vector<VkShaderStageFlagBits>& stages,
 		VkPipelineShaderStageCreateInfo* shaders);
 
 	VkFormat find_support_format(VkPhysicalDevice device, const std::vector<VkFormat>& candidates,
@@ -291,13 +299,7 @@ namespace rcq
 	}
 
 	extern const VkAllocationCallbacks* host_memory_manager;
-
-	extern const size_t DISASSEMBLER_COMMAND_QUEUE_MAX_SIZE;
-	extern const size_t CORE_COMMAND_QUEUE_MAX_SIZE;
-	extern const size_t SHADOW_MAP_SIZE;
-	extern const size_t DIR_SHADOW_MAP_SIZE;
-
-	extern const size_t FRUSTUM_SPLIT_COUNT;
+	extern const uint32_t OMNI_SHADOW_MAP_SIZE;
 
 	struct base_create_info
 	{
@@ -363,6 +365,10 @@ namespace rcq
 		cell_info cell;
 	};
 
+	struct material_em
+	{
+		VkDescriptorSet ds;
+	};
 
 	struct mesh
 	{
@@ -385,11 +391,17 @@ namespace rcq
 		cell_info cell;
 	};
 
-	struct update_proj
+	struct render_settings
 	{
+		glm::mat4 view;
 		glm::mat4 proj;
+		glm::vec3 pos;
 		float near;
 		float far;
+
+		glm::vec3 light_dir;
+		glm::vec3 irradiance;
+		glm::vec3 ambient_irradiance;
 	};
 
 	struct light_omni
@@ -436,24 +448,24 @@ namespace rcq
 		VkFramebuffer shadow_map_fb;
 	};
 
-	typedef std::array<std::vector<renderable>, RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> renderable_container;
+	typedef std::array<std::vector<renderable>, RENDERABLE_TYPE_COUNT> renderable_container;
 
 	struct core_package
 	{
-		std::array<std::vector<build_renderable_info>, RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> build_renderable;
-		std::array<std::vector<unique_id>, RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> destroy_renderable;
+		std::array<std::vector<build_renderable_info>, RENDERABLE_TYPE_COUNT> build_renderable;
+		std::array<std::vector<unique_id>, RENDERABLE_TYPE_COUNT> destroy_renderable;
 		std::vector<update_tr_info> update_tr;
 		std::optional<std::promise<void>> confirm_destroy;
+		render_settings settings;
 		bool render = false;
-		glm::mat4 view;
-		std::optional<update_proj> proj_info;
 	};
 
 
 	typedef std::vector<VkDeviceMemory> memory;
 
 	typedef std::tuple<
-		std::vector<build_mat_opaque_info>, 
+		std::vector<build_mat_opaque_info>,
+		std::vector<build_mat_em_info>,
 		std::vector<build_light_omni_info>,
 		std::vector<build_skybox_info>,
 		std::vector<build_mesh_info>, 
@@ -469,14 +481,15 @@ namespace rcq
 		std::optional<std::future<void>> destroy_confirmation;
 	};
 
-	struct command_package
+	/*struct command_package
 	{
 		std::optional<core_package> core_p;
 		std::optional<build_package> resource_manager_build_p;
 		std::optional<destroy_package> resource_mananger_destroy_p;
-	};
+	};*/
 
 	typedef std::packaged_task<material_opaque()> build_mat_opaque_task;
+	typedef std::packaged_task<material_em()> build_mat_em_task;
 	typedef std::packaged_task<light_omni()> build_light_omni_task;
 	typedef std::packaged_task<skybox()> build_skybox_task;
 	typedef std::packaged_task<mesh()> build_mesh_task;
@@ -485,6 +498,7 @@ namespace rcq
 
 	typedef std::tuple<
 		std::vector<build_mat_opaque_task>,
+		std::vector<build_mat_em_task>,
 		std::vector<build_light_omni_task>,
 		std::vector<build_skybox_task>,
 		std::vector<build_mesh_task>,
@@ -497,6 +511,7 @@ namespace rcq
 	struct resource_typename;
 
 	template<> struct resource_typename<RESOURCE_TYPE_MAT_OPAQUE> { typedef material_opaque type; };
+	template<> struct resource_typename<RESOURCE_TYPE_MAT_EM> { typedef material_em type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MESH> { typedef mesh type; };
 	template<> struct resource_typename<RESOURCE_TYPE_TR>{ typedef transform type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MEMORY> { typedef memory type; };
@@ -527,10 +542,10 @@ namespace rcq
 	template<size_t res_type>
 	struct render_pass_typename {};
 
-	template<> struct render_pass_typename<RENDER_PASS_BASIC> { typedef  basic_pass type; };
-	template<> struct render_pass_typename<RENDER_PASS_OMNI_LIGHT_SHADOW> { typedef omni_light_shadow_pass type; };
+	/*template<> struct render_pass_typename<RENDER_PASS_BASIC> { typedef  basic_pass type; };
+	template<> struct render_pass_typename<RENDER_PASS_OMNI_LIGHT_SHADOW> { typedef omni_light_shadow_pass type; };*/
 
-	struct graphics_pipeline_create_info
+	/*struct graphics_pipeline_create_info
 	{
 		std::vector<VkShaderModule> shader_modules = {};
 		std::vector<VkPipelineShaderStageCreateInfo> shaders = {};
@@ -743,7 +758,7 @@ namespace rcq
 			if (has_blend)
 				create.pColorBlendState = &blend;
 		}
-	};
+	};*/
 
 
 	struct vertex

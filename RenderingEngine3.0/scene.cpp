@@ -282,10 +282,19 @@ void scene::build()
 	m_camera.look_dir = glm::normalize(glm::vec3(-2.f));
 	m_camera.proj = glm::perspective(glm::radians(45.f), m_window_size.x / m_window_size.y, 0.1f, 1000.f);
 	m_camera.proj[1][1] *= (-1);
-	//m_camera.proj[3][2] *= (-1);
 	m_camera.view = glm::lookAt(glm::vec3(2.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
 	m_camera.data.pos = glm::vec3(2.f);
 	m_camera.data.proj_x_view = m_camera.proj*m_camera.view;
+
+	m_render_settings.ambient_irradiance = glm::vec3(0.5f);
+	m_render_settings.far = 1000.f;
+	m_render_settings.irradiance = glm::vec3(8.f);
+	m_render_settings.light_dir = glm::vec3(1.f, -1.f, 1.f);
+	m_render_settings.near = 0.1f;
+	m_render_settings.pos = m_camera.pos;
+	m_render_settings.proj = m_camera.proj;
+	m_render_settings.view = m_camera.view;
+
 
 }
 
@@ -300,9 +309,8 @@ void scene::update(float dt)
 		rcq::engine::instance()->cmd_update_transform(m_trs[i].id, m_trs[i].data);
 	}
 	update_camera(dt);
-	rcq::engine::instance()->cmd_update_camera(m_camera.data);
 
-	rcq::engine::instance()->cmd_render();
+	rcq::engine::instance()->cmd_render(m_render_settings);
 	rcq::engine::instance()->cmd_dispatch();
 }
 
@@ -354,4 +362,7 @@ void scene::update_camera(float dt)
 	m_camera.data.pos = m_camera.pos;
 	glm::mat4 view = glm::lookAt(m_camera.pos, m_camera.pos + m_camera.look_dir, glm::vec3(0.f, 1.f, 0.f));
 	m_camera.data.proj_x_view = m_camera.proj*view;
+
+	m_render_settings.pos = m_camera.pos;
+	m_render_settings.view = m_camera.view;
 }

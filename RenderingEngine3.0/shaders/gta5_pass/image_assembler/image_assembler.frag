@@ -42,20 +42,23 @@ float shlick_geometry_term(float dot_prod, float roughness)
 
 void main()
 {
-	vec3 v=-normalize(subpassLoad(pos_in).xyz);
-	vec3 n=subpassLoad(normal_in).xyz;
+	vec4 pos_roughness=subpassLoad(pos_roughness_in);
+	vec3 v=-normalize(pos_roughness.xyz);
+	float roughness=pos_roughness.w;
 	
-	vec4 load=subpassLoad(F0_roughness_in);
-	vec3 F0=load.xyz;
-	float roughness=load.w;
+	vec4 normal_ao=subpassLoad(normal_ao_in);
+	vec3 n=normal_ao.xyz;
+	float ao=normal_ao.w;
 	
-	load=subpassLoad(albedo_ao_in);
-	vec3 albedo=load.xyz;
-	float ao_local=load.w;
+	vec4 F0_ssao_in=subpassLoad(F0_ssao_in);
+	vec3 F0=F0_ssao_in.xyz;
+	float ssao=F0_ssao_in.w;
 	
-	float ssds=subpassLoad(ssds_in).x;
-	float ssao=subpassLoad(ssao_in).x;
-	float ao=ao_local*ssao;
+	vec4 albedo_ssds=subpassLoad(albedo_ssds_in);
+	vec3 albedo=albedo_ssds.xyz;
+	float ssds=albedo_ssds.w;
+	
+	ao*=ssao;
 	
 	vec3 l=-data.dir;
 	vec3 h=normalize(l+v);

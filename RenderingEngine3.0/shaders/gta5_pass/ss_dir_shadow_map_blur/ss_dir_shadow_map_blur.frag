@@ -10,7 +10,7 @@ layout(set=0, binding=1) uniform sampler2D shadow_tex;
 
 layout(input_attachment_index=0, set=0, binding=2) uniform subpassInput normal_in;
 
-layout(location=0) out float shadow_out;
+layout(location=0) out vec4 shadow_out;
 
 
 void main()
@@ -34,6 +34,6 @@ void main()
 		}
 	}
 	
-	shadow_out=sum/float(blur_count);
+	shadow_out.w=sum/float(blur_count);
 	
 }

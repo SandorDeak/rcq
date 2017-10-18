@@ -1,15 +1,13 @@
 #include "core.h"
 
 #include "resource_manager.h"
+#include "gta5_pass.h"
 
-using namespace rcq;
+rcq::core* rcq::core::m_instance = nullptr;
 
-core* core::m_instance = nullptr;
-
-core::core()
+rcq::core::core()
 {
 	m_should_end = false;
-	m_begin_s = VK_NULL_HANDLE;
 	m_looping_thread = std::thread([this]()
 	{
 		try
@@ -24,13 +22,13 @@ core::core()
 }
 
 
-core::~core()
+rcq::core::~core()
 {
 	m_should_end = true;
 	m_looping_thread.join();
 }
 
-void core::init()
+void rcq::core::init()
 {
 	if (m_instance != nullptr)
 	{
@@ -39,7 +37,7 @@ void core::init()
 	m_instance = new core();
 }
 
-void core::destroy()
+void rcq::core::destroy()
 {
 	if (m_instance == nullptr)
 	{
@@ -49,9 +47,9 @@ void core::destroy()
 	delete m_instance;
 }
 
-void core::loop()
+void rcq::core::loop()
 {
-	constexpr size_t renderables_size = RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT;
+	constexpr size_t renderables_size = RENDERABLE_TYPE_COUNT;
 
 	std::bitset<renderables_size> record_mask;
 	record_mask.reset();
@@ -68,7 +66,7 @@ void core::loop()
 			}
 			
 			//destroy renderables
-			std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> remove_deleted_renderables(false);
+			std::bitset<RENDERABLE_TYPE_COUNT> remove_deleted_renderables(false);
 
 			for (uint32_t i = 0; i < renderables_size; ++i)
 			{
@@ -114,8 +112,10 @@ void core::loop()
 
 			if (package->render)
 			{
-				record_and_render(package->view, package->proj_info, record_mask);
-				record_mask.reset();
+				/*record_and_render(package->view, package->proj_info, record_mask);
+				record_mask.reset();*/
+				m_render_settings = package->settings;
+				gta5_pass::instance()->render(m_render_settings, record_mask);			
 			}
 
 			if (package->confirm_destroy)
@@ -126,41 +126,40 @@ void core::loop()
 			}
 		}
 	}
-	wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
 
 }
 
-void rcq::core::record_and_render(const glm::mat4& view, const std::optional<update_proj>& proj_info,
+/*void rcq::core::record_and_render(const glm::mat4& view, const std::optional<update_proj>& proj_info,
 	std::bitset<RENDERABLE_TYPE_COUNT*LIFE_EXPECTANCY_COUNT> record_mask)
 {
 	auto shadow_map_s = omni_light_shadow_pass::instance()->record_and_render(view, proj_info, record_mask, m_begin_s);
 	m_begin_s=basic_pass::instance()->record_and_render(view, proj_info, record_mask, shadow_map_s);
-}
+}*/
 
 template<size_t rend_type>
-void core::build_renderables_impl(const std::vector<build_renderable_info>& build_infos)
+void rcq::core::build_renderables_impl(const std::vector<build_renderable_info>& build_infos)
 {
 	for (auto& info : build_infos)
 	{
 		renderable r;
 		r.id = std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(info);
 		r.destroy = false;
-		auto res = resource_manager::instance()->get<rend_type / LIFE_EXPECTANCY_COUNT>(
+		auto res = resource_manager::instance()->get_res<rend_type>(
 			std::get<BUILD_RENDERABLE_INFO_MAT_OR_LIGHT_ID>(info));
 
 		r.mat_light_ds = res.ds;
 
-		if constexpr (rend_type / LIFE_EXPECTANCY_COUNT == RESOURCE_TYPE_LIGHT_OMNI)
+		if constexpr (rend_type == RESOURCE_TYPE_LIGHT_OMNI)
 		{
 			r.shadow_map = res.shadow_map;
 			r.shadow_map_fb = res.shadow_map_fb;
 		}
 
-		if constexpr ((rend_type / LIFE_EXPECTANCY_COUNT) == RESOURCE_TYPE_MAT_OPAQUE)
+		if constexpr (rend_type  == RESOURCE_TYPE_MAT_OPAQUE)
 		{
-			r.m = resource_manager::instance()->get<RESOURCE_TYPE_MESH>(
+			r.m = resource_manager::instance()->get_res<RESOURCE_TYPE_MESH>(
 				std::get<BUILD_RENDERABLE_INFO_MESH_ID>(info));
-			r.tr_ds = resource_manager::instance()->get<RESOURCE_TYPE_TR>(
+			r.tr_ds = resource_manager::instance()->get_res<RESOURCE_TYPE_TR>(
 				std::get<BUILD_RENDERABLE_INFO_TR_ID>(info)).ds;
 		}
 
