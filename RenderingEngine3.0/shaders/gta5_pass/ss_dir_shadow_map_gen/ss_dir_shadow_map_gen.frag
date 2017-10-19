@@ -15,8 +15,6 @@ layout(set=0, binding=1) uniform sampler2DArray csm_tex;
 
 layout(input_attachment_index=0, set=0, binding=2) uniform subpassInput pos_in;
 
-layout(location=0) out float shadow_out;
-
 float calc_index(float z)
 {
 	float val=(z-data.near)/(data.far-data.near);
@@ -33,5 +31,5 @@ void main()
 	{
 		shadow=0.f;
 	}
-	shadow_out=shadow;
+	gl_FragDepth=shadow;
 }

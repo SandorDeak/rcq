@@ -76,8 +76,9 @@ void main()
 	vec3 lambert=(1.0f-fresnel)*albedo/PI;
 	//
 	
-	vec3 color=((specular+lambert)*ssds*data.irradiance+albedo*ssao*data.ambient_irradiance)*l_dot_n;
+	vec3 color=(specular+lambert)*ssds*data.irradiance*l_dot_n+albedo*ssao*data.ambient_irradiance;
+	//vec3 color=(specular+lambert)*data.irradiance*l_dot_n+albedo*data.ambient_irradiance;
 	
-	color_out=vec4(color, 1.f);
 	
+	color_out=vec4(ssao);	
 }

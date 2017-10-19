@@ -39,9 +39,9 @@ layout(location=3) out vec4 normal_ao_out;
 mat3 gram_schmidt(mat3 m)
 {
 	mat3 ret;
-	ret[0]=normalize(m[0]);
-	ret[1]=normalize(m[1]-dot(m[1],ret[0])*ret[0]);
-	ret[2]=normalize(m[2]-dot(m[2],ret[0])*ret[0]-dot(m[2],ret[1])*ret[1]);
+	ret[2]=normalize(m[2]);
+	ret[1]=normalize(m[1]-dot(m[1],ret[2])*ret[2]);
+	ret[0]=normalize(m[0]-dot(m[0],ret[2])*ret[2]-dot(m[0],ret[1])*ret[1]);
 	return ret;
 }
 

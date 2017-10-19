@@ -14,7 +14,7 @@ layout(set=0, binding=0) uniform em_gen_mat
 	uint padding2;	
 } data;
 
-layout(set=1, binding=0) uniform sampler2D diffuse_tex;
+layout(set=2, binding=0) uniform sampler2D diffuse_tex;
 
 layout(location=0) in vec3 normal_in;
 layout(location=1) in vec2 tex_coord_in;

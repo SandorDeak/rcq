@@ -7,7 +7,7 @@
 #include <stb_image.h>
 
 #include "device_memory.h"
-//#include "gta5_pass.h"
+#include "gta5_pass.h"
 //#include "omni_light_shadow_pass.h"
 //#include "basic_pass.h"
 
@@ -172,7 +172,7 @@ void resource_manager::destroy_loop()
 			if (package->destroy_confirmation.has_value())
 			{
 				package->destroy_confirmation.value().wait();
-				//gta5_pass::instance()->wait_for_finish();
+				gta5_pass::instance()->wait_for_finish();
 				//wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
 			}
 			/*bool has_user_resource = false;
@@ -1014,6 +1014,24 @@ void resource_manager::create_descriptor_set_layouts()
 		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE]) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create material descriptor set layout!");
+	}
+
+	//create material em
+	{
+		VkDescriptorSetLayoutBinding tex_binding = {};
+		tex_binding.binding = 0;
+		tex_binding.descriptorCount = 1;
+		tex_binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		tex_binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		VkDescriptorSetLayoutCreateInfo dsl = {};
+		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		dsl.bindingCount = 1;
+		dsl.pBindings = &tex_binding;
+
+		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, host_memory_manager, 
+			&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_MAT_EM]) != VK_SUCCESS)
+			throw std::runtime_error("failed to create dsl!");
 	}
 
 	//create light omni dsl

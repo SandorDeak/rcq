@@ -12,7 +12,7 @@ std::vector<char> rcq::read_file(const std::string_view& filename)
 	std::ifstream file(filename.data(), std::ios::ate | std::ios::binary);
 
 	if (!file.is_open())
-		throw std::runtime_error("failed to open file!");
+		throw std::runtime_error("failed to open file: " + std::string(filename));
 
 	size_t size = (size_t)file.tellg();
 	std::vector<char> data(size);

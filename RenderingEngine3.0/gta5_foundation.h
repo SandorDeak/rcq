@@ -228,7 +228,7 @@ namespace rcq
 						}
 
 						VkDevice device;
-						std::array<VkPipelineShaderStageCreateInfo, 3> shaders;
+						std::array<VkPipelineShaderStageCreateInfo, 3> shaders = {};
 					};
 
 					namespace dsl
@@ -418,7 +418,7 @@ namespace rcq
 						}
 
 						VkDevice device;
-						std::array<VkPipelineShaderStageCreateInfo, 3> shaders;
+						std::array<VkPipelineShaderStageCreateInfo, 3> shaders = {};
 					};
 
 					namespace dsl
@@ -453,7 +453,7 @@ namespace rcq
 
 			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
 			atts[ATT_DEPTH].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_DEPTH].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_DEPTH].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 			atts[ATT_DEPTH].format = VK_FORMAT_D32_SFLOAT;
 			atts[ATT_DEPTH].samples = VK_SAMPLE_COUNT_1_BIT;
 			atts[ATT_DEPTH].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -496,7 +496,7 @@ namespace rcq
 		constexpr std::array<VkSubpassDependency, DEP_COUNT> deps=get_dependencies();
 		constexpr std::array<VkAttachmentDescription, ATT_COUNT> atts=get_attachments();
 
-		VkSubpassDescription sp_unique=subpass_unique::create_subpass();
+		constexpr VkSubpassDescription sp_unique=subpass_unique::create_subpass();
 
 		constexpr VkRenderPassCreateInfo create_create_info()
 		{
@@ -539,6 +539,7 @@ namespace rcq
 				VkSubpassDescription subpass = {};
 				subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				subpass.pDepthStencilAttachment = &ref_depth;
+				subpass.colorAttachmentCount = 0;
 				return subpass;
 			}
 
@@ -653,8 +654,8 @@ namespace rcq
 
 						create_shaders(device,
 						{
-							"shaders/dir_shadow_map_gen/vert.spv",
-							"shaders/dir_shadow_map_gen/geom.spv"
+							"shaders/gta5_pass/dir_shadow_map_gen/vert.spv",
+							"shaders/gta5_pass/dir_shadow_map_gen/geom.spv"
 						},
 						{
 							VK_SHADER_STAGE_VERTEX_BIT,
@@ -687,7 +688,7 @@ namespace rcq
 					}
 
 					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
 				};
 
 				namespace dsl
@@ -755,7 +756,7 @@ namespace rcq
 
 		constexpr std::array<VkSubpassDependency, DEP_COUNT> deps=get_dependencies();
 		std::array<VkAttachmentDescription, ATT_COUNT> atts=get_attachments();
-		VkSubpassDescription sp_unique=subpass_unique::create_subpass();
+		constexpr VkSubpassDescription sp_unique=subpass_unique::create_subpass();
 		
 		constexpr VkRenderPassCreateInfo create_create_info()
 		{
@@ -805,10 +806,14 @@ namespace rcq
 			//DEP_EXT_SSDS_GEN,
 			DEP_GBUFFER_GEN_SSDS_GEN,
 			DEP_GBUFFER_GEN_SSAO_GEN,
-			DEP_SSDS_GEN_SSDS_BLUR,
-			DEP_SSAO_GEN_SSAO_BLUR,
+			DEP_GBUFFER_GEN_SSDS_BLUR,
+			DEP_GBUFFER_GEN_SSAO_BLUR,
+			DEP_SSDS_GEN_SELF,
+			DEP_SSAO_GEN_SELF,
+
 			DEP_SSDS_BLUR_IMAGE_ASSEMBLER,
 			DEP_SSAO_BLUR_IMAGE_ASSEMBLER,
+			DEP_GBUFFER_GEN_IMAGE_ASSEMBLER,
 			//DEP_END,
 			DEP_COUNT
 		};
@@ -991,20 +996,21 @@ namespace rcq
 						c.basePipelineIndex = -1;
 						c.pDepthStencilState = &depthstencil;
 						c.pInputAssemblyState = &input_assembly;
+						c.pColorBlendState = &blend;
 						c.pMultisampleState = &multisample;
 						c.pRasterizationState = &rasterizer;
 						c.pStages = shaders.data();
 						c.stageCount = 2;
 						c.pVertexInputState = &vertex_input;
 						c.pViewportState = &viewport;
-						c.subpass = 0;
+						c.subpass = SUBPASS_GBUFFER_GEN;
 					}
 
 					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
 					VkViewport vp;
 					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport;
+					VkPipelineViewportStateCreateInfo viewport = {};
 				};
 				namespace dsl
 				{
@@ -1035,14 +1041,13 @@ namespace rcq
 		namespace subpass_ss_dir_shadow_map_gen
 		{
 			constexpr std::array<uint32_t, 3> pres = { ATT_F0_SSAO, ATT_ALBEDO_SSDS, ATT_NORMAL_AO };
-			constexpr VkAttachmentReference color_out = { ATT_SS_DIR_SHADOW_MAP,  VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr VkAttachmentReference depth = { ATT_SS_DIR_SHADOW_MAP,  VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 			constexpr VkAttachmentReference pos_in = { ATT_POS_ROUGHNESS, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
 
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription s = {};
-				s.pColorAttachments = &color_out;
-				s.colorAttachmentCount = 1;
+				s.pDepthStencilAttachment = &depth;
 				s.pInputAttachments = &pos_in;
 				s.inputAttachmentCount = 1;
 				s.preserveAttachmentCount = 3;
@@ -1088,6 +1093,19 @@ namespace rcq
 				}
 				constexpr auto rasterizer = create_rasterizer();
 
+				constexpr auto create_depth_stencil()
+				{
+					VkPipelineDepthStencilStateCreateInfo d = {};
+					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+					d.depthBoundsTestEnable = VK_FALSE;
+					d.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+					d.depthTestEnable = VK_TRUE;
+					d.depthWriteEnable = VK_TRUE;
+					d.stencilTestEnable = VK_FALSE;
+					return d;
+				}
+				constexpr auto depth = create_depth_stencil();
+
 				constexpr auto create_multisample()
 				{
 					VkPipelineMultisampleStateCreateInfo m = {};
@@ -1100,28 +1118,6 @@ namespace rcq
 				}
 				constexpr auto multisample = create_multisample();
 
-				constexpr auto create_blend_att()
-				{
-					VkPipelineColorBlendAttachmentState b = {};
-
-						b.blendEnable = VK_FALSE;
-						b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-							| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-					return b;
-				}
-				constexpr auto blend_att = create_blend_att();
-
-				constexpr auto create_blend()
-				{
-					VkPipelineColorBlendStateCreateInfo b = {};
-					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-					b.attachmentCount = 1;
-					b.pAttachments = &blend_att;
-					b.logicOpEnable = VK_FALSE;
-					return b;
-				}
-				constexpr auto blend = create_blend();
-
 				struct runtime_info
 				{
 					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
@@ -1129,8 +1125,8 @@ namespace rcq
 
 						create_shaders(device,
 						{
-							"shaders/ss_dir_shadow_map_gen/vert.spv",
-							"shaders/ss_dir_shadow_map_gen/frag.spv"
+							"shaders/gta5_pass/ss_dir_shadow_map_gen/vert.spv",
+							"shaders/gta5_pass/ss_dir_shadow_map_gen/frag.spv"
 						},
 						{
 							VK_SHADER_STAGE_VERTEX_BIT,
@@ -1168,18 +1164,19 @@ namespace rcq
 						c.pInputAssemblyState = &input_assembly;
 						c.pMultisampleState = &multisample;
 						c.pRasterizationState = &rasterizer;
+						c.pDepthStencilState = &depth;
 						c.pStages = shaders.data();
 						c.stageCount = 2;
 						c.pVertexInputState = &vertex_input;
 						c.pViewportState = &viewport;
-						c.subpass = 0;
+						c.subpass = SUBPASS_SS_DIR_SHADOW_MAP_GEN;
 					}
 
 					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
 					VkViewport vp;
 					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport;
+					VkPipelineViewportStateCreateInfo viewport = {};
 				};
 				namespace dsl
 				{
@@ -1222,6 +1219,7 @@ namespace rcq
 		{
 			constexpr VkAttachmentReference ssds_out = { ATT_ALBEDO_SSDS, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 			constexpr VkAttachmentReference normal_in = { ATT_NORMAL_AO, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+
 			constexpr std::array<uint32_t, 2> pres = { ATT_F0_SSAO, ATT_POS_ROUGHNESS };
 
 			constexpr VkSubpassDescription create_subpass()
@@ -1352,19 +1350,20 @@ namespace rcq
 						c.basePipelineIndex = -1;
 						c.pInputAssemblyState = &input_assembly;
 						c.pMultisampleState = &multisample;
+						c.pColorBlendState = &blend;
 						c.pRasterizationState = &rasterizer;
 						c.pStages = shaders.data();
 						c.stageCount = 2;
 						c.pVertexInputState = &vertex_input;
 						c.pViewportState = &viewport;
-						c.subpass = 0;
+						c.subpass = SUBPASS_SS_DIR_SHADOW_MAP_BLUR;
 					}
 
 					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
 					VkViewport vp;
 					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport;
+					VkPipelineViewportStateCreateInfo viewport = {};
 				};
 				namespace dsl
 				{
@@ -1406,14 +1405,13 @@ namespace rcq
 		namespace subpass_ssao_map_gen
 		{
 			constexpr VkAttachmentReference normal_in = { ATT_NORMAL_AO, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-			constexpr VkAttachmentReference ssao_out = { ATT_SSAO_MAP, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr VkAttachmentReference depth = { ATT_SSAO_MAP, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
 			constexpr std::array<uint32_t, 3> pres = { ATT_ALBEDO_SSDS, ATT_POS_ROUGHNESS, ATT_F0_SSAO };
 
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription s = {};
-				s.colorAttachmentCount = 1;
-				s.pColorAttachments = &ssao_out;
+				s.pDepthStencilAttachment = &depth;
 				s.inputAttachmentCount = 1;
 				s.pInputAttachments = &normal_in;
 				s.preserveAttachmentCount = 3;
@@ -1460,6 +1458,19 @@ namespace rcq
 				}
 				constexpr auto rasterizer = create_rasterizer();
 
+				constexpr auto create_depth()
+				{
+					VkPipelineDepthStencilStateCreateInfo d = {};
+					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+					d.depthBoundsTestEnable = VK_FALSE;
+					d.depthCompareOp = VK_COMPARE_OP_ALWAYS;
+					d.depthTestEnable = VK_TRUE;
+					d.depthWriteEnable = VK_TRUE;
+					d.stencilTestEnable = VK_FALSE;
+					return d;
+				}
+				constexpr auto depth = create_depth();
+
 				constexpr auto create_multisample()
 				{
 					VkPipelineMultisampleStateCreateInfo m = {};
@@ -1471,27 +1482,6 @@ namespace rcq
 					return m;
 				}
 				constexpr auto multisample = create_multisample();
-
-				constexpr auto create_blend_att()
-				{
-					VkPipelineColorBlendAttachmentState b = {};
-
-					b.blendEnable = VK_FALSE;
-					b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT;
-					return b;
-				}
-				constexpr auto blend_att = create_blend_att();
-
-				constexpr auto create_blend()
-				{
-					VkPipelineColorBlendStateCreateInfo b = {};
-					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-					b.attachmentCount = 1;
-					b.pAttachments = &blend_att;
-					b.logicOpEnable = VK_FALSE;
-					return b;
-				}
-				constexpr auto blend = create_blend();
 
 				struct runtime_info
 				{
@@ -1539,18 +1529,19 @@ namespace rcq
 						c.pInputAssemblyState = &input_assembly;
 						c.pMultisampleState = &multisample;
 						c.pRasterizationState = &rasterizer;
+						c.pDepthStencilState = &depth;
 						c.pStages = shaders.data();
 						c.stageCount = 2;
 						c.pVertexInputState = &vertex_input;
 						c.pViewportState = &viewport;
-						c.subpass = 0;
+						c.subpass = SUBPASS_SSAO_MAP_GEN;
 					}
 
 					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
 					VkViewport vp;
 					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport;
+					VkPipelineViewportStateCreateInfo viewport = {};
 				};
 				namespace dsl
 				{
@@ -1716,18 +1707,19 @@ namespace rcq
 						c.pInputAssemblyState = &input_assembly;
 						c.pMultisampleState = &multisample;
 						c.pRasterizationState = &rasterizer;
+						c.pColorBlendState = &blend;
 						c.pStages = shaders.data();
 						c.stageCount = 2;
 						c.pVertexInputState = &vertex_input;
 						c.pViewportState = &viewport;
-						c.subpass = 0;
+						c.subpass = SUBPASS_SSAO_MAP_BLUR;
 					}
 
 					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
 					VkViewport vp;
 					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport;
+					VkPipelineViewportStateCreateInfo viewport = {};
 				};
 				namespace dsl
 				{
@@ -1737,7 +1729,7 @@ namespace rcq
 						binding.binding = 0;
 						binding.descriptorCount = 1;
 						binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-						binding.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+						binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 						return binding;
 					}
@@ -1761,9 +1753,9 @@ namespace rcq
 			enum REF_IN
 			{
 				REF_IN_POS_ROUGHNESS,
-				REF_IN_NORMAL_AO,
-				REF_IN_ALBEDO_SSDS,
 				REF_IN_F0_SSAO,
+				REF_IN_ALBEDO_SSDS,
+				REF_IN_NORMAL_AO,
 				REF_IN_COUNT
 			};
 
@@ -1862,6 +1854,7 @@ namespace rcq
 					b.attachmentCount = 1;
 					b.pAttachments = &blend_att;
 					b.logicOpEnable = VK_FALSE;
+					b.logicOp = VK_LOGIC_OP_COPY;
 					return b;
 				}
 				constexpr auto blend = create_blend();
@@ -1912,18 +1905,19 @@ namespace rcq
 						c.pInputAssemblyState = &input_assembly;
 						c.pMultisampleState = &multisample;
 						c.pRasterizationState = &rasterizer;
+						c.pColorBlendState = &blend;
 						c.pStages = shaders.data();
 						c.stageCount = 2;
 						c.pVertexInputState = &vertex_input;
 						c.pViewportState = &viewport;
-						c.subpass = 0;
+						c.subpass = SUBPASS_IMAGE_ASSEMBLER;
 					}
 
 					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
 					VkViewport vp;
 					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport;
+					VkPipelineViewportStateCreateInfo viewport = {};
 				};
 				namespace dsl
 				{
@@ -1933,18 +1927,18 @@ namespace rcq
 
 						for (uint32_t i = 0; i < 4; ++i)
 						{
-							bindings[i].binding = 0;
+							bindings[i].binding = i;
 							bindings[i].descriptorCount = 1;
 							bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 							bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 						}
 
-						bindings[4].binding = 6;
+						bindings[4].binding =4;
 						bindings[4].descriptorCount = 1;
 						bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 						bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-						bindings[5].binding = 6;
+						bindings[5].binding = 5;
 						bindings[5].descriptorCount = 1;
 						bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 						bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -1971,56 +1965,56 @@ namespace rcq
 			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
 
 			atts[ATT_POS_ROUGHNESS].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_POS_ROUGHNESS].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_POS_ROUGHNESS].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			atts[ATT_POS_ROUGHNESS].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_POS_ROUGHNESS].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			atts[ATT_POS_ROUGHNESS].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			atts[ATT_POS_ROUGHNESS].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_F0_SSAO].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_F0_SSAO].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_F0_SSAO].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			atts[ATT_F0_SSAO].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_F0_SSAO].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			atts[ATT_F0_SSAO].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			atts[ATT_F0_SSAO].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_ALBEDO_SSDS].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_ALBEDO_SSDS].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_ALBEDO_SSDS].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			atts[ATT_ALBEDO_SSDS].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_ALBEDO_SSDS].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			atts[ATT_ALBEDO_SSDS].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			atts[ATT_ALBEDO_SSDS].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_NORMAL_AO].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_NORMAL_AO].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_NORMAL_AO].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 			atts[ATT_NORMAL_AO].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_NORMAL_AO].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			atts[ATT_NORMAL_AO].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			atts[ATT_NORMAL_AO].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_DEPTHSTENCIL].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_DEPTHSTENCIL].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_DEPTHSTENCIL].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 			atts[ATT_DEPTHSTENCIL].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 			atts[ATT_DEPTHSTENCIL].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			atts[ATT_DEPTHSTENCIL].format = VK_FORMAT_D32_SFLOAT_S8_UINT;
 			atts[ATT_DEPTHSTENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_SS_DIR_SHADOW_MAP].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_SS_DIR_SHADOW_MAP].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_SS_DIR_SHADOW_MAP].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 			atts[ATT_SS_DIR_SHADOW_MAP].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_SS_DIR_SHADOW_MAP].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			atts[ATT_SS_DIR_SHADOW_MAP].format = VK_FORMAT_D32_SFLOAT;
 			atts[ATT_SS_DIR_SHADOW_MAP].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_SSAO_MAP].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_SSAO_MAP].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_SSAO_MAP].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 			atts[ATT_SSAO_MAP].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_SSAO_MAP].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			atts[ATT_SSAO_MAP].format = VK_FORMAT_D32_SFLOAT;
 			atts[ATT_SSAO_MAP].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_PREIMAGE].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_PREIMAGE].finalLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_PREIMAGE].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			atts[ATT_PREIMAGE].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_PREIMAGE].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			atts[ATT_PREIMAGE].format = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -2054,33 +2048,54 @@ namespace rcq
 			d[DEP_GBUFFER_GEN_SSAO_GEN].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 			d[DEP_GBUFFER_GEN_SSAO_GEN].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
 
-			d[DEP_SSDS_GEN_SSDS_BLUR].srcSubpass = SUBPASS_SS_DIR_SHADOW_MAP_GEN;
-			d[DEP_SSDS_GEN_SSDS_BLUR].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			d[DEP_SSDS_GEN_SSDS_BLUR].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			d[DEP_SSDS_GEN_SSDS_BLUR].dstSubpass = SUBPASS_SS_DIR_SHADOW_MAP_BLUR;
-			d[DEP_SSDS_GEN_SSDS_BLUR].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-			d[DEP_SSDS_GEN_SSDS_BLUR].dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+			d[DEP_SSDS_GEN_SELF].srcSubpass = SUBPASS_SS_DIR_SHADOW_MAP_GEN;
+			d[DEP_SSDS_GEN_SELF].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			d[DEP_SSDS_GEN_SELF].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			d[DEP_SSDS_GEN_SELF].dstSubpass = SUBPASS_SS_DIR_SHADOW_MAP_GEN;
+			d[DEP_SSDS_GEN_SELF].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_SSDS_GEN_SELF].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-			d[DEP_SSAO_GEN_SSAO_BLUR].srcSubpass = SUBPASS_SSAO_MAP_GEN;
-			d[DEP_SSAO_GEN_SSAO_BLUR].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			d[DEP_SSAO_GEN_SSAO_BLUR].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			d[DEP_SSAO_GEN_SSAO_BLUR].dstSubpass = SUBPASS_SSAO_MAP_BLUR;
-			d[DEP_SSAO_GEN_SSAO_BLUR].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-			d[DEP_SSAO_GEN_SSAO_BLUR].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			d[DEP_SSAO_GEN_SELF].srcSubpass = SUBPASS_SSAO_MAP_GEN;
+			d[DEP_SSAO_GEN_SELF].srcStageMask = VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			d[DEP_SSAO_GEN_SELF].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			d[DEP_SSAO_GEN_SELF].dstSubpass = SUBPASS_SSAO_MAP_GEN;
+			d[DEP_SSAO_GEN_SELF].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_SSAO_GEN_SELF].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].srcSubpass = SUBPASS_SS_DIR_SHADOW_MAP_BLUR;
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].dstSubpass = SUBPASS_IMAGE_ASSEMBLER;
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
 
 			d[DEP_SSAO_BLUR_IMAGE_ASSEMBLER].srcSubpass = SUBPASS_SSAO_MAP_BLUR;
 			d[DEP_SSAO_BLUR_IMAGE_ASSEMBLER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			d[DEP_SSAO_BLUR_IMAGE_ASSEMBLER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			d[DEP_SSAO_BLUR_IMAGE_ASSEMBLER].dstSubpass = SUBPASS_IMAGE_ASSEMBLER;
 			d[DEP_SSAO_BLUR_IMAGE_ASSEMBLER].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-			d[DEP_SSAO_BLUR_IMAGE_ASSEMBLER].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			d[DEP_SSAO_BLUR_IMAGE_ASSEMBLER].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+
+			d[DEP_GBUFFER_GEN_IMAGE_ASSEMBLER].srcSubpass = SUBPASS_GBUFFER_GEN;
+			d[DEP_GBUFFER_GEN_IMAGE_ASSEMBLER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_GBUFFER_GEN_IMAGE_ASSEMBLER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			d[DEP_GBUFFER_GEN_IMAGE_ASSEMBLER].dstSubpass = SUBPASS_IMAGE_ASSEMBLER;
+			d[DEP_GBUFFER_GEN_IMAGE_ASSEMBLER].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_GBUFFER_GEN_IMAGE_ASSEMBLER].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+
+			d[DEP_GBUFFER_GEN_SSAO_BLUR].srcSubpass = SUBPASS_GBUFFER_GEN;
+			d[DEP_GBUFFER_GEN_SSAO_BLUR].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_GBUFFER_GEN_SSAO_BLUR].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			d[DEP_GBUFFER_GEN_SSAO_BLUR].dstSubpass = SUBPASS_SSAO_MAP_BLUR;
+			d[DEP_GBUFFER_GEN_SSAO_BLUR].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_GBUFFER_GEN_SSAO_BLUR].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+
+			d[DEP_GBUFFER_GEN_SSDS_BLUR].srcSubpass = SUBPASS_GBUFFER_GEN;
+			d[DEP_GBUFFER_GEN_SSDS_BLUR].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_GBUFFER_GEN_SSDS_BLUR].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			d[DEP_GBUFFER_GEN_SSDS_BLUR].dstSubpass = SUBPASS_SS_DIR_SHADOW_MAP_BLUR;
+			d[DEP_GBUFFER_GEN_SSDS_BLUR].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_GBUFFER_GEN_SSDS_BLUR].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
 
 			/*d[DEP_END].srcSubpass = SUBPASS_IMAGE_ASSEMBLER;
 			d[DEP_END].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -2226,8 +2241,8 @@ namespace rcq
 
 						create_shaders(device,
 						{
-							"shaders/gta5_pass/ssao_blur/vert.spv",
-							"shaders/gta5_pass/ssao_blur/frag.spv"
+							"shaders/gta5_pass/postprocessing/vert.spv",
+							"shaders/gta5_pass/postprocessing/frag.spv"
 						},
 						{
 							VK_SHADER_STAGE_VERTEX_BIT,
@@ -2265,6 +2280,7 @@ namespace rcq
 						c.pInputAssemblyState = &input_assembly;
 						c.pMultisampleState = &multisample;
 						c.pRasterizationState = &rasterizer;
+						c.pColorBlendState = &blend;
 						c.pStages = shaders.data();
 						c.stageCount = 2;
 						c.pVertexInputState = &vertex_input;
@@ -2273,10 +2289,10 @@ namespace rcq
 					}
 
 					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
 					VkViewport vp;
 					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport;
+					VkPipelineViewportStateCreateInfo viewport = {};
 				};
 				namespace dsl
 				{
@@ -2286,7 +2302,7 @@ namespace rcq
 						binding.binding = 0;
 						binding.descriptorCount = 1;
 						binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-						binding.stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+						binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 						return binding;
 					}
@@ -2313,7 +2329,7 @@ namespace rcq
 			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
 			atts[ATT_SWAP_CHAIN_IMAGE].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			atts[ATT_SWAP_CHAIN_IMAGE].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-			atts[ATT_SWAP_CHAIN_IMAGE].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_SWAP_CHAIN_IMAGE].format = VK_FORMAT_B8G8R8A8_UNORM;
 			atts[ATT_SWAP_CHAIN_IMAGE].samples = VK_SAMPLE_COUNT_1_BIT;
 			atts[ATT_SWAP_CHAIN_IMAGE].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_SWAP_CHAIN_IMAGE].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -2361,11 +2377,11 @@ namespace rcq
 		constexpr auto create_sizes()
 		{
 			std::array<VkDescriptorPoolSize, 3> sizes = {};
-			sizes[0].descriptorCount = 0;// ub_count;
+			sizes[0].descriptorCount = 6;// ub_count;
 			sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			sizes[1].descriptorCount = 0;// cis_count;
+			sizes[1].descriptorCount = 7;// cis_count;
 			sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			sizes[2].descriptorCount = 0;// ia_count;
+			sizes[2].descriptorCount = 7;// ia_count;
 			sizes[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 			return sizes;
 		}

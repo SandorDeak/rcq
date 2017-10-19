@@ -133,7 +133,7 @@ namespace rcq
 			{
 				vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, gp);
 				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pl,
-					0, 2, &ds, 0, nullptr);
+					0, 1, &ds, 0, nullptr);
 			}
 		};
 

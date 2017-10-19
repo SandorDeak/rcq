@@ -115,7 +115,8 @@ void rcq::core::loop()
 				/*record_and_render(package->view, package->proj_info, record_mask);
 				record_mask.reset();*/
 				m_render_settings = package->settings;
-				gta5_pass::instance()->render(m_render_settings, record_mask);			
+				gta5_pass::instance()->render(m_render_settings, record_mask);
+				record_mask.reset();
 			}
 
 			if (package->confirm_destroy)
@@ -149,13 +150,13 @@ void rcq::core::build_renderables_impl(const std::vector<build_renderable_info>&
 
 		r.mat_light_ds = res.ds;
 
-		if constexpr (rend_type == RESOURCE_TYPE_LIGHT_OMNI)
+		if constexpr (rend_type == RENDERABLE_TYPE_LIGHT_OMNI)
 		{
 			r.shadow_map = res.shadow_map;
 			r.shadow_map_fb = res.shadow_map_fb;
 		}
 
-		if constexpr (rend_type  == RESOURCE_TYPE_MAT_OPAQUE)
+		if constexpr (rend_type  == RENDERABLE_TYPE_MAT_OPAQUE)
 		{
 			r.m = resource_manager::instance()->get_res<RESOURCE_TYPE_MESH>(
 				std::get<BUILD_RENDERABLE_INFO_MESH_ID>(info));

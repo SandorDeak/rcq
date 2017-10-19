@@ -34,6 +34,6 @@ void main()
 	gl_Position=data.proj*pos0;
 	
 	pos_out=pos0.xyz;
-	tex_coord_out=tex_coord_in*tr.tex_scale;	
+	tex_coord_out=tex_coord_in*tr.tex_scale;
 	TBN_out=mat3(model_to_view)*mat3(tangent_in, bitangent_in, normal_in);
 }
