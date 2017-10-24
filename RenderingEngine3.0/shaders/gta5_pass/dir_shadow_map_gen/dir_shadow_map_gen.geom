@@ -1,7 +1,7 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const uint FRUSTUM_SPLIT_COUNT=2;
+const uint FRUSTUM_SPLIT_COUNT=4;
 
 layout (set=0, binding=0) uniform dir_shadow_map_gen_data
 {

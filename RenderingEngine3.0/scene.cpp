@@ -14,6 +14,7 @@ scene::scene(GLFWwindow* window, const glm::vec2& window_size) : m_window(window
 scene::~scene()
 {
 	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKYBOX>(m_skybox.id);
+	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST);
 
 	for (auto& m : m_meshes)
 		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_MESH>(m.id);
@@ -119,6 +120,9 @@ void scene::build()
 	m_mats.push_back(mat);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
+	//sky res
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST, "textures/sky/try.sky", 32, 32, 32);
+
 	//create transforms
 	transform tr;
 	//buddha
@@ -154,8 +158,8 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//warehouse
-	tr.data.model = glm::translate(glm::mat4(1.f), { 0.f, 1.f, 0.f });
-	tr.data.scale = glm::vec3(6.f, 2.f, 6.f);
+	tr.data.model = glm::translate(glm::mat4(1.f), { -30.f, 1.f, 0.f });
+	tr.data.scale = glm::vec3(2.f, 2.f, 2.f);
 	tr.id = ENTITY_WAREHOUSE;
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
@@ -273,6 +277,12 @@ void scene::build()
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
 		e.m_life_exp);
 
+	//sky
+	e.m_material_light_id = SKY_FIRST;
+	e.m_id = ENTITY_SKY;
+	e.m_rend_type = rcq::RENDERABLE_TYPE_SKY;
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, 0, 0, e.m_material_light_id, e.m_rend_type, rcq::LIFE_EXPECTANCY_LONG);
+	m_entities.push_back(e);
 
 	//dispatch
 	rcq::engine::instance()->cmd_dispatch();
@@ -280,16 +290,16 @@ void scene::build()
 	//set camera
 	m_camera.pos = glm::vec3(0.f);
 	m_camera.look_dir = glm::normalize(glm::vec3(-2.f));
-	m_camera.proj = glm::perspective(glm::radians(45.f), m_window_size.x / m_window_size.y, 0.1f, 1000.f);
+	m_camera.proj = glm::perspective(glm::radians(45.f), m_window_size.x / m_window_size.y, 0.1f, 500.f);
 	m_camera.proj[1][1] *= (-1);
 	m_camera.view = glm::lookAt(glm::vec3(2.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
 	m_camera.data.pos = glm::vec3(2.f);
 	m_camera.data.proj_x_view = m_camera.proj*m_camera.view;
 
-	m_render_settings.ambient_irradiance = glm::vec3(0.5f);
-	m_render_settings.far = 1000.f;
-	m_render_settings.irradiance = glm::vec3(8.f);
-	m_render_settings.light_dir = glm::normalize(glm::vec3(0.f, -1.f, 0.f));
+	m_render_settings.ambient_irradiance = glm::vec3(1.f);
+	m_render_settings.far = 500.f;
+	m_render_settings.irradiance = glm::vec3(5.f);
+	m_render_settings.light_dir = glm::normalize(glm::vec3(0.1f, -1.f, 0.f));
 	m_render_settings.near = 0.1f;
 	m_render_settings.pos = m_camera.pos;
 	m_render_settings.proj = m_camera.proj;
@@ -308,13 +318,13 @@ void scene::update(float dt)
 		m_trs[i].data.model = glm::rotate(m_trs[i].data.model, glm::radians(90.f*dt), glm::vec3(0.f, 1.f, 0.f));
 		rcq::engine::instance()->cmd_update_transform(m_trs[i].id, m_trs[i].data);
 	}
-	update_camera(dt);
+	update_settings(dt);
 
 	rcq::engine::instance()->cmd_render(m_render_settings);
 	rcq::engine::instance()->cmd_dispatch();
 }
 
-void scene::update_camera(float dt)
+void scene::update_settings(float dt)
 {
 	glm::vec3 move(0.f);
 	float h_rot = 0.f;
@@ -365,4 +375,21 @@ void scene::update_camera(float dt)
 
 	m_render_settings.pos = m_camera.pos;
 	m_render_settings.view = m_camera.view;
+
+	//light 
+	float theta = 0.f;
+	float phi = 0.f;
+
+	if (glfwGetKey(m_window, GLFW_KEY_I))
+		phi += 1.f;
+	if (glfwGetKey(m_window, GLFW_KEY_K))
+		phi -= 1.f;
+	if (glfwGetKey(m_window, GLFW_KEY_J))
+		theta += 1.f;
+	if (glfwGetKey(m_window, GLFW_KEY_L))
+		theta -= 1.f;
+
+	glm::mat4 rot = glm::rotate(dt*theta, glm::vec3(0.f, 1.f, 0.f));
+	rot = glm::rotate(rot, dt*phi, glm::vec3(1.f, 0.f, 0.f));
+	m_render_settings.light_dir = static_cast<glm::mat3>(rot)*m_render_settings.light_dir;
 }

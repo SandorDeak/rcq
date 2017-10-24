@@ -15,7 +15,7 @@ public:
 	void update(float dt);
 private:
 	void build();
-	void update_camera(float dt);
+	void update_settings(float dt);
 
 	glm::vec2 m_window_size;
 
@@ -26,6 +26,7 @@ private:
 	std::vector<mesh> m_meshes;
 	std::vector<transform> m_trs;
 	std::vector<light_omni> m_light_omni;
+	rcq::unique_id m_sky;
 	skybox m_skybox;
 
 	rcq::render_settings m_render_settings;

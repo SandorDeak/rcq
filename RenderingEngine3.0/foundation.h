@@ -78,6 +78,7 @@ namespace rcq
 	{
 		RENDERABLE_TYPE_MAT_OPAQUE,
 		RENDERABLE_TYPE_MAT_EM,
+		RENDERABLE_TYPE_SKY,
 		RENDERABLE_TYPE_LIGHT_OMNI,
 		RENDERABLE_TYPE_SKYBOX,
 		RENDERABLE_TYPE_COUNT
@@ -93,6 +94,7 @@ namespace rcq
 	{
 		RESOURCE_TYPE_MAT_OPAQUE,
 		RESOURCE_TYPE_MAT_EM,
+		RESOURCE_TYPE_SKY,
 		RESOURCE_TYPE_LIGHT_OMNI,
 		RESOURCE_TYPE_SKYBOX,
 		RESOURCE_TYPE_MESH,
@@ -112,6 +114,7 @@ namespace rcq
 	{
 		DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE,
 		DESCRIPTOR_SET_LAYOUT_TYPE_MAT_EM,
+		DESCRIPTOR_SET_LAYOUT_TYPE_SKY,
 		DESCRIPTOR_SET_LAYOUT_TYPE_TR,
 		DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_OMNI,
 		DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX,
@@ -144,6 +147,16 @@ namespace rcq
 	{
 		BUILD_MAT_EM_INFO_ID,
 		BUILD_MAT_EM_INFO_STRING
+	};
+
+	typedef std::tuple<unique_id, std::string, size_t, size_t, size_t> build_sky_info;
+	enum
+	{
+		BUILD_SKY_INFO_ID,
+		BUILD_SKY_INFO_FILENAME,
+		BUILD_SKY_INFO_WIDTH,
+		BUILD_SKY_INFO_HEIGHT,
+		BUILD_SKY_INFO_DEPTH
 	};
 
 	typedef std::tuple<unique_id, std::string, bool> build_mesh_info;
@@ -299,6 +312,28 @@ namespace rcq
 		return ((raw_offset+alignment-1)/alignment)*alignment;
 	}
 
+	template<typename T>
+	constexpr T componentwise_max(const T& v, const T& w)
+	{
+		T ret = {};
+		for (int i = 0; i < v.length(); ++i)
+		{
+			ret[i] = v[i] < w[i] ? w[i] : v[i];
+		}
+		return ret;
+	}
+
+	template<typename T>
+	constexpr T componentwise_min(const T& v, const T& w)
+	{
+		T ret = {};
+		for (int i = 0; i < v.length(); ++i)
+		{
+			ret[i] = v[i] < w[i] ? v[i] : w[i];
+		}
+		return ret;
+	}
+
 	extern const VkAllocationCallbacks* host_memory_manager;
 	extern const uint32_t OMNI_SHADOW_MAP_SIZE;
 
@@ -370,6 +405,13 @@ namespace rcq
 	struct material_em
 	{
 		VkDescriptorSet ds;
+	};
+
+	struct sky
+	{
+		VkDescriptorSet ds;
+		texture tex;
+		uint32_t pool_index;
 	};
 
 	struct mesh
@@ -468,6 +510,7 @@ namespace rcq
 	typedef std::tuple<
 		std::vector<build_mat_opaque_info>,
 		std::vector<build_mat_em_info>,
+		std::vector<build_sky_info>,
 		std::vector<build_light_omni_info>,
 		std::vector<build_skybox_info>,
 		std::vector<build_mesh_info>, 
@@ -492,6 +535,7 @@ namespace rcq
 
 	typedef std::packaged_task<material_opaque()> build_mat_opaque_task;
 	typedef std::packaged_task<material_em()> build_mat_em_task;
+	typedef std::packaged_task<sky()> build_sky_task;
 	typedef std::packaged_task<light_omni()> build_light_omni_task;
 	typedef std::packaged_task<skybox()> build_skybox_task;
 	typedef std::packaged_task<mesh()> build_mesh_task;
@@ -501,6 +545,7 @@ namespace rcq
 	typedef std::tuple<
 		std::vector<build_mat_opaque_task>,
 		std::vector<build_mat_em_task>,
+		std::vector<build_sky_task>,
 		std::vector<build_light_omni_task>,
 		std::vector<build_skybox_task>,
 		std::vector<build_mesh_task>,
@@ -514,6 +559,7 @@ namespace rcq
 
 	template<> struct resource_typename<RESOURCE_TYPE_MAT_OPAQUE> { typedef material_opaque type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MAT_EM> { typedef material_em type; };
+	template<> struct resource_typename<RESOURCE_TYPE_SKY> { typedef sky type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MESH> { typedef mesh type; };
 	template<> struct resource_typename<RESOURCE_TYPE_TR>{ typedef transform type; };
 	template<> struct resource_typename<RESOURCE_TYPE_MEMORY> { typedef memory type; };

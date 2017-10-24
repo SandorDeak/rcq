@@ -27,6 +27,7 @@ namespace rcq
 			RES_DATA_DIR_SHADOW_MAP_GEN_DATA,
 			RES_DATA_SS_DIR_SHADOW_MAP_GEN_DATA,
 			RES_DATA_IMAGE_ASSEMBLER_DATA,
+			RES_DATA_SKY_DRAWER_DATA,
 			RES_DATA_COUNT
 		};
 		enum RES_IMAGE
@@ -82,13 +83,15 @@ namespace rcq
 
 		static const uint32_t ENVIRONMENT_MAP_SIZE = 128;
 		static const uint32_t DIR_SHADOW_MAP_SIZE = 1024;
-		static const uint32_t FRUSTUM_SPLIT_COUNT = 2;
+		static const uint32_t FRUSTUM_SPLIT_COUNT = 4;
 
 		enum RENDER_PASS
 		{
 			RENDER_PASS_ENVIRONMENT_MAP_GEN,
 			RENDER_PASS_DIR_SHADOW_MAP_GEN,
-			RENDER_PASS_FRAME_IMAGE_GEN,
+			RENDER_PASS_GBUFFER_ASSEMBLER,
+			RENDER_PASS_SSAO_MAP_GEN,
+			RENDER_PASS_PREIMAGE_ASSEMBLER,
 			RENDER_PASS_POSTPROCESSING,
 			RENDER_PASS_COUNT
 		};
@@ -106,6 +109,7 @@ namespace rcq
 			GP_SSAO_GEN,
 			GP_SSAO_BLUR,
 			GP_IMAGE_ASSEMBLER,
+			GP_SKY_DRAWER,
 
 			GP_POSTPROCESSING,
 			GP_COUNT
@@ -169,6 +173,7 @@ namespace rcq
 		struct ss_dir_shadow_map_gen_data
 		{
 			glm::mat4 projs[FRUSTUM_SPLIT_COUNT];
+			glm::vec3 light_dir;
 			float near;
 			float far;
 		};
@@ -181,12 +186,22 @@ namespace rcq
 			glm::vec3 ambient_irradiance;
 			uint32_t padding2;
 		};
+		struct sky_drawer_data
+		{
+			glm::mat4 proj_x_view_at_origin;
+			glm::vec3 light_dir;
+			float height;
+			glm::vec3 irradiance;
+			uint32_t padding0;
+		};
 
 		struct framebuffers
 		{
-			VkFramebuffer environment_map_gen_fb;
-			VkFramebuffer dir_shadow_map_gen_fb;
-			VkFramebuffer frame_image_gen;
+			VkFramebuffer environment_map_gen;
+			VkFramebuffer dir_shadow_map_gen;
+			VkFramebuffer gbuffer_assembler;
+			VkFramebuffer ssao_map_gen;
+			VkFramebuffer preimage_assembler;
 			std::vector<VkFramebuffer> postprocessing;
 		};
 
@@ -199,7 +214,8 @@ namespace rcq
 				gbuffer_gen_data*,
 				dir_shadow_map_gen_data*,
 				ss_dir_shadow_map_gen_data*,
-				image_assembler_data*
+				image_assembler_data*,
+				sky_drawer_data*
 			> data;
 
 			VkBuffer buffer;
@@ -216,7 +232,8 @@ namespace rcq
 					sizeof(gbuffer_gen_data),
 					sizeof(dir_shadow_map_gen_data),
 					sizeof(ss_dir_shadow_map_gen_data),
-					sizeof(image_assembler_data) };
+					sizeof(image_assembler_data),
+					sizeof(sky_drawer_data) };
 			}
 
 			void calcoffset_and_size(size_t alignment)

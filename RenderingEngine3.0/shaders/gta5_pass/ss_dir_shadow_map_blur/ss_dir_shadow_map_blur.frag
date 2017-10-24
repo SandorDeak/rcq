@@ -8,14 +8,14 @@ layout(set=0, binding=1) uniform sampler2D shadow_tex;
 
 
 
-layout(input_attachment_index=0, set=0, binding=2) uniform subpassInput normal_in;
+layout(set=0, binding=2) uniform sampler2D normal_in;
 
 layout(location=0) out vec4 shadow_out;
 
 
 void main()
 {
-	vec3 n=subpassLoad(normal_in).xyz;
+	vec3 n=texture(normal_in, gl_FragCoord.xy).xyz;
 	vec3 p0=texture(pos_tex, gl_FragCoord.xy).xyz;
 	float bias=0.2f;
 	uint blur_count=0;
@@ -35,5 +35,7 @@ void main()
 	}
 	
 	shadow_out.w=sum/float(blur_count);
+	
+	//shadow_out.w=texture(shadow_tex, gl_FragCoord.xy).x;
 	
 }

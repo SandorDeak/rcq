@@ -73,6 +73,7 @@ namespace rcq
 		std::tuple<
 			std::map<unique_id, material_opaque>,
 			std::map<unique_id, material_em>,
+			std::map<unique_id, sky>,
 			std::map<unique_id, light_omni>,
 			std::map<unique_id, skybox>,
 			std::map<unique_id, mesh>,
@@ -84,6 +85,7 @@ namespace rcq
 		std::tuple<
 			std::map<unique_id, std::future<material_opaque>>,
 			std::map<unique_id, std::future<material_em>>,
+			std::map<unique_id, std::future<sky>>,
 			std::map<unique_id, std::future<light_omni>>,
 			std::map<unique_id, std::future<skybox>>,
 			std::map<unique_id, std::future<mesh>>,
@@ -157,6 +159,10 @@ namespace rcq
 		typename std::enable_if_t<std::is_same_v<material_em, typename resource_typename<res_type>::type>, material_em>
 			build(const std::string& x) { return material_em(); }
 
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<sky, typename resource_typename<res_type>::type>, sky>
+			build(const std::string& filename, size_t width, size_t height, size_t depth);
+
 
 		texture load_texture(const std::string& filename);
 
@@ -171,6 +177,7 @@ namespace rcq
 		std::tuple<
 			std::vector<material_opaque>,
 			std::vector<material_em>,
+			std::vector<sky>,
 			std::vector<light_omni>,
 			std::vector<skybox>,
 			std::vector<mesh>,
@@ -202,6 +209,7 @@ namespace rcq
 		void destroy(memory&& _memory);
 		void destroy(skybox&& _sb);
 		void destroy(material_em&& _mat) {}
+		void destroy(sky&& _sky);
 
 	};
 

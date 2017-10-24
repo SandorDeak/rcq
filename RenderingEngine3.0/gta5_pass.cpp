@@ -34,9 +34,11 @@ gta5_pass::~gta5_pass()
 	for (auto s : m_present_ready_ss)
 		vkDestroySemaphore(m_base.device, s, host_memory_manager);
 
-	vkDestroyFramebuffer(m_base.device, m_fbs.environment_map_gen_fb, host_memory_manager);
-	vkDestroyFramebuffer(m_base.device, m_fbs.dir_shadow_map_gen_fb, host_memory_manager);
-	vkDestroyFramebuffer(m_base.device, m_fbs.frame_image_gen, host_memory_manager);
+	vkDestroyFramebuffer(m_base.device, m_fbs.environment_map_gen, host_memory_manager);
+	vkDestroyFramebuffer(m_base.device, m_fbs.dir_shadow_map_gen, host_memory_manager);
+	vkDestroyFramebuffer(m_base.device, m_fbs.gbuffer_assembler, host_memory_manager);
+	vkDestroyFramebuffer(m_base.device, m_fbs.ssao_map_gen, host_memory_manager);
+	vkDestroyFramebuffer(m_base.device, m_fbs.preimage_assembler, host_memory_manager);
 	for(auto fb : m_fbs.postprocessing)
 		vkDestroyFramebuffer(m_base.device, fb, host_memory_manager);
 
@@ -102,9 +104,17 @@ void gta5_pass::create_render_passes()
 		throw std::runtime_error("failed to create dir shadow map render pass!");
 
 
-	if (vkCreateRenderPass(m_base.device, &render_pass_frame_image_gen::create_info,
-		host_memory_manager, &m_passes[RENDER_PASS_FRAME_IMAGE_GEN]) != VK_SUCCESS)
-		throw std::runtime_error("failed to create frame image gen render pass!");
+	if (vkCreateRenderPass(m_base.device, &render_pass_gbuffer_assembler::create_info,
+		host_memory_manager, &m_passes[RENDER_PASS_GBUFFER_ASSEMBLER]) != VK_SUCCESS)
+		throw std::runtime_error("failed to create render pass!");
+
+	if (vkCreateRenderPass(m_base.device, &render_pass_ssao_gen::create_info,
+		host_memory_manager, &m_passes[RENDER_PASS_SSAO_MAP_GEN]) != VK_SUCCESS)
+		throw std::runtime_error("failed to create render pass!");
+
+	if (vkCreateRenderPass(m_base.device, &render_pass_preimage_assembler::create_info,
+		host_memory_manager, &m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER]) != VK_SUCCESS)
+		throw std::runtime_error("failed to create render pass!");
 
 	if (vkCreateRenderPass(m_base.device, &render_pass_postprocessing::create_info,
 		host_memory_manager, &m_passes[RENDER_PASS_POSTPROCESSING]) != VK_SUCCESS)
@@ -127,32 +137,36 @@ void gta5_pass::create_graphics_pipelines()
 	r2.fill_create_info(create_infos[GP_DIR_SHADOW_MAP_GEN]);
 	create_infos[GP_DIR_SHADOW_MAP_GEN].renderPass = m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN];
 
-	render_pass_frame_image_gen::subpass_gbuffer_gen::pipeline::runtime_info r3(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline::runtime_info r3(m_base.device, m_base.swap_chain_image_extent);
 	r3.fill_create_info(create_infos[GP_GBUFFER_GEN]);
-	create_infos[GP_GBUFFER_GEN].renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
+	create_infos[GP_GBUFFER_GEN].renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
-	render_pass_frame_image_gen::subpass_ss_dir_shadow_map_gen::pipeline::runtime_info r4(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_gbuffer_assembler::subpass_ss_dir_shadow_map_gen::pipeline::runtime_info r4(m_base.device, m_base.swap_chain_image_extent);
 	r4.fill_create_info(create_infos[GP_SS_DIR_SHADOW_MAP_GEN]);
-	create_infos[GP_SS_DIR_SHADOW_MAP_GEN].renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
+	create_infos[GP_SS_DIR_SHADOW_MAP_GEN].renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
-	render_pass_frame_image_gen::subpass_ss_dir_shadow_map_blur::pipeline::runtime_info r5(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_preimage_assembler::subpass_ss_dir_shadow_map_blur::pipeline::runtime_info r5(m_base.device, m_base.swap_chain_image_extent);
 	r5.fill_create_info(create_infos[GP_SS_DIR_SHADOW_MAP_BLUR]);
-	create_infos[GP_SS_DIR_SHADOW_MAP_BLUR].renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
+	create_infos[GP_SS_DIR_SHADOW_MAP_BLUR].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
 
-	render_pass_frame_image_gen::subpass_ssao_map_gen::pipeline::runtime_info r6(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_ssao_gen::subpass_unique::pipeline::runtime_info r6(m_base.device, m_base.swap_chain_image_extent);
 	r6.fill_create_info(create_infos[GP_SSAO_GEN]);
-	create_infos[GP_SSAO_GEN].renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
+	create_infos[GP_SSAO_GEN].renderPass = m_passes[RENDER_PASS_SSAO_MAP_GEN];
 
-	render_pass_frame_image_gen::subpass_ssao_map_blur::pipeline::runtime_info r7(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_preimage_assembler::subpass_ssao_map_blur::pipeline::runtime_info r7(m_base.device, m_base.swap_chain_image_extent);
 	r7.fill_create_info(create_infos[GP_SSAO_BLUR]);
-	create_infos[GP_SSAO_BLUR].renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
+	create_infos[GP_SSAO_BLUR].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
 
-	render_pass_frame_image_gen::subpass_image_assembler::pipeline::runtime_info r8(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_preimage_assembler::subpass_image_assembler::pipeline::runtime_info r8(m_base.device, m_base.swap_chain_image_extent);
 	r8.fill_create_info(create_infos[GP_IMAGE_ASSEMBLER]);
-	create_infos[GP_IMAGE_ASSEMBLER].renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
+	create_infos[GP_IMAGE_ASSEMBLER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
 
-	render_pass_postprocessing::subpass_bypass::pipeline::runtime_info r9(m_base.device, m_base.swap_chain_image_extent);
-	r9.fill_create_info(create_infos[GP_POSTPROCESSING]);
+	render_pass_preimage_assembler::subpass_sky_drawer::pipeline::runtime_info r9(m_base.device, m_base.swap_chain_image_extent);
+	r9.fill_create_info(create_infos[GP_SKY_DRAWER]);
+	create_infos[GP_SKY_DRAWER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
+
+	render_pass_postprocessing::subpass_bypass::pipeline::runtime_info r10(m_base.device, m_base.swap_chain_image_extent);
+	r10.fill_create_info(create_infos[GP_POSTPROCESSING]);
 	create_infos[GP_POSTPROCESSING].renderPass = m_passes[RENDER_PASS_POSTPROCESSING];
 
 	//create layouts
@@ -176,6 +190,11 @@ void gta5_pass::create_graphics_pipelines()
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR),
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE)
+	});
+
+	m_gps[GP_SKY_DRAWER].create_layout(m_base.device,
+	{
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
 	});
 
 	m_gps[GP_SS_DIR_SHADOW_MAP_GEN].create_layout(m_base.device, {});
@@ -219,26 +238,29 @@ void gta5_pass::create_dsls_and_allocate_dss()
 
 
 	m_gps[GP_GBUFFER_GEN].create_dsl(m_base.device,
-		render_pass_frame_image_gen::subpass_gbuffer_gen::pipeline::dsl::create_info);
+		render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline::dsl::create_info);
 
 	m_gps[GP_SS_DIR_SHADOW_MAP_GEN].create_dsl(m_base.device,
-		render_pass_frame_image_gen::subpass_ss_dir_shadow_map_gen::pipeline::dsl::create_info);
+		render_pass_gbuffer_assembler::subpass_ss_dir_shadow_map_gen::pipeline::dsl::create_info);
 
 
 	m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].create_dsl(m_base.device,
-		render_pass_frame_image_gen::subpass_ss_dir_shadow_map_blur::pipeline::dsl::create_info);
+		render_pass_preimage_assembler::subpass_ss_dir_shadow_map_blur::pipeline::dsl::create_info);
 
 	m_gps[GP_SSAO_GEN].create_dsl(m_base.device,
-		render_pass_frame_image_gen::subpass_ssao_map_gen::pipeline::dsl::create_info);
+		render_pass_ssao_gen::subpass_unique::pipeline::dsl::create_info);
 
 	m_gps[GP_SSAO_BLUR].create_dsl(m_base.device,
-		render_pass_frame_image_gen::subpass_ssao_map_blur::pipeline::dsl::create_info);
+		render_pass_preimage_assembler::subpass_ssao_map_blur::pipeline::dsl::create_info);
 
 	m_gps[GP_IMAGE_ASSEMBLER].create_dsl(m_base.device,
-		render_pass_frame_image_gen::subpass_image_assembler::pipeline::dsl::create_info);
+		render_pass_preimage_assembler::subpass_image_assembler::pipeline::dsl::create_info);
 
 	m_gps[GP_POSTPROCESSING].create_dsl(m_base.device,
 		render_pass_postprocessing::subpass_bypass::pipeline::dsl::create_info);
+
+	m_gps[GP_SKY_DRAWER].create_dsl(m_base.device,
+		render_pass_preimage_assembler::subpass_sky_drawer::pipeline::dsl::create_info);
 
 	//create descriptor pool
 	if (vkCreateDescriptorPool(m_base.device, &dp::create_info,
@@ -479,7 +501,7 @@ void gta5_pass::send_memory_requirements()
 		image.samples = VK_SAMPLE_COUNT_1_BIT;
 		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
 		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_NORMAL_AO].image)
 			!= VK_SUCCESS)
@@ -1124,7 +1146,11 @@ void gta5_pass::update_descriptor_sets()
 		pos.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		pos.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
 
-		w.resize(3);
+		VkDescriptorImageInfo normal = {};
+		normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		normal.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+
+		w.resize(4);
 		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[0].descriptorCount = 1;
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1149,6 +1175,14 @@ void gta5_pass::update_descriptor_sets()
 		w[2].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_GEN].ds;
 		w[2].pImageInfo = &pos;
 
+		w[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[3].descriptorCount = 1;
+		w[3].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[3].dstArrayElement = 0;
+		w[3].dstBinding = 3;
+		w[3].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_GEN].ds;
+		w[3].pImageInfo = &normal;
+
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
 
@@ -1167,6 +1201,7 @@ void gta5_pass::update_descriptor_sets()
 		VkDescriptorImageInfo normal;
 		normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		normal.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+		normal.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
 
 		w.resize(3);
 		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1187,7 +1222,7 @@ void gta5_pass::update_descriptor_sets()
 
 		w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[2].descriptorCount = 1;
-		w[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[2].dstArrayElement = 0;
 		w[2].dstBinding = 2;
 		w[2].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].ds;
@@ -1206,6 +1241,7 @@ void gta5_pass::update_descriptor_sets()
 		VkDescriptorImageInfo normal;
 		normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		normal.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+		normal.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
 
 		w.resize(2);
 		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1218,7 +1254,7 @@ void gta5_pass::update_descriptor_sets()
 
 		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[1].descriptorCount = 1;
-		w[1].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[1].dstArrayElement = 0;
 		w[1].dstBinding = 1;
 		w[1].dstSet = m_gps[GP_SSAO_GEN].ds;
@@ -1251,6 +1287,7 @@ void gta5_pass::update_descriptor_sets()
 		VkDescriptorImageInfo gb_pos_roughness;
 		gb_pos_roughness.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		gb_pos_roughness.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
+		gb_pos_roughness.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo gb_F0_ssao;
 		gb_F0_ssao.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1263,10 +1300,12 @@ void gta5_pass::update_descriptor_sets()
 		VkDescriptorImageInfo gb_normal_ao;
 		gb_normal_ao.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		gb_normal_ao.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+		gb_normal_ao.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo em;
 		em.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		em.imageView = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].view;
+		//em.imageView = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].view;
 		em.sampler = m_samplers[SAMPLER_GENERAL];
 
 		VkDescriptorBufferInfo ub;
@@ -1282,7 +1321,7 @@ void gta5_pass::update_descriptor_sets()
 		w[0].dstArrayElement = 0;
 		w[0].dstBinding = 0;
 		w[0].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
-		w[0].pImageInfo = &gb_pos_roughness;
+		w[0].pImageInfo = &gb_F0_ssao;
 
 		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[1].descriptorCount = 1;
@@ -1290,19 +1329,19 @@ void gta5_pass::update_descriptor_sets()
 		w[1].dstArrayElement = 0;
 		w[1].dstBinding = 1;
 		w[1].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
-		w[1].pImageInfo = &gb_F0_ssao;
+		w[1].pImageInfo = &gb_albedo_ssds;
 
 		w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[2].descriptorCount = 1;
-		w[2].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[2].dstArrayElement = 0;
 		w[2].dstBinding = 2;
 		w[2].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
-		w[2].pImageInfo = &gb_albedo_ssds;
+		w[2].pImageInfo = &gb_pos_roughness;
 
 		w[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[3].descriptorCount = 1;
-		w[3].descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+		w[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[3].dstArrayElement = 0;
 		w[3].dstBinding = 3;
 		w[3].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
@@ -1327,6 +1366,23 @@ void gta5_pass::update_descriptor_sets()
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
 
+	//sky drawer
+	{
+		VkDescriptorBufferInfo data = {};
+		data.buffer = m_res_data.buffer;
+		data.offset = m_res_data.offsets[RES_DATA_SKY_DRAWER_DATA];
+		data.range = sizeof(sky_drawer_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_SKY_DRAWER].ds;
+		w[0].pBufferInfo = &data;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
 	//postprocessing
 	{
 		VkDescriptorImageInfo preimage = {};
@@ -1437,7 +1493,7 @@ void gta5_pass::create_framebuffers()
 		fb.layers = 6;
 		fb.renderPass = m_passes[RENDER_PASS_ENVIRONMENT_MAP_GEN];
 
-		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.environment_map_gen_fb) != VK_SUCCESS)
+		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.environment_map_gen) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
@@ -1457,13 +1513,13 @@ void gta5_pass::create_framebuffers()
 		fb.layers = FRUSTUM_SPLIT_COUNT;
 		fb.renderPass = m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN];
 
-		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.dir_shadow_map_gen_fb) != VK_SUCCESS)
+		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.dir_shadow_map_gen) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
-	//frame image gen
+	//gbuffer assembler
 	{
-		using namespace render_pass_frame_image_gen;
+		using namespace render_pass_gbuffer_assembler;
 
 		std::array<VkImageView, ATT_COUNT> atts;
 		atts[ATT_POS_ROUGHNESS] = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
@@ -1471,9 +1527,7 @@ void gta5_pass::create_framebuffers()
 		atts[ATT_F0_SSAO] = m_res_image[RES_IMAGE_GB_F0_SSAO].view;
 		atts[ATT_NORMAL_AO] = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
 		atts[ATT_DEPTHSTENCIL] = m_res_image[RES_IMAGE_GB_DEPTH].view;
-		atts[ATT_SSAO_MAP] = m_res_image[RES_IMAGE_SSAO_MAP].view;
 		atts[ATT_SS_DIR_SHADOW_MAP] = m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].view;
-		atts[ATT_PREIMAGE] = m_res_image[RES_IMAGE_PREIMAGE].view;
 
 		VkFramebufferCreateInfo fb = {};
 		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -1482,9 +1536,52 @@ void gta5_pass::create_framebuffers()
 		fb.height = m_base.swap_chain_image_extent.height;
 		fb.width = m_base.swap_chain_image_extent.width;
 		fb.layers = 1;
-		fb.renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
+		fb.renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
-		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.frame_image_gen) != VK_SUCCESS)
+		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.gbuffer_assembler) != VK_SUCCESS)
+			throw std::runtime_error("failed to create framebuffer!");
+	}
+
+	//ssao map gen
+	{
+		using namespace render_pass_ssao_gen;
+
+		std::array<VkImageView, ATT_COUNT> atts;
+		atts[ATT_SSAO_MAP] = m_res_image[RES_IMAGE_SSAO_MAP].view;
+
+		VkFramebufferCreateInfo fb = {};
+		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fb.attachmentCount = ATT_COUNT;
+		fb.pAttachments = atts.data();
+		fb.height = m_base.swap_chain_image_extent.height;
+		fb.width = m_base.swap_chain_image_extent.width;
+		fb.layers = 1;
+		fb.renderPass = m_passes[RENDER_PASS_SSAO_MAP_GEN];
+
+		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.ssao_map_gen) != VK_SUCCESS)
+			throw std::runtime_error("failed to create framebuffer!");
+	}
+
+	//preimage assembler
+	{
+		using namespace render_pass_preimage_assembler;
+
+		std::array<VkImageView, ATT_COUNT> atts;
+		atts[ATT_ALBEDO_SSDS] = m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].view;
+		atts[ATT_F0_SSAO] = m_res_image[RES_IMAGE_GB_F0_SSAO].view;
+		atts[ATT_PREIMAGE] = m_res_image[RES_IMAGE_PREIMAGE].view;
+		atts[ATT_DEPTHSTENCIL] = m_res_image[RES_IMAGE_GB_DEPTH].view;
+
+		VkFramebufferCreateInfo fb = {};
+		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fb.attachmentCount = ATT_COUNT;
+		fb.pAttachments = atts.data();
+		fb.height = m_base.swap_chain_image_extent.height;
+		fb.width = m_base.swap_chain_image_extent.width;
+		fb.layers = 1;
+		fb.renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
+
+		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.preimage_assembler) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
@@ -1595,7 +1692,7 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 		VkCommandBufferInheritanceInfo inharitance = {};
 		inharitance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-		inharitance.framebuffer = m_fbs.environment_map_gen_fb;
+		inharitance.framebuffer = m_fbs.environment_map_gen;
 		inharitance.occlusionQueryEnable = VK_FALSE;
 		inharitance.renderPass = m_passes[RENDER_PASS_ENVIRONMENT_MAP_GEN];
 		inharitance.subpass = 0;
@@ -1633,7 +1730,7 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 		VkCommandBufferInheritanceInfo inharitance = {};
 		inharitance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-		inharitance.framebuffer = m_fbs.environment_map_gen_fb;
+		inharitance.framebuffer = m_fbs.environment_map_gen;
 		inharitance.occlusionQueryEnable = VK_FALSE;
 		inharitance.renderPass = m_passes[RENDER_PASS_ENVIRONMENT_MAP_GEN];
 		inharitance.subpass = 0;
@@ -1669,7 +1766,7 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			VkCommandBufferInheritanceInfo inharitance = {};
 			inharitance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-			inharitance.framebuffer = m_fbs.dir_shadow_map_gen_fb;
+			inharitance.framebuffer = m_fbs.dir_shadow_map_gen;
 			inharitance.occlusionQueryEnable = VK_FALSE;
 			inharitance.renderPass = m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN];
 			inharitance.subpass = 0;
@@ -1706,10 +1803,10 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			VkCommandBufferInheritanceInfo inharitance = {};
 			inharitance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-			inharitance.framebuffer = m_fbs.frame_image_gen;
+			inharitance.framebuffer = m_fbs.gbuffer_assembler;
 			inharitance.occlusionQueryEnable = VK_FALSE;
-			inharitance.renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
-			inharitance.subpass = render_pass_frame_image_gen::SUBPASS_GBUFFER_GEN;
+			inharitance.renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
+			inharitance.subpass = render_pass_gbuffer_assembler::SUBPASS_GBUFFER_GEN;
 
 			VkCommandBufferBeginInfo begin = {};
 			begin.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
@@ -1784,7 +1881,7 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			VkRenderPassBeginInfo begin = {};
 			begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			begin.framebuffer = m_fbs.environment_map_gen_fb;
+			begin.framebuffer = m_fbs.environment_map_gen;
 			begin.renderPass = m_passes[RENDER_PASS_ENVIRONMENT_MAP_GEN];
 
 			std::array<VkClearValue, ATT_COUNT> clears = {};
@@ -1809,7 +1906,7 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			VkRenderPassBeginInfo begin = {};
 			begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			begin.framebuffer = m_fbs.dir_shadow_map_gen_fb;
+			begin.framebuffer = m_fbs.dir_shadow_map_gen;
 			begin.renderPass = m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN];
 
 			std::array<VkClearValue, ATT_COUNT> clears = {};
@@ -1826,14 +1923,14 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			vkCmdEndRenderPass(cb);
 		}
 
-		//frame image gen
+		//gbuffer assembler
 		{
-			using namespace render_pass_frame_image_gen;
+			using namespace render_pass_gbuffer_assembler;
 
 			VkRenderPassBeginInfo begin = {};
 			begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-			begin.framebuffer = m_fbs.frame_image_gen;
-			begin.renderPass = m_passes[RENDER_PASS_FRAME_IMAGE_GEN];
+			begin.framebuffer = m_fbs.gbuffer_assembler;
+			begin.renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
 			std::array<VkClearValue, ATT_COUNT> clears = {};
 			clears[ATT_DEPTHSTENCIL].depthStencil = { 1.f, 0 };
@@ -1851,55 +1948,86 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			m_gps[GP_SS_DIR_SHADOW_MAP_GEN].bind(cb);
 			vkCmdDraw(cb, 4, 1, 0, 0);
 
-			//transition shadow map
+			vkCmdEndRenderPass(cb);
+		}
+
+		//barrier for pos and normal images
+		{
+			std::array<VkImageMemoryBarrier, 2> bs = {};
+			for (auto& b : bs)
 			{
-				VkImageMemoryBarrier barrier = {};
-				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-				barrier.image = m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image;
-				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-				barrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-				barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-				barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-				barrier.subresourceRange.baseArrayLayer = 0;
-				barrier.subresourceRange.baseMipLevel = 0;
-				barrier.subresourceRange.layerCount = 1;
-				barrier.subresourceRange.levelCount = 1;
-
-				vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-					0, 0, nullptr, 0, nullptr, 1, &barrier);
+				b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				b.subresourceRange.baseArrayLayer = 0;
+				b.subresourceRange.baseMipLevel = 0;
+				b.subresourceRange.layerCount = 1;
+				b.subresourceRange.levelCount = 1;
 			}
+			bs[0].image = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image;
+			bs[1].image = m_res_image[RES_IMAGE_GB_NORMAL_AO].image;
 
-			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
-			m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].bind(cb);
-			vkCmdDraw(cb, 4, 1, 0, 0);
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 2, bs.data());
+		}
 
-			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
+		//ssao map gen
+		{
+			using namespace render_pass_ssao_gen;
+
+			VkRenderPassBeginInfo begin = {};
+			begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			begin.framebuffer = m_fbs.ssao_map_gen;
+			begin.renderPass = m_passes[RENDER_PASS_SSAO_MAP_GEN];
+			begin.renderArea.extent = m_base.swap_chain_image_extent;
+			begin.renderArea.offset = { 0,0 };
+
+			vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_INLINE);
 			m_gps[GP_SSAO_GEN].bind(cb);
 			vkCmdDraw(cb, 4, 1, 0, 0);
+			vkCmdEndRenderPass(cb);
+		}
 
-			//transition ssao map
-			{
-				VkImageMemoryBarrier barrier = {};
-				barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-				barrier.image = m_res_image[RES_IMAGE_SSAO_MAP].image;
-				barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-				barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-				barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-				barrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-				barrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-				barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-				barrier.subresourceRange.baseArrayLayer = 0;
-				barrier.subresourceRange.baseMipLevel = 0;
-				barrier.subresourceRange.layerCount = 1;
-				barrier.subresourceRange.levelCount = 1;
+		//barrier for ssao map
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			b.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+			b.image = m_res_image[RES_IMAGE_SSAO_MAP].image;
 
-				vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-					0, 0, nullptr, 0, nullptr, 1, &barrier);
-			}
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
+
+		//preimage assembler
+		{
+			using namespace render_pass_preimage_assembler;
+
+			VkRenderPassBeginInfo begin = {};
+			begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			begin.framebuffer = m_fbs.preimage_assembler;
+			begin.renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
+			begin.renderArea.extent = m_base.swap_chain_image_extent;
+			begin.renderArea.offset = { 0,0 };
+
+			vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_INLINE);
+			m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].bind(cb);
+			vkCmdDraw(cb, 4, 1, 0, 0);
 
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
 			m_gps[GP_SSAO_BLUR].bind(cb);
@@ -1908,6 +2036,15 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
 			m_gps[GP_IMAGE_ASSEMBLER].bind(cb);
 			vkCmdDraw(cb, 4, 1, 0, 0);
+
+			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
+			m_gps[GP_SKY_DRAWER].bind(cb);
+			if (!m_renderables[RENDERABLE_TYPE_SKY].empty())
+			{
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_SKY_DRAWER].pl,
+					1, 1, &m_renderables[RENDERABLE_TYPE_SKY][0].mat_light_ds, 0, nullptr);
+				vkCmdDraw(cb, 1, 1, 0, 0);
+			}
 
 			vkCmdEndRenderPass(cb);
 		}
@@ -1998,6 +2135,7 @@ void gta5_pass::process_settings(const render_settings & settings)
 	//ss dir shadow map gen
 	{
 		auto data = m_res_data.get<ss_dir_shadow_map_gen_data>();
+		data->light_dir = settings.light_dir;
 		data->far = settings.far;
 		data->near = settings.near;
 		memcpy(data->projs, projs.data(), sizeof(glm::mat4)*projs.size());
@@ -2011,13 +2149,27 @@ void gta5_pass::process_settings(const render_settings & settings)
 		data->irradiance = settings.irradiance;
 	}
 
+	//sky data
+	{
+		auto data = m_res_data.get<sky_drawer_data>();
+		glm::mat4 view_at_origin = settings.view;
+		view_at_origin[3][0] = 0.f;
+		view_at_origin[3][1] = 0.f;
+		view_at_origin[3][2] = 0.f;
+		data->proj_x_view_at_origin = settings.proj*view_at_origin;
+		data->height = std::max(settings.pos.y, 0.f);
+		data->irradiance = settings.irradiance;
+		data->light_dir = settings.light_dir;
+	}
+
 }
 
 std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> gta5_pass::calc_projs(const render_settings& settings)
 {
 	std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> projs;
 
-	glm::mat4 light = glm::lookAt(glm::vec3(0.f), settings.light_dir, glm::vec3(0.f, 1.f, 0.f));
+	glm::vec3 light_dir = static_cast<glm::mat3>(settings.view)*settings.light_dir;
+	glm::mat4 light = glm::lookAtLH(glm::vec3(0.f), light_dir, glm::vec3(0.f, 1.f, 0.f));
 	std::array<std::array<glm::vec3, 4>, FRUSTUM_SPLIT_COUNT + 1> frustum_points;
 	
 	glm::vec2 max[2];
@@ -2025,8 +2177,9 @@ std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> gta5_pass::calc_projs(const render_se
 
 	for (uint32_t i = 0; i < FRUSTUM_SPLIT_COUNT + 1; ++i)
 	{
-		float z = settings.near + std::powf(static_cast<float>(i) / static_cast<float>(FRUSTUM_SPLIT_COUNT), 2.f)*(settings.far - settings.near);		
-		
+		float z = settings.near + std::powf(static_cast<float>(i) / static_cast<float>(FRUSTUM_SPLIT_COUNT), 4.f)*(settings.far - settings.near);		
+		z *= (-1.f);
+
 		std::array<float, 4> x = { -1.f, 1.f, -1.f, 1.f };
 		std::array<float, 4> y = { -1.f, -1.f, 1.f, 1.f };
 
@@ -2035,18 +2188,18 @@ std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> gta5_pass::calc_projs(const render_se
 
 		for (uint32_t j=0; j<4; ++j)
 		{
-			glm::vec3 v = { x[j]*z / settings.view[0][0], y[j]*z / settings.view[1][1], z };
+			glm::vec3 v = { x[j]*z / settings.proj[0][0], y[j]*z / settings.proj[1][1], z };
 			v = static_cast<glm::mat3>(light)*v;
 			frustum_points[i][j] = v;
 
-			max[i % 2] = glm::max(max[i % 2], { v.x, v.y });
-			min[i % 2] = glm::min(min[i % 2], { v.x, v.y });
+			max[i % 2] = componentwise_max(max[i % 2], { v.x, v.y });
+			min[i % 2] = componentwise_min(min[i % 2], { v.x, v.y });
 		}
 
 		if (i > 0)
 		{
-			glm::vec2 frustum_max = glm::max(max[0], max[1]);
-			glm::vec2 frustum_min = glm::min(min[0], min[1]);
+			glm::vec2 frustum_max = componentwise_max(max[0], max[1]);
+			glm::vec2 frustum_min = componentwise_min(min[0], min[1]);
 
 			glm::vec2 center = (frustum_max + frustum_min)*0.5f;
 			glm::vec2 scale = glm::vec2(2.f)/(frustum_max - frustum_min);
@@ -2054,12 +2207,12 @@ std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> gta5_pass::calc_projs(const render_se
 			glm::mat4 proj(1.f);
 			proj[0][0] = scale.x;
 			proj[1][1] = scale.y;
-			proj[2][2] = 0.5f / 10000.f;
+			proj[2][2] = 0.5f / 1000.f;
 			proj[3][0] = -scale.x*center.x;
 			proj[3][1] = -scale.y*center.y;
 			proj[3][2] = 0.5f;
 
-			projs[i - 1] = proj;
+			projs[i - 1] = proj*light;
 		}
 	}
 	return projs; //from view space

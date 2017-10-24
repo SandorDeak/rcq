@@ -14,5 +14,5 @@ layout(location=0) in vec3 pos_in;
 
 void main()
 {
-	gl_Position=tr.model*vec4(pos_in, 1.f);
+	gl_Position=tr.model*vec4(tr.scale*pos_in, 1.f);
 }

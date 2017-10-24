@@ -28,6 +28,12 @@ enum SKYBOX : rcq::unique_id
 	SKYBOX_COUNT
 };
 
+enum SKY : rcq::unique_id
+{
+	SKY_FIRST,
+	SKY_COUNT
+};
+
 enum ENTITIY : rcq::unique_id
 {
 	ENTITY_FLOOR,
@@ -36,6 +42,7 @@ enum ENTITIY : rcq::unique_id
 	ENTITY_LIGHT0,
 	ENTITY_LIGHT1,
 	ENTITY_SKYBOX,
+	ENTITY_SKY,
 	ENTITY_TERRAIN,
 	ENTITY_GOLD_BUDDHA,
 	ENTITY_COUNT

@@ -1034,6 +1034,24 @@ void resource_manager::create_descriptor_set_layouts()
 			throw std::runtime_error("failed to create dsl!");
 	}
 
+	//create sky dsl
+	{
+		VkDescriptorSetLayoutBinding tex = {};
+		tex.binding = 0;
+		tex.descriptorCount = 1;
+		tex.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		tex.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		VkDescriptorSetLayoutCreateInfo dsl = {};
+		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		dsl.bindingCount = 1;
+		dsl.pBindings = &tex;
+		
+		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, host_memory_manager,
+			&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_SKY]) != VK_SUCCESS)
+			throw std::runtime_error("failed to create dsl!");
+	}
+
 	//create light omni dsl
 	VkDescriptorSetLayoutBinding light_bindings[2] = {};
 
@@ -1088,6 +1106,14 @@ inline void resource_manager::extend_descriptor_pool_pool()
 	{
 		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
 		dp_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+		dp_info.poolSizeCount = 1;
+	}
+
+	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
+	{
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
+		dp_size[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 		dp_info.poolSizeCount = 1;
 	}
@@ -1514,4 +1540,186 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 	vkUpdateDescriptorSets(m_base.device, 1, &write, 0, nullptr);
 
 	return skyb;
+}
+
+template<>
+sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size_t width, size_t height, size_t depth)
+{
+	sky s;
+
+	//load image from file to staging buffer;
+	auto LUT = read_file(filename);
+	VkBuffer sb;
+	VkDeviceMemory sb_mem;
+	create_staging_buffer(m_base, LUT.size(), sb, sb_mem);
+	void* data;
+	vkMapMemory(m_base.device, sb_mem, 0, LUT.size(), 0, &data);
+	memcpy(data, LUT.data(), LUT.size());
+	vkUnmapMemory(m_base.device, sb_mem);
+	LUT.clear();
+
+	//create texture
+	{
+		VkImageCreateInfo image = {};
+		image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		image.extent = { width, height, depth };
+		image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		image.arrayLayers = 1;
+		image.imageType = VK_IMAGE_TYPE_3D;
+		image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image.mipLevels = 1;
+		image.samples = VK_SAMPLE_COUNT_1_BIT;
+		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		image.tiling = VK_IMAGE_TILING_OPTIMAL;
+		image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+		if (vkCreateImage(m_base.device, &image, host_memory_manager, &s.tex.image) != VK_SUCCESS)
+			throw std::runtime_error("failed to create sky image!");
+
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(m_base.device, s.tex.image, &mr);
+		VkMemoryAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		alloc.allocationSize = mr.size;
+		if (vkAllocateMemory(m_base.device, &alloc, host_memory_manager, &s.tex.memory) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate memory!");
+
+		vkBindImageMemory(m_base.device, s.tex.image, s.tex.memory, 0);
+		
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = s.tex.image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_3D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &s.tex.view) != VK_SUCCESS)
+			throw std::runtime_error("failed to reate sky image view!");
+
+		s.tex.sampler_type = SAMPLER_TYPE_CUBE;
+	}
+
+	//copy and transition layout
+	{
+		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+
+		//transition to transfer dst optimal
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = s.tex.image;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = 0;
+			b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
+				0, nullptr, 1, &b);
+		}
+
+		//copy from staging buffer
+		{
+			VkBufferImageCopy region = {};
+			region.bufferImageHeight = 0;
+			region.bufferOffset = 0;
+			region.bufferRowLength = 0;
+			region.imageExtent = { width, height, depth };
+			region.imageOffset = { 0,0,0 };
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageSubresource.mipLevel = 0;
+
+			vkCmdCopyBufferToImage(cb, sb, s.tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		}
+
+		//transition to shader read only optimal
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = s.tex.image;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+				0, nullptr, 1, &b);
+		}
+
+		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
+	}
+
+	//destroy staging buffer
+	vkDestroyBuffer(m_base.device, sb, host_memory_manager);
+	vkFreeMemory(m_base.device, sb_mem, host_memory_manager);
+
+	//allocate descriptor set
+	{
+		VkDescriptorSetAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc_info.descriptorSetCount = 1;
+		alloc_info.pSetLayouts = &m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_SKY];
+		pool_id p_id = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKY].get_available_pool_id();
+		if (p_id == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKY].pools.size())
+		{
+			extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_SKY>();
+		}
+		alloc_info.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKY].pools[p_id];
+		if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &s.ds) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate material descriptor set!");
+
+		--m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKY].availability[p_id];
+		s.pool_index = p_id;
+	}
+
+	//update ds
+	{
+		VkDescriptorImageInfo sky_tex;
+		sky_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		sky_tex.imageView = s.tex.view;
+		sky_tex.sampler = m_samplers[s.tex.sampler_type];
+
+		VkWriteDescriptorSet write = {};
+		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write.descriptorCount = 1;
+		write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		write.dstArrayElement = 0;
+		write.dstBinding = 0;
+		write.dstSet = s.ds;
+		write.pImageInfo = &sky_tex;
+
+		vkUpdateDescriptorSets(m_base.device, 1, &write, 0, nullptr);
+	}
+
+	return s;
+}
+
+void resource_manager::destroy(sky&& s)
+{
+	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKY].pools[s.pool_index], 1, &s.ds);
+	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKY].availability[s.pool_index];
+
+	vkDestroyImageView(m_base.device, s.tex.view, host_memory_manager);
+	vkDestroyImage(m_base.device, s.tex.image, host_memory_manager);
+	vkFreeMemory(m_base.device, s.tex.memory, host_memory_manager);
 }

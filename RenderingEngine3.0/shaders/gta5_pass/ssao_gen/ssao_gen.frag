@@ -1,19 +1,19 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const int KERNEL_DIM=30;
+const int KERNEL_DIM=5;
 
 layout(set=0, binding=0) uniform sampler2D pos_tex;
 
-layout(input_attachment_index=0, set=0, binding=1) uniform subpassInput normal_in;
+layout(set=0, binding=1) uniform sampler2D normal_in;
 
 
 void main()
 {
-	vec3 n=subpassLoad(normal_in).xyz;
+	vec3 n=texture(normal_in, gl_FragCoord.xy).xyz;
 	vec3 p0=texture(pos_tex, gl_FragCoord.xy).xyz;
 	uint sum=0;
-	float bias=0.1f;
+	float bias=0.001f;
 	
 	for(int i=-KERNEL_DIM; i<KERNEL_DIM+1; ++i)
 	{
@@ -27,5 +27,5 @@ void main()
 		}
 	}
 	
-	gl_FragDepth=(float(sum))/(float(KERNEL_DIM*KERNEL_DIM));
+	gl_FragDepth=float(sum)/pow(2*float(KERNEL_DIM)+1, 2.f);
 }

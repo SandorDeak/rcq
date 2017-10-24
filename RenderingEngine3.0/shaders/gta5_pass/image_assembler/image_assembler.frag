@@ -3,13 +3,16 @@
 
 #define PI 3.1415926535897f
 
-layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput pos_roughness_in;
-layout(input_attachment_index=1, set=0, binding=1) uniform subpassInput F0_ssao_in;
-layout(input_attachment_index=2, set=0, binding=2) uniform subpassInput albedo_ssds_in;
-layout(input_attachment_index=3, set=0, binding=3) uniform subpassInput normal_ao_in;
+
+layout(input_attachment_index=0, set=0, binding=0) uniform subpassInput F0_ssao_in;
+layout(input_attachment_index=1, set=0, binding=1) uniform subpassInput albedo_ssds_in;
 
 
-layout(set=0, binding=4) uniform samplerCube em_tex;
+layout(set=0, binding=2) uniform sampler2D pos_roughness_in;
+layout(set=0, binding=3) uniform sampler2D normal_ao_in;
+
+
+layout(set=0, binding=4) uniform sampler2DArray em_tex;
 
 layout(set=0, binding=5) uniform image_assembler_data
 {
@@ -42,11 +45,11 @@ float shlick_geometry_term(float dot_prod, float roughness)
 
 void main()
 {
-	vec4 pos_roughness=subpassLoad(pos_roughness_in);
+	vec4 pos_roughness=texture(pos_roughness_in, gl_FragCoord.xy);
 	vec3 v=-normalize(pos_roughness.xyz);
 	float roughness=pos_roughness.w;
 	
-	vec4 normal_ao=subpassLoad(normal_ao_in);
+	vec4 normal_ao=texture(normal_ao_in, gl_FragCoord.xy);
 	vec3 n=normal_ao.xyz;
 	float ao=normal_ao.w;
 	
@@ -74,11 +77,9 @@ void main()
 	float geometry=shlick_geometry_term(l_dot_n, roughness)*shlick_geometry_term(v_dot_n, roughness);
 	vec3 specular=fresnel*geometry*ndf;(4.0f*l_dot_n*v_dot_n+0.001f);		
 	vec3 lambert=(1.0f-fresnel)*albedo/PI;
-	//
 	
-	vec3 color=(specular+lambert)*ssds*data.irradiance*l_dot_n+albedo*ssao*data.ambient_irradiance;
+	vec3 color=(specular+lambert)*ssds*data.irradiance*l_dot_n+albedo*ao*data.ambient_irradiance;
 	//vec3 color=(specular+lambert)*data.irradiance*l_dot_n+albedo*data.ambient_irradiance;
 	
-	
-	color_out=vec4(ssao);	
+	color_out=vec4(color, 1.f);	
 }
