@@ -121,7 +121,7 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
 	//sky res
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST, "textures/sky/try.sky", 32, 32, 32);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST, "textures/sky/try_8", 32, 32, 32);
 
 	//create transforms
 	transform tr;
@@ -319,6 +319,7 @@ void scene::update(float dt)
 		rcq::engine::instance()->cmd_update_transform(m_trs[i].id, m_trs[i].data);
 	}
 	update_settings(dt);
+	std::cout << m_render_settings.light_dir.x << ' ' << m_render_settings.light_dir.y << ' ' << m_render_settings.light_dir.z << '\n';
 
 	rcq::engine::instance()->cmd_render(m_render_settings);
 	rcq::engine::instance()->cmd_dispatch();
@@ -379,6 +380,7 @@ void scene::update_settings(float dt)
 	//light 
 	float theta = 0.f;
 	float phi = 0.f;
+	float scale = 0.2f;
 
 	if (glfwGetKey(m_window, GLFW_KEY_I))
 		phi += 1.f;
@@ -389,7 +391,7 @@ void scene::update_settings(float dt)
 	if (glfwGetKey(m_window, GLFW_KEY_L))
 		theta -= 1.f;
 
-	glm::mat4 rot = glm::rotate(dt*theta, glm::vec3(0.f, 1.f, 0.f));
-	rot = glm::rotate(rot, dt*phi, glm::vec3(1.f, 0.f, 0.f));
+	glm::mat4 rot = glm::rotate(scale*dt*theta, glm::vec3(0.f, 1.f, 0.f));
+	rot = glm::rotate(rot, scale*dt*phi, glm::vec3(1.f, 0.f, 0.f));
 	m_render_settings.light_dir = static_cast<glm::mat3>(rot)*m_render_settings.light_dir;
 }

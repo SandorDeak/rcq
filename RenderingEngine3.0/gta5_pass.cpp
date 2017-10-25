@@ -2157,7 +2157,7 @@ void gta5_pass::process_settings(const render_settings & settings)
 		view_at_origin[3][1] = 0.f;
 		view_at_origin[3][2] = 0.f;
 		data->proj_x_view_at_origin = settings.proj*view_at_origin;
-		data->height = std::max(settings.pos.y, 0.f);
+		data->height = std::max(settings.pos.y, 2000.f); //bias
 		data->irradiance = settings.irradiance;
 		data->light_dir = settings.light_dir;
 	}

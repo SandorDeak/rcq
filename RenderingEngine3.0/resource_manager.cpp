@@ -904,7 +904,7 @@ void rcq::resource_manager::create_samplers()
 	omni_light_shadow_map_sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 	omni_light_shadow_map_sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 	omni_light_shadow_map_sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	omni_light_shadow_map_sampler.anisotropyEnable = VK_TRUE;
+	omni_light_shadow_map_sampler.anisotropyEnable = VK_FALSE;
 	omni_light_shadow_map_sampler.maxAnisotropy = 16.f;
 	omni_light_shadow_map_sampler.compareEnable = VK_FALSE;
 	omni_light_shadow_map_sampler.magFilter = VK_FILTER_LINEAR;
@@ -1036,16 +1036,21 @@ void resource_manager::create_descriptor_set_layouts()
 
 	//create sky dsl
 	{
-		VkDescriptorSetLayoutBinding tex = {};
-		tex.binding = 0;
-		tex.descriptorCount = 1;
-		tex.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		tex.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+		std::array<VkDescriptorSetLayoutBinding, 2> bindings  = {};
+		bindings[0].binding = 0;
+		bindings[0].descriptorCount = 1;
+		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		bindings[1].binding = 1;
+		bindings[1].descriptorCount = 1;
+		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		dsl.bindingCount = 1;
-		dsl.pBindings = &tex;
+		dsl.bindingCount = 2;
+		dsl.pBindings = bindings.data();
 		
 		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, host_memory_manager,
 			&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_SKY]) != VK_SUCCESS)
@@ -1112,7 +1117,7 @@ inline void resource_manager::extend_descriptor_pool_pool()
 
 	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
 	{
-		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE*2;
 		dp_size[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 		dp_info.poolSizeCount = 1;
@@ -1545,130 +1550,135 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 template<>
 sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size_t width, size_t height, size_t depth)
 {
+	static const std::array<std::string, 2> postfix = { "_Rayleigh.sky", "_Mie.sky" };
+
 	sky s;
 
-	//load image from file to staging buffer;
-	auto LUT = read_file(filename);
 	VkBuffer sb;
 	VkDeviceMemory sb_mem;
-	create_staging_buffer(m_base, LUT.size(), sb, sb_mem);
-	void* data;
-	vkMapMemory(m_base.device, sb_mem, 0, LUT.size(), 0, &data);
-	memcpy(data, LUT.data(), LUT.size());
-	vkUnmapMemory(m_base.device, sb_mem);
-	LUT.clear();
-
-	//create texture
+	create_staging_buffer(m_base, sizeof(glm::vec4)*width*height*depth, sb, sb_mem);
+	for (uint32_t i = 0; i < 2; ++i)
 	{
-		VkImageCreateInfo image = {};
-		image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image.extent = { width, height, depth };
-		image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		image.arrayLayers = 1;
-		image.imageType = VK_IMAGE_TYPE_3D;
-		image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		image.mipLevels = 1;
-		image.samples = VK_SAMPLE_COUNT_1_BIT;
-		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		image.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &s.tex.image) != VK_SUCCESS)
-			throw std::runtime_error("failed to create sky image!");
+		//load image from file to staging buffer;
+		auto LUT = read_file(filename + postfix[i]);
+		void* data;
+		vkMapMemory(m_base.device, sb_mem, 0, LUT.size(), 0, &data);
+		memcpy(data, LUT.data(), LUT.size());
+		vkUnmapMemory(m_base.device, sb_mem);
+		LUT.clear();
 
-		VkMemoryRequirements mr;
-		vkGetImageMemoryRequirements(m_base.device, s.tex.image, &mr);
-		VkMemoryAllocateInfo alloc = {};
-		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		alloc.allocationSize = mr.size;
-		if (vkAllocateMemory(m_base.device, &alloc, host_memory_manager, &s.tex.memory) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate memory!");
+		//create texture
+		{
+			VkImageCreateInfo image = {};
+			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			image.extent = { width, height, depth };
+			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			image.arrayLayers = 1;
+			image.imageType = VK_IMAGE_TYPE_3D;
+			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			image.mipLevels = 1;
+			image.samples = VK_SAMPLE_COUNT_1_BIT;
+			image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			image.tiling = VK_IMAGE_TILING_OPTIMAL;
+			image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-		vkBindImageMemory(m_base.device, s.tex.image, s.tex.memory, 0);
-		
-		VkImageViewCreateInfo view = {};
-		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		view.image = s.tex.image;
-		view.viewType = VK_IMAGE_VIEW_TYPE_3D;
-		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		view.subresourceRange.baseArrayLayer = 0;
-		view.subresourceRange.baseMipLevel = 0;
-		view.subresourceRange.layerCount = 1;
-		view.subresourceRange.levelCount = 1;
+			if (vkCreateImage(m_base.device, &image, host_memory_manager, &s.tex[i].image) != VK_SUCCESS)
+				throw std::runtime_error("failed to create sky image!");
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &s.tex.view) != VK_SUCCESS)
-			throw std::runtime_error("failed to reate sky image view!");
+			VkMemoryRequirements mr;
+			vkGetImageMemoryRequirements(m_base.device, s.tex[i].image, &mr);
+			VkMemoryAllocateInfo alloc = {};
+			alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			alloc.allocationSize = mr.size;
+			if (vkAllocateMemory(m_base.device, &alloc, host_memory_manager, &s.tex[i].memory) != VK_SUCCESS)
+				throw std::runtime_error("failed to allocate memory!");
 
-		s.tex.sampler_type = SAMPLER_TYPE_CUBE;
+			vkBindImageMemory(m_base.device, s.tex[i].image, s.tex[i].memory, 0);
+
+			VkImageViewCreateInfo view = {};
+			view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			view.image = s.tex[i].image;
+			view.viewType = VK_IMAGE_VIEW_TYPE_3D;
+			view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			view.subresourceRange.baseArrayLayer = 0;
+			view.subresourceRange.baseMipLevel = 0;
+			view.subresourceRange.layerCount = 1;
+			view.subresourceRange.levelCount = 1;
+
+			if (vkCreateImageView(m_base.device, &view, host_memory_manager, &s.tex[i].view) != VK_SUCCESS)
+				throw std::runtime_error("failed to reate sky image view!");
+
+			s.tex[i].sampler_type = SAMPLER_TYPE_CUBE;
+		}
+
+		//copy and transition layout
+		{
+			VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+
+			//transition to transfer dst optimal
+			{
+				VkImageMemoryBarrier b = {};
+				b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				b.image = s.tex[i].image;
+				b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				b.srcAccessMask = 0;
+				b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+				b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+				b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				b.subresourceRange.baseArrayLayer = 0;
+				b.subresourceRange.baseMipLevel = 0;
+				b.subresourceRange.layerCount = 1;
+				b.subresourceRange.levelCount = 1;
+
+				vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
+					0, nullptr, 1, &b);
+			}
+
+			//copy from staging buffer
+			{
+				VkBufferImageCopy region = {};
+				region.bufferImageHeight = 0;
+				region.bufferOffset = 0;
+				region.bufferRowLength = 0;
+				region.imageExtent = { width, height, depth };
+				region.imageOffset = { 0,0,0 };
+				region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				region.imageSubresource.baseArrayLayer = 0;
+				region.imageSubresource.layerCount = 1;
+				region.imageSubresource.mipLevel = 0;
+
+				vkCmdCopyBufferToImage(cb, sb, s.tex[i].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+			}
+
+			//transition to shader read only optimal
+			{
+				VkImageMemoryBarrier b = {};
+				b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				b.image = s.tex[i].image;
+				b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+				b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+				b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+				b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				b.subresourceRange.baseArrayLayer = 0;
+				b.subresourceRange.baseMipLevel = 0;
+				b.subresourceRange.layerCount = 1;
+				b.subresourceRange.levelCount = 1;
+
+				vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+					0, nullptr, 1, &b);
+			}
+
+			end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
+		}
 	}
-
-	//copy and transition layout
-	{
-		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
-
-		//transition to transfer dst optimal
-		{
-			VkImageMemoryBarrier b = {};
-			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			b.image = s.tex.image;
-			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.srcAccessMask = 0;
-			b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			b.subresourceRange.baseArrayLayer = 0;
-			b.subresourceRange.baseMipLevel = 0;
-			b.subresourceRange.layerCount = 1;
-			b.subresourceRange.levelCount = 1;
-
-			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
-				0, nullptr, 1, &b);
-		}
-
-		//copy from staging buffer
-		{
-			VkBufferImageCopy region = {};
-			region.bufferImageHeight = 0;
-			region.bufferOffset = 0;
-			region.bufferRowLength = 0;
-			region.imageExtent = { width, height, depth };
-			region.imageOffset = { 0,0,0 };
-			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			region.imageSubresource.baseArrayLayer = 0;
-			region.imageSubresource.layerCount = 1;
-			region.imageSubresource.mipLevel = 0;
-
-			vkCmdCopyBufferToImage(cb, sb, s.tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-		}
-
-		//transition to shader read only optimal
-		{
-			VkImageMemoryBarrier b = {};
-			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			b.image = s.tex.image;
-			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			b.subresourceRange.baseArrayLayer = 0;
-			b.subresourceRange.baseMipLevel = 0;
-			b.subresourceRange.layerCount = 1;
-			b.subresourceRange.levelCount = 1;
-
-			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
-				0, nullptr, 1, &b);
-		}
-
-		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
-	}
-
 	//destroy staging buffer
 	vkDestroyBuffer(m_base.device, sb, host_memory_manager);
 	vkFreeMemory(m_base.device, sb_mem, host_memory_manager);
@@ -1694,21 +1704,34 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size
 
 	//update ds
 	{
-		VkDescriptorImageInfo sky_tex;
-		sky_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		sky_tex.imageView = s.tex.view;
-		sky_tex.sampler = m_samplers[s.tex.sampler_type];
+		VkDescriptorImageInfo Rayleigh_tex;
+		Rayleigh_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		Rayleigh_tex.imageView = s.tex[0].view;
+		Rayleigh_tex.sampler = m_samplers[s.tex[0].sampler_type];
 
-		VkWriteDescriptorSet write = {};
-		write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		write.descriptorCount = 1;
-		write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		write.dstArrayElement = 0;
-		write.dstBinding = 0;
-		write.dstSet = s.ds;
-		write.pImageInfo = &sky_tex;
+		VkDescriptorImageInfo Mie_tex;
+		Mie_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		Mie_tex.imageView = s.tex[1].view;
+		Mie_tex.sampler = m_samplers[s.tex[1].sampler_type];
 
-		vkUpdateDescriptorSets(m_base.device, 1, &write, 0, nullptr);
+		std::array<VkWriteDescriptorSet, 2> write = {};
+		write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write[0].descriptorCount = 1;
+		write[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		write[0].dstArrayElement = 0;
+		write[0].dstBinding = 0;
+		write[0].dstSet = s.ds;
+		write[0].pImageInfo = &Rayleigh_tex;
+
+		write[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write[1].descriptorCount = 1;
+		write[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		write[1].dstArrayElement = 0;
+		write[1].dstBinding = 1;
+		write[1].dstSet = s.ds;
+		write[1].pImageInfo = &Rayleigh_tex;
+
+		vkUpdateDescriptorSets(m_base.device, 2, write.data(), 0, nullptr);
 	}
 
 	return s;
@@ -1719,7 +1742,10 @@ void resource_manager::destroy(sky&& s)
 	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKY].pools[s.pool_index], 1, &s.ds);
 	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKY].availability[s.pool_index];
 
-	vkDestroyImageView(m_base.device, s.tex.view, host_memory_manager);
-	vkDestroyImage(m_base.device, s.tex.image, host_memory_manager);
-	vkFreeMemory(m_base.device, s.tex.memory, host_memory_manager);
+	for (auto& t : s.tex)
+	{
+		vkDestroyImageView(m_base.device, t.view, host_memory_manager);
+		vkDestroyImage(m_base.device, t.image, host_memory_manager);
+		vkFreeMemory(m_base.device, t.memory, host_memory_manager);
+	}
 }

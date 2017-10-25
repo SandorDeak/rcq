@@ -12,7 +12,8 @@ layout(set=0, binding=0) uniform sky_data
 	vec3 irradiance;
 } data;
 
-layout(set=1, binding=0) uniform sampler3D sky_tex;
+layout(set=1, binding=0) uniform sampler3D Rayleigh_tex;
+layout(set=1, binding=1) uniform sampler3D Mie_tex;
 
 layout(location=0) in vec3 view_dir_in;
 
@@ -26,16 +27,36 @@ vec3 params_to_tex_coords(vec3 params)
 	float cos_horizon= -sqrt(params.x*(2.f * Earth_radius + params.x)) / (Earth_radius + params.x);
 	if (params.y > cos_horizon)
 	{
+		params.y=max(params.y, cos_horizon+0.0001f);
 		tex_coords.y = 0.5f*pow((params.y - cos_horizon) / (1.f - cos_horizon), 0.2f) + 0.5f;
 	}
 	else
 	{
+		params.y=min(params.y, cos_horizon-0.0001f);
 		tex_coords.y= 0.5f*pow((cos_horizon - params.y) / (1.f + cos_horizon), 0.2f);
 	}
 
-	tex_coords.z = 0.5f*(atan(max(params.z, -0.1975f)*tan(1.26f*1.1f)) / 1.1f + 0.74f);
+	tex_coords.z = 0.5f*(atan(max(params.z, 0.f)*tan(1.26f*1.1f)) / 1.1f + 0.74f);
 
 	return tex_coords;
+}
+
+float Rayleigh_phase(float cos_theta)
+{
+	return (3.f*(1.f + cos_theta*cos_theta)) / 4.f;
+}
+
+float ad_hoc_Rayleigh_phase(float cos_theta)
+{
+	return 0.8f*(1.4f+0.5f*cos_theta);
+}
+
+float Mie_phase(float cos_theta, float g)
+{
+	float g_square = g*g;
+	float nom = 3.f * (1.f - g_square)*(1.f + cos_theta*cos_theta);
+	float denom = 2.f * (2.f + g_square)*pow(1.f + g_square - 2.f * g*cos_theta, 1.5f);
+	return nom / denom;
 }
 
 void main()
@@ -44,6 +65,7 @@ void main()
 	float cos_view_zenit=v.y;
 	float cos_sun_zenit=-data.light_dir.y;
 	vec3 tex_coords=params_to_tex_coords(vec3(data.height, cos_view_zenit, cos_sun_zenit));	
-	vec3 color=data.irradiance*texture(sky_tex, tex_coords).xyz;
+	float cos_view_sun=dot(v, -data.light_dir);
+	vec3 color=data.irradiance*(ad_hoc_Rayleigh_phase(cos_view_sun)*texture(Rayleigh_tex, tex_coords).xyz+Mie_phase(cos_view_sun, 0.75f)*texture(Mie_tex, tex_coords).xyz);
 	color_out=vec4(color, 1.f);
 }

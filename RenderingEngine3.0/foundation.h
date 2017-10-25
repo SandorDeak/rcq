@@ -410,7 +410,7 @@ namespace rcq
 	struct sky
 	{
 		VkDescriptorSet ds;
-		texture tex;
+		std::array<texture, 2> tex;
 		uint32_t pool_index;
 	};
 
