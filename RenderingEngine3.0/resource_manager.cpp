@@ -1036,7 +1036,7 @@ void resource_manager::create_descriptor_set_layouts()
 
 	//create sky dsl
 	{
-		std::array<VkDescriptorSetLayoutBinding, 2> bindings  = {};
+		std::array<VkDescriptorSetLayoutBinding, 3> bindings  = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1047,9 +1047,14 @@ void resource_manager::create_descriptor_set_layouts()
 		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+		bindings[2].binding = 2;
+		bindings[2].descriptorCount = 1;
+		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		dsl.bindingCount = 2;
+		dsl.bindingCount = bindings.size();
 		dsl.pBindings = bindings.data();
 		
 		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, host_memory_manager,
@@ -1117,7 +1122,7 @@ inline void resource_manager::extend_descriptor_pool_pool()
 
 	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
 	{
-		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE*2;
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE*3;
 		dp_size[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 		dp_info.poolSizeCount = 1;
@@ -1548,22 +1553,25 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 }
 
 template<>
-sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size_t width, size_t height, size_t depth)
+sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, const glm::uvec3& sky_image_size, 
+	const glm::uvec2& transmittance_size)
 {
-	static const std::array<std::string, 2> postfix = { "_Rayleigh.sky", "_Mie.sky" };
+	static const std::array<std::string, 3> postfix = { "_Rayleigh.sky", "_Mie.sky", "_transmittance.sky" };
 
 	sky s;
 
 	VkBuffer sb;
 	VkDeviceMemory sb_mem;
-	create_staging_buffer(m_base, sizeof(glm::vec4)*width*height*depth, sb, sb_mem);
+	VkDeviceSize sb_size = sizeof(glm::vec4)*std::max(sky_image_size.x*sky_image_size.y*sky_image_size.z,
+		transmittance_size.x*transmittance_size.y);
+	create_staging_buffer(m_base, sb_size, sb, sb_mem);
 	for (uint32_t i = 0; i < 2; ++i)
 	{
 
 		//load image from file to staging buffer;
 		auto LUT = read_file(filename + postfix[i]);
 		void* data;
-		vkMapMemory(m_base.device, sb_mem, 0, LUT.size(), 0, &data);
+		vkMapMemory(m_base.device, sb_mem, 0, sb_size, 0, &data);
 		memcpy(data, LUT.data(), LUT.size());
 		vkUnmapMemory(m_base.device, sb_mem);
 		LUT.clear();
@@ -1572,7 +1580,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size
 		{
 			VkImageCreateInfo image = {};
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-			image.extent = { width, height, depth };
+			image.extent = { sky_image_size.x, sky_image_size.y, sky_image_size.z };
 			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			image.arrayLayers = 1;
 			image.imageType = VK_IMAGE_TYPE_3D;
@@ -1616,13 +1624,135 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size
 
 		//copy and transition layout
 		{
+		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+
+		//transition to transfer dst optimal
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = s.tex[i].image;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = 0;
+			b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
+				0, nullptr, 1, &b);
+		}
+
+		//copy from staging buffer
+		{
+			VkBufferImageCopy region = {};
+			region.bufferImageHeight = 0;
+			region.bufferOffset = 0;
+			region.bufferRowLength = 0;
+			region.imageExtent = { sky_image_size.x, sky_image_size.y, sky_image_size.z };
+			region.imageOffset = { 0,0,0 };
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageSubresource.mipLevel = 0;
+
+			vkCmdCopyBufferToImage(cb, sb, s.tex[i].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		}
+
+		//transition to shader read only optimal
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = s.tex[i].image;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+				0, nullptr, 1, &b);
+		}
+
+		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
+		}
+	}
+
+	// load transmittance texture
+	{
+		//load image from file to staging buffer;
+		auto LUT = read_file(filename + postfix[2]);
+		void* data;
+		vkMapMemory(m_base.device, sb_mem, 0, LUT.size(), 0, &data);
+		memcpy(data, LUT.data(), LUT.size());
+		vkUnmapMemory(m_base.device, sb_mem);
+		LUT.clear();
+
+		//create texture
+		{
+			VkImageCreateInfo image = {};
+			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+			image.extent = { transmittance_size.x, transmittance_size.y, 1 };
+			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			image.arrayLayers = 1;
+			image.imageType = VK_IMAGE_TYPE_2D;
+			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			image.mipLevels = 1;
+			image.samples = VK_SAMPLE_COUNT_1_BIT;
+			image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+			image.tiling = VK_IMAGE_TILING_OPTIMAL;
+			image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+			if (vkCreateImage(m_base.device, &image, host_memory_manager, &s.tex[2].image) != VK_SUCCESS)
+				throw std::runtime_error("failed to create sky image!");
+
+			VkMemoryRequirements mr;
+			vkGetImageMemoryRequirements(m_base.device, s.tex[2].image, &mr);
+			VkMemoryAllocateInfo alloc = {};
+			alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+			alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+			alloc.allocationSize = mr.size;
+			if (vkAllocateMemory(m_base.device, &alloc, host_memory_manager, &s.tex[2].memory) != VK_SUCCESS)
+				throw std::runtime_error("failed to allocate memory!");
+
+			vkBindImageMemory(m_base.device, s.tex[2].image, s.tex[2].memory, 0);
+
+			VkImageViewCreateInfo view = {};
+			view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+			view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			view.image = s.tex[2].image;
+			view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+			view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			view.subresourceRange.baseArrayLayer = 0;
+			view.subresourceRange.baseMipLevel = 0;
+			view.subresourceRange.layerCount = 1;
+			view.subresourceRange.levelCount = 1;
+
+			if (vkCreateImageView(m_base.device, &view, host_memory_manager, &s.tex[2].view) != VK_SUCCESS)
+				throw std::runtime_error("failed to reate sky image view!");
+
+			s.tex[2].sampler_type = SAMPLER_TYPE_CUBE;
+		}
+
+		//copy and transition layout
+		{
 			VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
 
 			//transition to transfer dst optimal
 			{
 				VkImageMemoryBarrier b = {};
 				b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-				b.image = s.tex[i].image;
+				b.image = s.tex[2].image;
 				b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				b.srcAccessMask = 0;
@@ -1645,21 +1775,21 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size
 				region.bufferImageHeight = 0;
 				region.bufferOffset = 0;
 				region.bufferRowLength = 0;
-				region.imageExtent = { width, height, depth };
+				region.imageExtent = { transmittance_size.x, transmittance_size.y, 1 };
 				region.imageOffset = { 0,0,0 };
 				region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 				region.imageSubresource.baseArrayLayer = 0;
 				region.imageSubresource.layerCount = 1;
 				region.imageSubresource.mipLevel = 0;
 
-				vkCmdCopyBufferToImage(cb, sb, s.tex[i].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+				vkCmdCopyBufferToImage(cb, sb, s.tex[2].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 			}
 
 			//transition to shader read only optimal
 			{
 				VkImageMemoryBarrier b = {};
 				b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-				b.image = s.tex[i].image;
+				b.image = s.tex[2].image;
 				b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 				b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -1714,7 +1844,12 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size
 		Mie_tex.imageView = s.tex[1].view;
 		Mie_tex.sampler = m_samplers[s.tex[1].sampler_type];
 
-		std::array<VkWriteDescriptorSet, 2> write = {};
+		VkDescriptorImageInfo transmittance_tex;
+		transmittance_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		transmittance_tex.imageView = s.tex[2].view;
+		transmittance_tex.sampler = m_samplers[s.tex[2].sampler_type];
+
+		std::array<VkWriteDescriptorSet, 3> write = {};
 		write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write[0].descriptorCount = 1;
 		write[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1731,7 +1866,15 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, size
 		write[1].dstSet = s.ds;
 		write[1].pImageInfo = &Rayleigh_tex;
 
-		vkUpdateDescriptorSets(m_base.device, 2, write.data(), 0, nullptr);
+		write[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		write[2].descriptorCount = 1;
+		write[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		write[2].dstArrayElement = 0;
+		write[2].dstBinding = 2;
+		write[2].dstSet = s.ds;
+		write[2].pImageInfo = &transmittance_tex;
+
+		vkUpdateDescriptorSets(m_base.device, write.size(), write.data(), 0, nullptr);
 	}
 
 	return s;

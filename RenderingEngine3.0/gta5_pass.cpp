@@ -169,6 +169,10 @@ void gta5_pass::create_graphics_pipelines()
 	r10.fill_create_info(create_infos[GP_POSTPROCESSING]);
 	create_infos[GP_POSTPROCESSING].renderPass = m_passes[RENDER_PASS_POSTPROCESSING];
 
+	render_pass_preimage_assembler::subpass_sun_drawer::pipeline::runtime_info r11(m_base.device, m_base.swap_chain_image_extent);
+	r11.fill_create_info(create_infos[GP_SUN_DRAWER]);
+	create_infos[GP_SUN_DRAWER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
+
 	//create layouts
 	m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].create_layout(m_base.device, 
 	{
@@ -201,7 +205,14 @@ void gta5_pass::create_graphics_pipelines()
 	m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].create_layout(m_base.device, {});
 	m_gps[GP_SSAO_GEN].create_layout(m_base.device, {});
 	m_gps[GP_SSAO_BLUR].create_layout(m_base.device, {});
-	m_gps[GP_IMAGE_ASSEMBLER].create_layout(m_base.device, {});
+	m_gps[GP_IMAGE_ASSEMBLER].create_layout(m_base.device, 
+	{
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
+	});
+	m_gps[GP_SUN_DRAWER].create_layout(m_base.device,
+	{
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
+	});
 	m_gps[GP_POSTPROCESSING].create_layout(m_base.device, {});
 
 	for (uint32_t i = 0; i < GP_COUNT; ++i)
@@ -261,6 +272,9 @@ void gta5_pass::create_dsls_and_allocate_dss()
 
 	m_gps[GP_SKY_DRAWER].create_dsl(m_base.device,
 		render_pass_preimage_assembler::subpass_sky_drawer::pipeline::dsl::create_info);
+
+	m_gps[GP_SUN_DRAWER].create_dsl(m_base.device,
+		render_pass_preimage_assembler::subpass_sun_drawer::pipeline::dsl::create_info);
 
 	//create descriptor pool
 	if (vkCreateDescriptorPool(m_base.device, &dp::create_info,
@@ -1383,6 +1397,25 @@ void gta5_pass::update_descriptor_sets()
 
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
+
+	//sun drawer
+	{
+		VkDescriptorBufferInfo data = {};
+		data.buffer = m_res_data.buffer;
+		data.offset = m_res_data.offsets[RES_DATA_SUN_DRAWER_DATA];
+		data.range = sizeof(sky_drawer_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_SUN_DRAWER].ds;
+		w[0].pBufferInfo = &data;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
 	//postprocessing
 	{
 		VkDescriptorImageInfo preimage = {};
@@ -2035,6 +2068,12 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
 			m_gps[GP_IMAGE_ASSEMBLER].bind(cb);
+			if (!m_renderables[RENDERABLE_TYPE_SKY].empty())
+			{
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_IMAGE_ASSEMBLER].pl,
+					1, 1, &m_renderables[RENDERABLE_TYPE_SKY][0].mat_light_ds, 0, nullptr);
+				vkCmdDraw(cb, 1, 1, 0, 0);
+			}
 			vkCmdDraw(cb, 4, 1, 0, 0);
 
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
@@ -2044,6 +2083,15 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_SKY_DRAWER].pl,
 					1, 1, &m_renderables[RENDERABLE_TYPE_SKY][0].mat_light_ds, 0, nullptr);
 				vkCmdDraw(cb, 1, 1, 0, 0);
+			}
+
+			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
+			m_gps[GP_SUN_DRAWER].bind(cb);
+			if (!m_renderables[RENDERABLE_TYPE_SKY].empty())
+			{
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_SUN_DRAWER].pl,
+					1, 1, &m_renderables[RENDERABLE_TYPE_SKY][0].mat_light_ds, 0, nullptr);
+				vkCmdDraw(cb, 18, 1, 0, 0);
 			}
 
 			vkCmdEndRenderPass(cb);
@@ -2099,6 +2147,7 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 void gta5_pass::process_settings(const render_settings & settings)
 {
 	auto projs = calc_projs(settings);
+	float height = std::max(1000.f, settings.pos.y);
 
 	//environment map gen mat
 	{
@@ -2147,19 +2196,34 @@ void gta5_pass::process_settings(const render_settings & settings)
 		data->ambient_irradiance = settings.ambient_irradiance;
 		data->dir = static_cast<glm::mat3>(settings.view)*settings.light_dir;
 		data->irradiance = settings.irradiance;
+		data->view_inverse = glm::inverse(settings.view);
+		data->height = height;
 	}
 
-	//sky data
+	glm::mat4 view_at_origin = settings.view;
+	view_at_origin[3][0] = 0.f;
+	view_at_origin[3][1] = 0.f;
+	view_at_origin[3][2] = 0.f;
+	glm::mat4 proj_x_view_at_origin = settings.proj*view_at_origin;
+
+	//sky drawer data
 	{
 		auto data = m_res_data.get<sky_drawer_data>();
-		glm::mat4 view_at_origin = settings.view;
-		view_at_origin[3][0] = 0.f;
-		view_at_origin[3][1] = 0.f;
-		view_at_origin[3][2] = 0.f;
-		data->proj_x_view_at_origin = settings.proj*view_at_origin;
-		data->height = std::max(settings.pos.y, 2000.f); //bias
+		
+		data->proj_x_view_at_origin = proj_x_view_at_origin;
+		data->height = height;
 		data->irradiance = settings.irradiance;
 		data->light_dir = settings.light_dir;
+	}
+
+	//sun drawer data
+	{
+		auto data = m_res_data.get<sun_drawer_data>();
+		data->height = height;
+		data->irradiance = settings.irradiance;
+		data->light_dir = settings.light_dir;
+		data->proj_x_view_at_origin = proj_x_view_at_origin;
+		data->helper_dir = get_orthonormal(settings.light_dir);
 	}
 
 }

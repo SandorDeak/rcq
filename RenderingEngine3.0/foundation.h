@@ -149,14 +149,13 @@ namespace rcq
 		BUILD_MAT_EM_INFO_STRING
 	};
 
-	typedef std::tuple<unique_id, std::string, size_t, size_t, size_t> build_sky_info;
+	typedef std::tuple<unique_id, std::string, glm::uvec3, glm::uvec2> build_sky_info;
 	enum
 	{
 		BUILD_SKY_INFO_ID,
 		BUILD_SKY_INFO_FILENAME,
-		BUILD_SKY_INFO_WIDTH,
-		BUILD_SKY_INFO_HEIGHT,
-		BUILD_SKY_INFO_DEPTH
+		BUILD_SKY_INFO_SKY_IMAGE_SIZE,
+		BUILD_SKY_INFO_TRANSMITTANCE_SIZE
 	};
 
 	typedef std::tuple<unique_id, std::string, bool> build_mesh_info;
@@ -293,6 +292,18 @@ namespace rcq
 			VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 	}
 
+	inline glm::vec3 get_orthonormal(const glm::vec3& v)
+	{
+		if (fabsf(v.x) > 0.001f || fabsf(v.y)>0.001f)
+		{
+			return glm::normalize(glm::vec3(-v.y, v.x, 0.f));
+		}
+		else
+		{
+			return glm::normalize(glm::vec3(-v.z, 0.f, v.x));
+		}
+	}
+
 	template<size_t... indices, typename Callable, typename Tuple>
 	inline constexpr void for_each_impl(Callable&& f, Tuple&& tuple, std::index_sequence<indices...>)
 	{
@@ -410,7 +421,7 @@ namespace rcq
 	struct sky
 	{
 		VkDescriptorSet ds;
-		std::array<texture, 2> tex;
+		std::array<texture, 3> tex;
 		uint32_t pool_index;
 	};
 

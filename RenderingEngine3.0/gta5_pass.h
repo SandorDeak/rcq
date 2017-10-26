@@ -28,6 +28,7 @@ namespace rcq
 			RES_DATA_SS_DIR_SHADOW_MAP_GEN_DATA,
 			RES_DATA_IMAGE_ASSEMBLER_DATA,
 			RES_DATA_SKY_DRAWER_DATA,
+			RES_DATA_SUN_DRAWER_DATA,
 			RES_DATA_COUNT
 		};
 		enum RES_IMAGE
@@ -110,6 +111,7 @@ namespace rcq
 			GP_SSAO_BLUR,
 			GP_IMAGE_ASSEMBLER,
 			GP_SKY_DRAWER,
+			GP_SUN_DRAWER,
 
 			GP_POSTPROCESSING,
 			GP_COUNT
@@ -180,11 +182,12 @@ namespace rcq
 		struct image_assembler_data
 		{
 			glm::vec3 dir; //in view space
-			uint32_t padding0;
+			float height;
 			glm::vec3 irradiance;
 			uint32_t padding1;
 			glm::vec3 ambient_irradiance;
 			uint32_t padding2;
+			glm::mat4 view_inverse;
 		};
 		struct sky_drawer_data
 		{
@@ -193,6 +196,16 @@ namespace rcq
 			float height;
 			glm::vec3 irradiance;
 			uint32_t padding0;
+		};
+		struct sun_drawer_data
+		{
+			glm::mat4 proj_x_view_at_origin;
+			glm::vec3 light_dir;
+			uint32_t padding0;
+			glm::vec3 helper_dir;
+			float height;
+			glm::vec3 irradiance;
+			uint32_t padding1;
 		};
 
 		struct framebuffers
@@ -215,7 +228,8 @@ namespace rcq
 				dir_shadow_map_gen_data*,
 				ss_dir_shadow_map_gen_data*,
 				image_assembler_data*,
-				sky_drawer_data*
+				sky_drawer_data*,
+				sun_drawer_data*
 			> data;
 
 			VkBuffer buffer;
@@ -233,7 +247,8 @@ namespace rcq
 					sizeof(dir_shadow_map_gen_data),
 					sizeof(ss_dir_shadow_map_gen_data),
 					sizeof(image_assembler_data),
-					sizeof(sky_drawer_data) };
+					sizeof(sky_drawer_data),
+					sizeof(sun_drawer_data) };
 			}
 
 			void calcoffset_and_size(size_t alignment)

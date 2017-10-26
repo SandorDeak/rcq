@@ -22,6 +22,7 @@ namespace rcq
 		GP_SSAO_BLUR,
 		GP_IMAGE_ASSEMBLER,
 		GP_SKY_DRAWER,
+		GP_SUN_DRAWER,
 
 		GP_POSTPROCESSING,
 		GP_COUNT
@@ -791,6 +792,7 @@ namespace rcq
 			SUBPASS_SSAO_MAP_BLUR,
 			SUBPASS_IMAGE_ASSEMBLER,
 			SUBPASS_SKY_DRAWER,
+			SUBPASS_SUN_DRAWER,
 			SUBPASS_COUNT
 		};
 
@@ -799,8 +801,202 @@ namespace rcq
 			DEP_SSDS_BLUR_IMAGE_ASSEMBLER,
 			DEP_SSAO_BLUR_IMAGE_ASSEMBLER,
 			DEP_IMAGE_ASSEMBLER_SKY_DRAWER,
+			DEP_SKY_DRAWER_SUN_DRAWER,
 			DEP_COUNT
 		};
+
+		namespace subpass_sun_drawer
+		{
+			VkAttachmentReference preimage = { ATT_PREIMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			VkAttachmentReference ref_depth = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
+
+			constexpr VkSubpassDescription create_subpass()
+			{
+				VkSubpassDescription s = {};
+				s.colorAttachmentCount = 1;
+				s.pColorAttachments = &preimage;
+				s.pDepthStencilAttachment = &ref_depth;
+				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				return s;
+			}
+
+			namespace pipeline
+			{
+
+				constexpr auto create_vertex_input()
+				{
+					VkPipelineVertexInputStateCreateInfo input = {};
+					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+					return input;
+				}
+				constexpr auto vertex_input = create_vertex_input();
+
+				constexpr auto create_input_assembly()
+				{
+
+					VkPipelineInputAssemblyStateCreateInfo assembly = {};
+					assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+					assembly.primitiveRestartEnable = VK_FALSE;
+					assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+					return assembly;
+				}
+				constexpr auto input_assembly = create_input_assembly();
+
+				constexpr auto create_rasterizer()
+				{
+					VkPipelineRasterizationStateCreateInfo r = {};
+					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+					r.cullMode = VK_CULL_MODE_NONE;
+					r.depthBiasEnable = VK_FALSE;
+					r.depthClampEnable = VK_FALSE;
+					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+					r.lineWidth = 1.f;
+					r.polygonMode = VK_POLYGON_MODE_FILL;
+					r.rasterizerDiscardEnable = VK_FALSE;
+					return r;
+				}
+				constexpr auto rasterizer = create_rasterizer();
+
+				constexpr auto create_depth()
+				{
+					VkPipelineDepthStencilStateCreateInfo d = {};
+					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+					d.depthBoundsTestEnable = VK_FALSE;
+					d.depthCompareOp = VK_COMPARE_OP_EQUAL;
+					d.depthTestEnable = VK_TRUE;
+					d.depthWriteEnable = VK_FALSE;
+					d.stencilTestEnable = VK_FALSE;
+					return d;
+				}
+				constexpr auto depth = create_depth();
+
+				constexpr auto create_multisample()
+				{
+					VkPipelineMultisampleStateCreateInfo m = {};
+					m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+					m.alphaToCoverageEnable = VK_FALSE;
+					m.alphaToOneEnable = VK_FALSE;
+					m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+					m.sampleShadingEnable = VK_FALSE;
+					return m;
+				}
+				constexpr auto multisample = create_multisample();
+
+				constexpr auto create_blend_att()
+				{
+					VkPipelineColorBlendAttachmentState b = {};
+
+					b.blendEnable = VK_TRUE;
+					b.alphaBlendOp = VK_BLEND_OP_ADD;
+					b.colorBlendOp = VK_BLEND_OP_ADD;
+					b.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+					b.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+					b.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+					b.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;
+					b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+						VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+					return b;
+				}
+				constexpr auto blend_att = create_blend_att();
+
+				constexpr auto create_blend()
+				{
+					VkPipelineColorBlendStateCreateInfo b = {};
+					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+					b.attachmentCount = 1;
+					b.pAttachments = &blend_att;
+					b.logicOpEnable = VK_FALSE;
+					return b;
+				}
+				constexpr auto blend = create_blend();
+
+				struct runtime_info
+				{
+					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
+					{
+
+						create_shaders(device,
+						{
+							"shaders/gta5_pass/sun/vert.spv",
+							"shaders/gta5_pass/sun/frag.spv"
+						},
+						{
+							VK_SHADER_STAGE_VERTEX_BIT,
+							VK_SHADER_STAGE_FRAGMENT_BIT
+						},
+							shaders.data()
+						);
+
+						viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+						viewport.pScissors = &scissor;
+						viewport.scissorCount = 1;
+						viewport.pViewports = &vp;
+						viewport.viewportCount = 1;
+						scissor.extent = e;
+						scissor.offset = { 0,0 };
+						vp.height = static_cast<float>(e.height);
+						vp.width = static_cast<float>(e.width);
+						vp.maxDepth = 1.f;
+						vp.minDepth = 0.f;
+						vp.x = 0.f;
+						vp.y = 0.f;
+					}
+
+					~runtime_info()
+					{
+						for (auto s : shaders)
+							vkDestroyShaderModule(device, s.module, host_memory_manager);
+					}
+
+					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
+					{
+						c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+						c.basePipelineHandle = VK_NULL_HANDLE;
+						c.basePipelineIndex = -1;
+						c.pInputAssemblyState = &input_assembly;
+						c.pMultisampleState = &multisample;
+						c.pRasterizationState = &rasterizer;
+						c.pDepthStencilState = &depth;
+						c.pColorBlendState = &blend;
+						c.pStages = shaders.data();
+						c.stageCount = 2;
+						c.pVertexInputState = &vertex_input;
+						c.pViewportState = &viewport;
+						c.subpass = SUBPASS_SUN_DRAWER;
+					}
+
+					VkDevice device;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
+					VkViewport vp;
+					VkRect2D scissor;
+					VkPipelineViewportStateCreateInfo viewport = {};
+				};
+				namespace dsl
+				{
+					constexpr auto create_binding()
+					{
+						VkDescriptorSetLayoutBinding binding = {};
+						binding.binding = 0;
+						binding.descriptorCount = 1;
+						binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+						binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+						return binding;
+					}
+					constexpr auto binding = create_binding();
+
+					constexpr auto create_create_info()
+					{
+						VkDescriptorSetLayoutCreateInfo dsl = {};
+						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+						dsl.bindingCount = 1;
+						dsl.pBindings = &binding;
+						return dsl;
+					}
+					constexpr auto create_info = create_create_info();
+				}//namespace dsl
+			}//namespace pipeline
+		}// namespace subpass_sun_drawer
 
 		namespace subpass_sky_drawer
 		{
@@ -1619,8 +1815,15 @@ namespace rcq
 			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].dstSubpass = SUBPASS_SKY_DRAWER;
-			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+			d[DEP_SKY_DRAWER_SUN_DRAWER].srcSubpass = SUBPASS_SKY_DRAWER;
+			d[DEP_SKY_DRAWER_SUN_DRAWER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_SKY_DRAWER_SUN_DRAWER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			d[DEP_SKY_DRAWER_SUN_DRAWER].dstSubpass = SUBPASS_SUN_DRAWER;
+			d[DEP_SKY_DRAWER_SUN_DRAWER].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_SKY_DRAWER_SUN_DRAWER].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 			return d;
 		}
@@ -1630,7 +1833,8 @@ namespace rcq
 			subpass_ss_dir_shadow_map_blur::create_subpass(),
 			subpass_ssao_map_blur::create_subpass(),
 			subpass_image_assembler::create_subpass(),
-			subpass_sky_drawer::create_subpass()
+			subpass_sky_drawer::create_subpass(),
+			subpass_sun_drawer::create_subpass()
 		};
 
 		constexpr auto create_create_info()
@@ -2637,7 +2841,7 @@ namespace rcq
 		constexpr auto create_sizes()
 		{
 			std::array<VkDescriptorPoolSize, 3> sizes = {};
-			sizes[0].descriptorCount = 7;// ub_count;
+			sizes[0].descriptorCount = 8;// ub_count;
 			sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			sizes[1].descriptorCount = 11;// cis_count;
 			sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;

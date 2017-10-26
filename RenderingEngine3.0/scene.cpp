@@ -121,7 +121,8 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
 	//sky res
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST, "textures/sky/try_8", 32, 32, 32);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST, "textures/sky/try_12",
+		glm::uvec3(32), glm::uvec2(512));
 
 	//create transforms
 	transform tr;
@@ -298,7 +299,7 @@ void scene::build()
 
 	m_render_settings.ambient_irradiance = glm::vec3(1.f);
 	m_render_settings.far = 500.f;
-	m_render_settings.irradiance = glm::vec3(5.f);
+	m_render_settings.irradiance = glm::vec3(10.f);
 	m_render_settings.light_dir = glm::normalize(glm::vec3(0.1f, -1.f, 0.f));
 	m_render_settings.near = 0.1f;
 	m_render_settings.pos = m_camera.pos;

@@ -161,7 +161,7 @@ namespace rcq
 
 		template<size_t res_type>
 		typename std::enable_if_t<std::is_same_v<sky, typename resource_typename<res_type>::type>, sky>
-			build(const std::string& filename, size_t width, size_t height, size_t depth);
+			build(const std::string& filename, const glm::uvec3& sky_image_size, const glm::uvec2& transmittance_size);
 
 
 		texture load_texture(const std::string& filename);
