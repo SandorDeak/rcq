@@ -36,8 +36,8 @@ namespace rcq
 			RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL,
 			RES_IMAGE_ENVIRONMENT_MAP,
 			RES_IMAGE_GB_POS_ROUGHNESS,
-			RES_IMAGE_GB_F0_SSAO,
-			RES_IMAGE_GB_ALBEDO_SSDS,
+			RES_IMAGE_GB_BASECOLOR_SSAO,
+			RES_IMAGE_GB_METALNESS_SSDS,
 			RES_IMAGE_GB_NORMAL_AO,
 			RES_IMAGE_GB_DEPTH,
 			RES_IMAGE_DIR_SHADOW_MAP,
@@ -55,8 +55,8 @@ namespace rcq
 			MEMORY_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL,
 			MEMORY_ENVIRONMENT_MAP,
 			MEMORY_GB_POS_ROUGHNESS,
-			MEMORY_GB_F0_SSAO,
-			MEMORY_GB_ALBEDO_SSDS,
+			MEMORY_GB_BASECOLOR_SSAO,
+			MEMORY_GB_METALNESS_SSDS,
 			MEMORY_GB_NORMAL_AO,
 			MEMORY_GB_DEPTH,
 			MEMORY_DIR_SHADOW_MAP,
@@ -165,8 +165,8 @@ namespace rcq
 		};
 		struct gbuffer_gen_data
 		{
-			glm::mat4 proj;
-			glm::mat4 view;
+			glm::mat4 proj_x_view;
+			glm::vec3 cam_pos;
 		};
 		struct dir_shadow_map_gen_data
 		{
@@ -175,6 +175,7 @@ namespace rcq
 		struct ss_dir_shadow_map_gen_data
 		{
 			glm::mat4 projs[FRUSTUM_SPLIT_COUNT];
+			glm::mat4 view;
 			glm::vec3 light_dir;
 			float near;
 			float far;
@@ -182,12 +183,13 @@ namespace rcq
 		struct image_assembler_data
 		{
 			glm::vec3 dir; //in view space
-			float height;
+			float height_bias;
 			glm::vec3 irradiance;
 			uint32_t padding1;
 			glm::vec3 ambient_irradiance;
 			uint32_t padding2;
-			glm::mat4 view_inverse;
+			glm::vec3 cam_pos;
+			uint32_t padding3;
 		};
 		struct sky_drawer_data
 		{

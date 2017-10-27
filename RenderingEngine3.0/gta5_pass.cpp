@@ -459,15 +459,15 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_F0_SSAO].image)
+		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
 		VkMemoryRequirements mr;
-		vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_F0_SSAO].image, &mr);
+		vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image, &mr);
 
-		alloc_infos[MEMORY_GB_F0_SSAO].allocationSize = mr.size;
-		alloc_infos[MEMORY_GB_F0_SSAO].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
+		alloc_infos[MEMORY_GB_BASECOLOR_SSAO].allocationSize = mr.size;
+		alloc_infos[MEMORY_GB_BASECOLOR_SSAO].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	}
 
@@ -488,15 +488,15 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].image)
+		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
 		VkMemoryRequirements mr;
-		vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].image, &mr);
+		vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image, &mr);
 
-		alloc_infos[MEMORY_GB_ALBEDO_SSDS].allocationSize = mr.size;
-		alloc_infos[MEMORY_GB_ALBEDO_SSDS].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
+		alloc_infos[MEMORY_GB_METALNESS_SSDS].allocationSize = mr.size;
+		alloc_infos[MEMORY_GB_METALNESS_SSDS].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	}
 
@@ -765,13 +765,13 @@ void gta5_pass::get_memory_and_build_resources()
 
 	//gbuffer F0 ssao
 	{
-		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_F0_SSAO].image,
-			mem[MEMORY_GB_F0_SSAO], 0);
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image,
+			mem[MEMORY_GB_BASECOLOR_SSAO], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		view.image = m_res_image[RES_IMAGE_GB_F0_SSAO].image;
+		view.image = m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image;
 		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		view.subresourceRange.baseArrayLayer = 0;
@@ -779,20 +779,20 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_F0_SSAO].view)
+		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
 
 	//gbuffer albedo ssds
 	{
-		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].image,
-			mem[MEMORY_GB_ALBEDO_SSDS], 0);
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image,
+			mem[MEMORY_GB_METALNESS_SSDS], 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		view.image = m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].image;
+		view.image = m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image;
 		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		view.subresourceRange.baseArrayLayer = 0;
@@ -800,7 +800,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].view)
+		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_METALNESS_SSDS].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -975,8 +975,8 @@ void gta5_pass::get_memory_and_build_resources()
 
 	//gbuffer F0 ssao
 	{
-		auto& b = barriers[RES_IMAGE_GB_F0_SSAO];
-		b.image = m_res_image[RES_IMAGE_GB_F0_SSAO].image;
+		auto& b = barriers[RES_IMAGE_GB_BASECOLOR_SSAO];
+		b.image = m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image;
 		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -988,8 +988,8 @@ void gta5_pass::get_memory_and_build_resources()
 
 	//gbuffer albedo ssds
 	{
-		auto& b = barriers[RES_IMAGE_GB_ALBEDO_SSDS];
-		b.image = m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].image;
+		auto& b = barriers[RES_IMAGE_GB_METALNESS_SSDS];
+		b.image = m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image;
 		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 		b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1303,13 +1303,13 @@ void gta5_pass::update_descriptor_sets()
 		gb_pos_roughness.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
 		gb_pos_roughness.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
 
-		VkDescriptorImageInfo gb_F0_ssao;
-		gb_F0_ssao.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		gb_F0_ssao.imageView = m_res_image[RES_IMAGE_GB_F0_SSAO].view;
+		VkDescriptorImageInfo gb_BASECOLOR_SSAO;
+		gb_BASECOLOR_SSAO.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		gb_BASECOLOR_SSAO.imageView = m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].view;
 
-		VkDescriptorImageInfo gb_albedo_ssds;
-		gb_albedo_ssds.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		gb_albedo_ssds.imageView = m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].view;
+		VkDescriptorImageInfo gb_METALNESS_SSDS;
+		gb_METALNESS_SSDS.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		gb_METALNESS_SSDS.imageView = m_res_image[RES_IMAGE_GB_METALNESS_SSDS].view;
 		
 		VkDescriptorImageInfo gb_normal_ao;
 		gb_normal_ao.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1335,7 +1335,7 @@ void gta5_pass::update_descriptor_sets()
 		w[0].dstArrayElement = 0;
 		w[0].dstBinding = 0;
 		w[0].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
-		w[0].pImageInfo = &gb_F0_ssao;
+		w[0].pImageInfo = &gb_BASECOLOR_SSAO;
 
 		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[1].descriptorCount = 1;
@@ -1343,7 +1343,7 @@ void gta5_pass::update_descriptor_sets()
 		w[1].dstArrayElement = 0;
 		w[1].dstBinding = 1;
 		w[1].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
-		w[1].pImageInfo = &gb_albedo_ssds;
+		w[1].pImageInfo = &gb_METALNESS_SSDS;
 
 		w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[2].descriptorCount = 1;
@@ -1556,8 +1556,8 @@ void gta5_pass::create_framebuffers()
 
 		std::array<VkImageView, ATT_COUNT> atts;
 		atts[ATT_POS_ROUGHNESS] = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
-		atts[ATT_ALBEDO_SSDS] = m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].view;
-		atts[ATT_F0_SSAO] = m_res_image[RES_IMAGE_GB_F0_SSAO].view;
+		atts[ATT_METALNESS_SSDS] = m_res_image[RES_IMAGE_GB_METALNESS_SSDS].view;
+		atts[ATT_BASECOLOR_SSAO] = m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].view;
 		atts[ATT_NORMAL_AO] = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
 		atts[ATT_DEPTHSTENCIL] = m_res_image[RES_IMAGE_GB_DEPTH].view;
 		atts[ATT_SS_DIR_SHADOW_MAP] = m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].view;
@@ -1600,8 +1600,8 @@ void gta5_pass::create_framebuffers()
 		using namespace render_pass_preimage_assembler;
 
 		std::array<VkImageView, ATT_COUNT> atts;
-		atts[ATT_ALBEDO_SSDS] = m_res_image[RES_IMAGE_GB_ALBEDO_SSDS].view;
-		atts[ATT_F0_SSAO] = m_res_image[RES_IMAGE_GB_F0_SSAO].view;
+		atts[ATT_METALNESS_SSDS] = m_res_image[RES_IMAGE_GB_METALNESS_SSDS].view;
+		atts[ATT_BASECOLOR_SSAO] = m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].view;
 		atts[ATT_PREIMAGE] = m_res_image[RES_IMAGE_PREIMAGE].view;
 		atts[ATT_DEPTHSTENCIL] = m_res_image[RES_IMAGE_GB_DEPTH].view;
 
@@ -1685,7 +1685,7 @@ void gta5_pass::record_present_command_buffers()
 	{
 		VkCommandBufferBeginInfo begin = {};
 		begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		begin.flags = 0;
+		begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 		if (vkBeginCommandBuffer(m_present_cbs[i], &begin) != VK_SUCCESS)
 			throw std::runtime_error("failed to begin command buffer!");
 
@@ -1710,14 +1710,10 @@ void gta5_pass::record_present_command_buffers()
 
 void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_TYPE_COUNT> record_mask)
 {
-	process_settings(settings);
+	timer t;
+	t.start();
 
-	uint32_t image_index;
-	vkAcquireNextImageKHR(m_base.device, m_base.swap_chain, std::numeric_limits<uint64_t>::max(), m_image_available_s,
-		VK_NULL_HANDLE, &image_index);
-	
-	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
-	vkResetFences(m_base.device, 1, &m_render_finished_f);
+	process_settings(settings);
 
 	if (record_mask[RENDERABLE_TYPE_MAT_EM] && !m_renderables[RENDERABLE_TYPE_MAT_EM].empty())
 	{
@@ -1876,10 +1872,11 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 	//record primary cb
 	{
 		auto cb = m_render_cb;
+		//vkResetCommandBuffer(cb, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
 
 		VkCommandBufferBeginInfo cb_begin = {};
 		cb_begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		cb_begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		cb_begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 
 		if (vkBeginCommandBuffer(cb, &cb_begin) != VK_SUCCESS)
 			throw std::runtime_error("failed to begin command buffer!");
@@ -1927,9 +1924,27 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			begin.renderArea.offset = { 0,0 };
 
 			vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_MAT_EM]);
-			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_SKYBOX_EM]);
+			/*vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_MAT_EM]);
+			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_SKYBOX_EM]);*/
 			vkCmdEndRenderPass(cb);
+
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 6;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
 		}
 
 		//dir shadow map gen
@@ -1954,6 +1969,24 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
 			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_DIR_SHADOW_GEN]);
 			vkCmdEndRenderPass(cb);
+
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = FRUSTUM_SPLIT_COUNT;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
 		}
 
 		//gbuffer assembler
@@ -1984,6 +2017,26 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			vkCmdEndRenderPass(cb);
 		}
 
+		//barrier for ssds map
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
 		//barrier for pos and normal images
 		{
 			std::array<VkImageMemoryBarrier, 2> bs = {};
@@ -2007,6 +2060,52 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 				0, 0, nullptr, 0, nullptr, 2, bs.data());
+		}
+
+		//barrier for basecolor_ssao and metalness_ssds
+		{
+			std::array<VkImageMemoryBarrier, 2> bs = {};
+			for (auto& b : bs)
+			{
+				b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+				b.oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+				b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+				b.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT|VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
+				b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+				b.subresourceRange.baseArrayLayer = 0;
+				b.subresourceRange.baseMipLevel = 0;
+				b.subresourceRange.layerCount = 1;
+				b.subresourceRange.levelCount = 1;
+			}
+			bs[0].image = m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image;
+			bs[1].image = m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+				0, 0, nullptr, 0, nullptr, 2, bs.data());
+		}
+
+		//barrier for depthstencil
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_GB_DEPTH].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
 		}
 
 		//ssao map gen
@@ -2097,10 +2196,41 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			vkCmdEndRenderPass(cb);
 		}
 
+		//barrier for preimage
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_PREIMAGE].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
+
 
 		if (vkEndCommandBuffer(cb) != VK_SUCCESS)
 			throw std::runtime_error("failed to record commnd buffer!");
 	}
+
+	t.stop();
+	//std::cout << "render_function_time: " << t.get() << std::endl;
+
+	uint32_t image_index;
+	vkAcquireNextImageKHR(m_base.device, m_base.swap_chain, std::numeric_limits<uint64_t>::max(), m_image_available_s,
+		VK_NULL_HANDLE, &image_index);
+
+	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+	vkResetFences(m_base.device, 1, &m_render_finished_f);
 
 	//submit command buffers
 	{
@@ -2142,12 +2272,14 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 		if (vkQueuePresentKHR(m_base.present_queue, &present) != VK_SUCCESS)
 			throw std::runtime_error("failed to present image!");
 	}
+
 }
 
 void gta5_pass::process_settings(const render_settings & settings)
 {
 	auto projs = calc_projs(settings);
-	float height = std::max(1000.f, settings.pos.y);
+	float height_bias = 1000.f;
+	float height = height_bias+settings.pos.y;
 
 	//environment map gen mat
 	{
@@ -2177,14 +2309,15 @@ void gta5_pass::process_settings(const render_settings & settings)
 	//gbuffer gen
 	{
 		auto data = m_res_data.get<gbuffer_gen_data>();
-		data->proj = settings.proj;
-		data->view = settings.view;
+		data->proj_x_view = settings.proj*settings.view;
+		data->cam_pos = settings.pos;
 	}
 
 	//ss dir shadow map gen
 	{
 		auto data = m_res_data.get<ss_dir_shadow_map_gen_data>();
 		data->light_dir = settings.light_dir;
+		data->view = settings.view;
 		data->far = settings.far;
 		data->near = settings.near;
 		memcpy(data->projs, projs.data(), sizeof(glm::mat4)*projs.size());
@@ -2194,10 +2327,10 @@ void gta5_pass::process_settings(const render_settings & settings)
 	{
 		auto data = m_res_data.get<image_assembler_data>();
 		data->ambient_irradiance = settings.ambient_irradiance;
-		data->dir = static_cast<glm::mat3>(settings.view)*settings.light_dir;
+		data->dir = settings.light_dir;
 		data->irradiance = settings.irradiance;
-		data->view_inverse = glm::inverse(settings.view);
-		data->height = height;
+		data->cam_pos = settings.pos;
+		data->height_bias = height_bias;
 	}
 
 	glm::mat4 view_at_origin = settings.view;
@@ -2241,7 +2374,7 @@ std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> gta5_pass::calc_projs(const render_se
 
 	for (uint32_t i = 0; i < FRUSTUM_SPLIT_COUNT + 1; ++i)
 	{
-		float z = settings.near + std::powf(static_cast<float>(i) / static_cast<float>(FRUSTUM_SPLIT_COUNT), 4.f)*(settings.far - settings.near);		
+		float z = settings.near + std::powf(static_cast<float>(i) / static_cast<float>(FRUSTUM_SPLIT_COUNT), 3.f)*(settings.far - settings.near);		
 		z *= (-1.f);
 
 		std::array<float, 4> x = { -1.f, 1.f, -1.f, 1.f };

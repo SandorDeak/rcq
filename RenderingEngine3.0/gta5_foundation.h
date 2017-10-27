@@ -577,7 +577,7 @@ namespace rcq
 				{
 					VkPipelineRasterizationStateCreateInfo r = {};
 					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-					r.cullMode = VK_CULL_MODE_BACK_BIT;
+					r.cullMode = VK_CULL_MODE_FRONT_BIT;
 					r.depthBiasEnable = VK_FALSE;
 					r.depthClampEnable = VK_FALSE;
 					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
@@ -779,8 +779,8 @@ namespace rcq
 	{
 		enum ATT
 		{
-			ATT_F0_SSAO,
-			ATT_ALBEDO_SSDS,
+			ATT_BASECOLOR_SSAO,
+			ATT_METALNESS_SSDS,
 			ATT_PREIMAGE,
 			ATT_DEPTHSTENCIL,
 			ATT_COUNT
@@ -1189,7 +1189,7 @@ namespace rcq
 
 		namespace subpass_ss_dir_shadow_map_blur
 		{
-			constexpr VkAttachmentReference ssds_out = { ATT_ALBEDO_SSDS, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr VkAttachmentReference ssds_out = { ATT_METALNESS_SSDS, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
 			constexpr VkSubpassDescription create_subpass()
 			{
@@ -1369,8 +1369,8 @@ namespace rcq
 
 		namespace subpass_ssao_map_blur
 		{
-			constexpr VkAttachmentReference ssao_out = { ATT_F0_SSAO, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			constexpr uint32_t pres = ATT_ALBEDO_SSDS;
+			constexpr VkAttachmentReference ssao_out = { ATT_BASECOLOR_SSAO, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr uint32_t pres = ATT_METALNESS_SSDS;
 
 			constexpr VkSubpassDescription create_subpass()
 			{
@@ -1544,21 +1544,22 @@ namespace rcq
 		{
 			enum REF_IN
 			{
-				REF_IN_F0_SSAO,
-				REF_IN_ALBEDO_SSDS,
+				REF_IN_BASECOLOR_SSAO,
+				REF_IN_METALNESS_SSDS,
 				REF_IN_COUNT
 			};
 
 			constexpr auto create_refs_in()
 			{
 				std::array<VkAttachmentReference, REF_IN_COUNT> ref = {};
-				ref[REF_IN_ALBEDO_SSDS].attachment = ATT_ALBEDO_SSDS;
-				ref[REF_IN_ALBEDO_SSDS].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-				ref[REF_IN_F0_SSAO].attachment = ATT_F0_SSAO;
-				ref[REF_IN_F0_SSAO].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				ref[REF_IN_METALNESS_SSDS].attachment = ATT_METALNESS_SSDS;
+				ref[REF_IN_METALNESS_SSDS].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+				ref[REF_IN_BASECOLOR_SSAO].attachment = ATT_BASECOLOR_SSAO;
+				ref[REF_IN_BASECOLOR_SSAO].layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 				return ref;
 			}
 			constexpr std::array<VkAttachmentReference, REF_IN_COUNT>  ref_in = create_refs_in();
+			constexpr VkAttachmentReference depth_ref = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
 			constexpr VkAttachmentReference color_out = { ATT_PREIMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
 			constexpr VkSubpassDescription create_subpass()
@@ -1568,6 +1569,7 @@ namespace rcq
 				s.pInputAttachments = ref_in.data();
 				s.colorAttachmentCount = 1;
 				s.pColorAttachments = &color_out;
+				s.pDepthStencilAttachment = &depth_ref;
 				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				return s;
 			}
@@ -1609,6 +1611,19 @@ namespace rcq
 					return r;
 				}
 				constexpr auto rasterizer = create_rasterizer();
+
+				constexpr auto create_depth()
+				{
+					VkPipelineDepthStencilStateCreateInfo d = {};
+					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+					d.depthBoundsTestEnable = VK_FALSE;
+					d.depthCompareOp = VK_COMPARE_OP_GREATER;
+					d.depthTestEnable = VK_TRUE;
+					d.depthWriteEnable = VK_FALSE;
+					d.stencilTestEnable = VK_FALSE;
+					return d;
+				}
+				constexpr auto depth = create_depth();
 
 				constexpr auto create_multisample()
 				{
@@ -1692,6 +1707,7 @@ namespace rcq
 						c.pMultisampleState = &multisample;
 						c.pRasterizationState = &rasterizer;
 						c.pColorBlendState = &blend;
+						c.pDepthStencilState = &depth;
 						c.pStages = shaders.data();
 						c.stageCount = 2;
 						c.pVertexInputState = &vertex_input;
@@ -1753,23 +1769,23 @@ namespace rcq
 		{
 			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
 
-			atts[ATT_ALBEDO_SSDS].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-			atts[ATT_ALBEDO_SSDS].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			atts[ATT_ALBEDO_SSDS].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			atts[ATT_ALBEDO_SSDS].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			atts[ATT_ALBEDO_SSDS].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			atts[ATT_ALBEDO_SSDS].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			atts[ATT_ALBEDO_SSDS].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			atts[ATT_ALBEDO_SSDS].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_METALNESS_SSDS].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_METALNESS_SSDS].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			atts[ATT_METALNESS_SSDS].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			atts[ATT_METALNESS_SSDS].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			atts[ATT_METALNESS_SSDS].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			atts[ATT_METALNESS_SSDS].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_METALNESS_SSDS].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			atts[ATT_METALNESS_SSDS].samples = VK_SAMPLE_COUNT_1_BIT;
 
-			atts[ATT_F0_SSAO].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-			atts[ATT_F0_SSAO].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			atts[ATT_F0_SSAO].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			atts[ATT_F0_SSAO].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			atts[ATT_F0_SSAO].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			atts[ATT_F0_SSAO].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			atts[ATT_F0_SSAO].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-			atts[ATT_F0_SSAO].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_BASECOLOR_SSAO].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_BASECOLOR_SSAO].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			atts[ATT_BASECOLOR_SSAO].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			atts[ATT_BASECOLOR_SSAO].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			atts[ATT_BASECOLOR_SSAO].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			atts[ATT_BASECOLOR_SSAO].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_BASECOLOR_SSAO].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			atts[ATT_BASECOLOR_SSAO].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_PREIMAGE].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			atts[ATT_PREIMAGE].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -2068,8 +2084,8 @@ namespace rcq
 		{
 			ATT_DEPTHSTENCIL,
 			ATT_POS_ROUGHNESS,
-			ATT_F0_SSAO,
-			ATT_ALBEDO_SSDS,
+			ATT_BASECOLOR_SSAO,
+			ATT_METALNESS_SSDS,
 			ATT_NORMAL_AO,
 			ATT_SS_DIR_SHADOW_MAP,
 			ATT_COUNT
@@ -2094,7 +2110,7 @@ namespace rcq
 			{
 				REF_POS_ROUGHNESS,
 				REF_FO_SSAO,
-				REF_ALBEDO_SSDS,
+				REF_METALNESS_SSDS,
 				REF_NORMAL_AO,
 				REF_COUNT
 			};
@@ -2105,11 +2121,11 @@ namespace rcq
 				refs[REF_POS_ROUGHNESS].attachment = ATT_POS_ROUGHNESS;
 				refs[REF_POS_ROUGHNESS].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-				refs[REF_FO_SSAO].attachment = ATT_F0_SSAO;
+				refs[REF_FO_SSAO].attachment = ATT_BASECOLOR_SSAO;
 				refs[REF_FO_SSAO].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-				refs[REF_ALBEDO_SSDS].attachment = ATT_ALBEDO_SSDS;
-				refs[REF_ALBEDO_SSDS].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+				refs[REF_METALNESS_SSDS].attachment = ATT_METALNESS_SSDS;
+				refs[REF_METALNESS_SSDS].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 				refs[REF_NORMAL_AO].attachment = ATT_NORMAL_AO;
 				refs[REF_NORMAL_AO].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -2508,19 +2524,19 @@ namespace rcq
 			atts[ATT_POS_ROUGHNESS].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			atts[ATT_POS_ROUGHNESS].samples = VK_SAMPLE_COUNT_1_BIT;
 
-			atts[ATT_F0_SSAO].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_F0_SSAO].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			atts[ATT_F0_SSAO].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			atts[ATT_F0_SSAO].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			atts[ATT_F0_SSAO].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-			atts[ATT_F0_SSAO].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_BASECOLOR_SSAO].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_BASECOLOR_SSAO].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			atts[ATT_BASECOLOR_SSAO].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_BASECOLOR_SSAO].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			atts[ATT_BASECOLOR_SSAO].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_BASECOLOR_SSAO].samples = VK_SAMPLE_COUNT_1_BIT;
 
-			atts[ATT_ALBEDO_SSDS].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			atts[ATT_ALBEDO_SSDS].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-			atts[ATT_ALBEDO_SSDS].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			atts[ATT_ALBEDO_SSDS].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			atts[ATT_ALBEDO_SSDS].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-			atts[ATT_ALBEDO_SSDS].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_METALNESS_SSDS].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_METALNESS_SSDS].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			atts[ATT_METALNESS_SSDS].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_METALNESS_SSDS].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			atts[ATT_METALNESS_SSDS].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_METALNESS_SSDS].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			atts[ATT_NORMAL_AO].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			atts[ATT_NORMAL_AO].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

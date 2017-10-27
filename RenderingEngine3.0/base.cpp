@@ -381,9 +381,9 @@ void base::create_swap_chain()
 
 	uint32_t image_count;
 	if (swap_chain_support.capabilities.maxImageCount == 0) //means no max limit
-		image_count = swap_chain_support.capabilities.minImageCount + 1;
+		image_count = swap_chain_support.capabilities.minImageCount;
 	else
-		image_count = std::min(swap_chain_support.capabilities.minImageCount + 1, swap_chain_support.capabilities.maxImageCount);
+		image_count = std::min(swap_chain_support.capabilities.minImageCount, swap_chain_support.capabilities.maxImageCount);
 
 	VkSwapchainCreateInfoKHR create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;

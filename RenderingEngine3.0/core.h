@@ -20,14 +20,14 @@ namespace rcq
 
 		void push_package(std::unique_ptr<core_package>&& package)
 		{
-			timer t;
-			t.start();
+			/*timer t;
+			t.start();*/
 			std::unique_lock<std::mutex> lock(m_package_mutex);
 			if (m_package)
 				m_package_condvar.wait(lock, [this]() { return !m_package; });
 			m_package = std::move(package);
-			t.stop();
-			std::cout << "core push package wait: " << t.get() << "\n";
+			/*t.stop();
+			std::cout << "core push package wait: " << t.get() << "\n";*/
 		}
 
 		renderable_container& get_renderable_container() { return m_renderables; }

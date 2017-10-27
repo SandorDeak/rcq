@@ -2,7 +2,7 @@
 
 #include "engine.h"
 
-const int buddha_count = 3;
+const int buddha_count = 1;
 
 
 scene::scene(GLFWwindow* window, const glm::vec2& window_size) : m_window(window), m_window_size(window_size)
@@ -13,7 +13,7 @@ scene::scene(GLFWwindow* window, const glm::vec2& window_size) : m_window(window
 
 scene::~scene()
 {
-	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKYBOX>(m_skybox.id);
+	//rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKYBOX>(m_skybox.id);
 	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST);
 
 	for (auto& m : m_meshes)
@@ -60,6 +60,12 @@ void scene::build()
 	m.resource = "meshes/terrain/terrain.obj";
 	m.calc_tb = true;
 	m.id = MESH_TERRAIN;
+	m_meshes.push_back(m);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
+
+	m.resource = "meshes/sphere/sphere.obj";
+	m.calc_tb = true;
+	m.id = MESH_SPHERE;
 	m_meshes.push_back(m);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MESH>(m.id, m.resource, m.calc_tb);
 
@@ -118,6 +124,25 @@ void scene::build()
 	mat.data.roughness = 0.5f;
 	mat.id = MAT_WHITE_WALL;
 	m_mats.push_back(mat);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources); 
+
+	//rusted iron
+	mat.data.flags = rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_METAL | rcq::TEX_TYPE_FLAG_NORMAL | rcq::TEX_TYPE_FLAG_ROUGHNESS;
+	mat.id = MAT_RUSTED_IRON;
+	mat.tex_resources[rcq::TEX_TYPE_COLOR] = "textures/rusted_iron/rustediron2_basecolor.png";
+	mat.tex_resources[rcq::TEX_TYPE_METAL] = "textures/rusted_iron/rustediron2_metallic.png";
+	mat.tex_resources[rcq::TEX_TYPE_NORMAL] = "textures/rusted_iron/rustediron2_normal.png";
+	mat.tex_resources[rcq::TEX_TYPE_ROUGHNESS] = "textures/rusted_iron/rustediron2_roughness.png";
+	m_mats.push_back(mat);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
+
+	//scuffed aluminium
+	mat.data.flags = rcq::TEX_TYPE_FLAG_ROUGHNESS;
+	mat.id = MAT_SCUFFED_ALUMINIUM;
+	mat.tex_resources[rcq::TEX_TYPE_ROUGHNESS] = "textures/scuffed_aluminium/Aluminum-Scuffed_roughness.png";
+	mat.data.color = { 0.91f, 0.92f, 0.92f };
+	mat.data.metal = 1.f;
+	m_mats.push_back(mat);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
 	//sky res
@@ -134,7 +159,7 @@ void scene::build()
 
 	for (int i = 0; i < buddha_count; ++i)
 	{
-		tr.data.model = glm::translate(glm::mat4(1.f), glm::vec3(float(i - 5)*0.5f, -0.5f, 0.f));
+		tr.data.model = glm::translate(glm::mat4(1.f), glm::vec3(float(i - 5)*0.5f, -0.55f, 0.f));
 		tr.id = ENTITY_GOLD_BUDDHA+i;
 		m_trs.push_back(tr);
 		rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
@@ -150,7 +175,7 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//self
-	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, 0.f, -4.f });
+	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, -0.4f, -4.f });
 	tr.data.scale = glm::vec3(0.015f);
 	tr.data.tex_scale = glm::vec2(5.f);
 	tr.id = ENTITY_SHELF;
@@ -165,16 +190,30 @@ void scene::build()
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
-	//terrain
+	//rusted iron sphere
+	tr.data.model = glm::translate(glm::mat4(1.f), { -1., -0.75f, -1.f });
+	tr.data.scale = glm::vec3(0.2f);
+	tr.id = ENTITY_RUSTED_IRON_SPHERE;
+	m_trs.push_back(tr);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
+
+	//scuffed aluminium sphere
+	tr.data.model = glm::translate(glm::mat4(1.f), { -3., -0.75f, -3.f });
+	tr.data.scale = glm::vec3(0.2f);
+	tr.id = ENTITY_SCUFFED_ALUMINIUM_SPHERE;
+	m_trs.push_back(tr);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
+
+	/*//terrain
 	tr.data.model = glm::translate(glm::mat4(1.f), { -600.f, -18.f, 400.f });
 	tr.data.scale = glm::vec3(1.f);
 	tr.data.tex_scale = glm::vec2(1.f);
 	tr.id = ENTITY_TERRAIN;
 	tr.usage = rcq::USAGE_STATIC;
 	m_trs.push_back(tr);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);*/
 
-	//create light res
+	/*//create light res
 	rcq::light_omni_data old;
 	old.pos = glm::vec3(2.f);
 	old.flags = 0;// rcq::LIGHT_FLAG_SHADOW_MAP;
@@ -192,9 +231,9 @@ void scene::build()
 	lo.data = old;
 	lo.id = 1;
 	m_light_omni.push_back(lo);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT_OMNI>(lo.id, lo.data, rcq::USAGE_STATIC);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_LIGHT_OMNI>(lo.id, lo.data, rcq::USAGE_STATIC);*/
 
-	//create lights
+	/*//create lights
 	entity l;
 	l.m_id = ENTITY_LIGHT0;
 	l.m_life_exp = rcq::LIFE_EXPECTANCY_LONG;
@@ -222,11 +261,12 @@ void scene::build()
 	sb.m_life_exp = rcq::LIFE_EXPECTANCY_LONG;
 	sb.m_rend_type = rcq::RENDERABLE_TYPE_SKYBOX;
 	m_entities.push_back(sb);
-	rcq::engine::instance()->cmd_build_renderable(sb.m_id, 0, 0, sb.m_material_light_id, sb.m_rend_type, sb.m_life_exp);
+	rcq::engine::instance()->cmd_build_renderable(sb.m_id, 0, 0, sb.m_material_light_id, sb.m_rend_type, sb.m_life_exp);*/
 
 
 	//create entities
 	entity e;
+
 	//buddha
 	e.m_material_light_id = MAT_GOLD;
 	e.m_mesh_id = MESH_BUDDHA;
@@ -242,20 +282,20 @@ void scene::build()
 			e.m_life_exp);
 	}
 
-	//floor
-	e.m_material_light_id = MAT_OAKFLOOR;
-	e.m_mesh_id = MESH_FLOOR;
-	e.m_transform_id = ENTITY_FLOOR;
-	e.m_id = ENTITY_FLOOR;
-	m_entities.push_back(e);
-	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
-		e.m_life_exp);
-
 	//self
 	e.m_material_light_id = MAT_BAMBOO_WOOD;
 	e.m_mesh_id = MESH_SHELF;
 	e.m_transform_id = ENTITY_SHELF;
 	e.m_id = ENTITY_SHELF;
+	m_entities.push_back(e);
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
+		e.m_life_exp);
+
+	//floor
+	e.m_material_light_id = MAT_OAKFLOOR;
+	e.m_mesh_id = MESH_FLOOR;
+	e.m_transform_id = ENTITY_FLOOR;
+	e.m_id = ENTITY_FLOOR;
 	m_entities.push_back(e);
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
 		e.m_life_exp);
@@ -269,14 +309,30 @@ void scene::build()
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
 		e.m_life_exp);
 
-	//terrain
+	//rusted iron sphere
+	e.m_material_light_id = MAT_RUSTED_IRON;
+	e.m_mesh_id = MESH_SPHERE;
+	e.m_transform_id = ENTITY_RUSTED_IRON_SPHERE;
+	e.m_id = ENTITY_RUSTED_IRON_SPHERE;
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
+		e.m_life_exp);
+
+	//scuffed aluminium sphere
+	e.m_material_light_id = MAT_SCUFFED_ALUMINIUM;
+	e.m_mesh_id = MESH_SPHERE;
+	e.m_transform_id = ENTITY_SCUFFED_ALUMINIUM_SPHERE;
+	e.m_id = ENTITY_SCUFFED_ALUMINIUM_SPHERE;
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
+		e.m_life_exp);
+
+	/*//terrain
 	e.m_material_light_id = MAT_TERRAIN;
 	e.m_mesh_id = MESH_TERRAIN;
 	e.m_transform_id = ENTITY_TERRAIN;
 	e.m_id = ENTITY_TERRAIN;
 	m_entities.push_back(e);
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
-		e.m_life_exp);
+		e.m_life_exp);*/
 
 	//sky
 	e.m_material_light_id = SKY_FIRST;
@@ -297,9 +353,9 @@ void scene::build()
 	m_camera.data.pos = glm::vec3(2.f);
 	m_camera.data.proj_x_view = m_camera.proj*m_camera.view;
 
-	m_render_settings.ambient_irradiance = glm::vec3(1.f);
+	m_render_settings.ambient_irradiance = glm::vec3(0.2f);
 	m_render_settings.far = 500.f;
-	m_render_settings.irradiance = glm::vec3(10.f);
+	m_render_settings.irradiance = glm::vec3(8.f);
 	m_render_settings.light_dir = glm::normalize(glm::vec3(0.1f, -1.f, 0.f));
 	m_render_settings.near = 0.1f;
 	m_render_settings.pos = m_camera.pos;
@@ -314,11 +370,11 @@ void scene::update(float dt)
 	static float elapsed_time = 0.f;
 	elapsed_time += dt;
 
-	for (int i = 0; i < buddha_count; ++i)
+	/*for (int i = 0; i < buddha_count; ++i)
 	{
 		m_trs[i].data.model = glm::rotate(m_trs[i].data.model, glm::radians(90.f*dt), glm::vec3(0.f, 1.f, 0.f));
 		rcq::engine::instance()->cmd_update_transform(m_trs[i].id, m_trs[i].data);
-	}
+	}*/
 	update_settings(dt);
 	std::cout << m_render_settings.light_dir.x << ' ' << m_render_settings.light_dir.y << ' ' << m_render_settings.light_dir.z << '\n';
 

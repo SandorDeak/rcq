@@ -7,6 +7,7 @@ const uint FRUSTUM_SPLIT_COUNT=4;
 layout(set=0, binding=0) uniform ss_dir_shadow_map_gen_data
 {
 	mat4 projs[FRUSTUM_SPLIT_COUNT];
+	mat4 view;
 	vec3 light_dir;
 	float near;
 	float far;
@@ -20,13 +21,13 @@ layout(input_attachment_index=1, set=0, binding=3) uniform subpassInput normal_i
 float calc_index(float z)
 {
 	float val=(z-data.near)/(data.far-data.near);
-	return pow(val, 0.25f)*float(FRUSTUM_SPLIT_COUNT);
+	return pow(val, 1.f/3.f)*float(FRUSTUM_SPLIT_COUNT);
 }
 
 void main()
 {
-	vec4 view_pos=vec4(subpassLoad(pos_in).xyz, 1.f);
-	float bias=max(0.00001f, (1.f+dot(data.light_dir, subpassLoad(normal_in).xyz))*0.001f);
+	vec4 view_pos=data.view*vec4(subpassLoad(pos_in).xyz, 1.f);
+	float bias=max(0.000001f, (1.f+dot(data.light_dir, subpassLoad(normal_in).xyz))*0.00001f);
 	float split_index=floor(calc_index(-view_pos.z));
 	vec3 light_pos=(data.projs[uint(split_index)]*view_pos).xyz;
 	float shadow=1.f;	

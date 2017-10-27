@@ -21,7 +21,7 @@ engine::engine()
 	};
 	base_info.enable_validation_layers = true;
 	base_info.height = 768;
-	base_info.width = 1024;
+	base_info.width = 1360;
 	base_info.instance_extensions=
 	{
 		VK_EXT_DEBUG_REPORT_EXTENSION_NAME
