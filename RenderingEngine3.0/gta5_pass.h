@@ -29,6 +29,7 @@ namespace rcq
 			RES_DATA_IMAGE_ASSEMBLER_DATA,
 			RES_DATA_SKY_DRAWER_DATA,
 			RES_DATA_SUN_DRAWER_DATA,
+			RES_DATA_TERRAIN_DRAWER,
 			RES_DATA_COUNT
 		};
 		enum RES_IMAGE
@@ -110,6 +111,7 @@ namespace rcq
 			GP_SSAO_GEN,
 			GP_SSAO_BLUR,
 			GP_IMAGE_ASSEMBLER,
+			GP_TERRAIN_DRAWER,
 			GP_SKY_DRAWER,
 			GP_SUN_DRAWER,
 
@@ -123,16 +125,16 @@ namespace rcq
 			VkPipelineLayout pl;
 			VkDescriptorSet ds;
 			VkDescriptorSetLayout dsl;
-			void create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls)
+			void create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls, const VkAllocationCallbacks* alloc)
 			{
 				std::vector<VkDescriptorSet> all_dsl(1 + dsls.size());
 				all_dsl[0] = dsl;
 				std::copy(dsls.begin(), dsls.end(), all_dsl.begin() + 1);
-				pl = rcq::create_layout(device, all_dsl);
+				pl = rcq::create_layout(device, all_dsl, alloc);
 			}
-			void create_dsl(VkDevice device, const VkDescriptorSetLayoutCreateInfo& create_info)
+			void create_dsl(VkDevice device, const VkDescriptorSetLayoutCreateInfo& create_info, const VkAllocationCallbacks* alloc)
 			{
-				if (vkCreateDescriptorSetLayout(device, &create_info, host_memory_manager, &dsl) != VK_SUCCESS)
+				if (vkCreateDescriptorSetLayout(device, &create_info, alloc, &dsl) != VK_SUCCESS)
 					throw std::runtime_error("failed to create dsl!");
 			}
 			void bind(VkCommandBuffer cb)
@@ -209,6 +211,10 @@ namespace rcq
 			glm::vec3 irradiance;
 			uint32_t padding1;
 		};
+		struct terrain_drawer_data
+		{
+			glm::mat4 proj_x_view;
+		};
 
 		struct framebuffers
 		{
@@ -231,7 +237,8 @@ namespace rcq
 				ss_dir_shadow_map_gen_data*,
 				image_assembler_data*,
 				sky_drawer_data*,
-				sun_drawer_data*
+				sun_drawer_data*,
+				terrain_drawer_data*
 			> data;
 
 			VkBuffer buffer;
@@ -250,7 +257,8 @@ namespace rcq
 					sizeof(ss_dir_shadow_map_gen_data),
 					sizeof(image_assembler_data),
 					sizeof(sky_drawer_data),
-					sizeof(sun_drawer_data) };
+					sizeof(sun_drawer_data),
+					sizeof(terrain_drawer_data) };
 			}
 
 			void calcoffset_and_size(size_t alignment)
@@ -320,6 +328,9 @@ namespace rcq
 		VkSemaphore m_render_finished_s;
 		std::vector<VkSemaphore> m_present_ready_ss;
 		VkFence m_render_finished_f;
+
+		//allocator
+		allocator m_alloc;
 	};
 }
 

@@ -34,6 +34,9 @@ namespace rcq
 		std::array<std::multimap<uint32_t, size_t>, USAGE_COUNT> m_available_cells;
 		std::array<std::vector<VkDeviceMemory>, USAGE_COUNT> m_blocks;
 		std::mutex m_block_mutexes[USAGE_COUNT];
+
+		//allocator
+		allocator m_alloc;
 	};
 }
 

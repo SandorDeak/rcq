@@ -7,7 +7,8 @@ using namespace rcq;
 
 gta5_pass* gta5_pass::m_instance = nullptr;
 
-gta5_pass::gta5_pass(const base_info& info, const renderable_container& rends) : m_base(info), m_renderables(rends)
+gta5_pass::gta5_pass(const base_info& info, const renderable_container& rends) : m_base(info), m_renderables(rends), 
+	m_alloc("gta5_pass")
 {
 	send_memory_requirements();
 	create_render_passes();
@@ -28,36 +29,36 @@ gta5_pass::~gta5_pass()
 {
 	wait_for_finish();
 
-	vkDestroyFence(m_base.device, m_render_finished_f, host_memory_manager);
-	vkDestroySemaphore(m_base.device, m_render_finished_s, host_memory_manager);
-	vkDestroySemaphore(m_base.device, m_image_available_s, host_memory_manager);
+	vkDestroyFence(m_base.device, m_render_finished_f, m_alloc);
+	vkDestroySemaphore(m_base.device, m_render_finished_s, m_alloc);
+	vkDestroySemaphore(m_base.device, m_image_available_s, m_alloc);
 	for (auto s : m_present_ready_ss)
-		vkDestroySemaphore(m_base.device, s, host_memory_manager);
+		vkDestroySemaphore(m_base.device, s, m_alloc);
 
-	vkDestroyFramebuffer(m_base.device, m_fbs.environment_map_gen, host_memory_manager);
-	vkDestroyFramebuffer(m_base.device, m_fbs.dir_shadow_map_gen, host_memory_manager);
-	vkDestroyFramebuffer(m_base.device, m_fbs.gbuffer_assembler, host_memory_manager);
-	vkDestroyFramebuffer(m_base.device, m_fbs.ssao_map_gen, host_memory_manager);
-	vkDestroyFramebuffer(m_base.device, m_fbs.preimage_assembler, host_memory_manager);
+	vkDestroyFramebuffer(m_base.device, m_fbs.environment_map_gen, m_alloc);
+	vkDestroyFramebuffer(m_base.device, m_fbs.dir_shadow_map_gen, m_alloc);
+	vkDestroyFramebuffer(m_base.device, m_fbs.gbuffer_assembler, m_alloc);
+	vkDestroyFramebuffer(m_base.device, m_fbs.ssao_map_gen, m_alloc);
+	vkDestroyFramebuffer(m_base.device, m_fbs.preimage_assembler, m_alloc);
 	for(auto fb : m_fbs.postprocessing)
-		vkDestroyFramebuffer(m_base.device, fb, host_memory_manager);
+		vkDestroyFramebuffer(m_base.device, fb, m_alloc);
 
-	vkDestroyCommandPool(m_base.device, m_cp, host_memory_manager);
+	vkDestroyCommandPool(m_base.device, m_cp, m_alloc);
 
 	for (auto s : m_samplers)
-		vkDestroySampler(m_base.device, s, host_memory_manager);
+		vkDestroySampler(m_base.device, s, m_alloc);
 
 	for (auto& im : m_res_image)
 	{
-		vkDestroyImageView(m_base.device, im.view, host_memory_manager);
-		vkDestroyImage(m_base.device, im.image, host_memory_manager);
+		vkDestroyImageView(m_base.device, im.view, m_alloc);
+		vkDestroyImage(m_base.device, im.image, m_alloc);
 	}
 
 	vkUnmapMemory(m_base.device, m_res_data.staging_buffer_mem);
-	vkDestroyBuffer(m_base.device, m_res_data.staging_buffer, host_memory_manager);
-	vkDestroyBuffer(m_base.device, m_res_data.buffer, host_memory_manager);
+	vkDestroyBuffer(m_base.device, m_res_data.staging_buffer, m_alloc);
+	vkDestroyBuffer(m_base.device, m_res_data.buffer, m_alloc);
 
-	vkDestroyDescriptorPool(m_base.device, m_dp, host_memory_manager);
+	vkDestroyDescriptorPool(m_base.device, m_dp, m_alloc);
 
 	auto package = std::make_unique<destroy_package>();
 	package->ids[RESOURCE_TYPE_MEMORY].push_back(RENDER_ENGINE_GTA5);
@@ -65,12 +66,12 @@ gta5_pass::~gta5_pass()
 
 	for (auto& gp : m_gps)
 	{
-		vkDestroyPipeline(m_base.device, gp.gp, host_memory_manager);
-		vkDestroyPipelineLayout(m_base.device, gp.pl, host_memory_manager);
-		vkDestroyDescriptorSetLayout(m_base.device, gp.dsl, host_memory_manager);
+		vkDestroyPipeline(m_base.device, gp.gp, m_alloc);
+		vkDestroyPipelineLayout(m_base.device, gp.pl, m_alloc);
+		vkDestroyDescriptorSetLayout(m_base.device, gp.dsl, m_alloc);
 	}
 	for(auto pass : m_passes)
-		vkDestroyRenderPass(m_base.device, pass, host_memory_manager);
+		vkDestroyRenderPass(m_base.device, pass, m_alloc);
 }
 
 void gta5_pass::init(const base_info& info, const renderable_container& rends)
@@ -95,29 +96,29 @@ void gta5_pass::destroy()
 void gta5_pass::create_render_passes()
 {
 	if (vkCreateRenderPass(m_base.device, &render_pass_environment_map_gen::create_info,
-		host_memory_manager, &m_passes[RENDER_PASS_ENVIRONMENT_MAP_GEN]) != VK_SUCCESS)
+		m_alloc, &m_passes[RENDER_PASS_ENVIRONMENT_MAP_GEN]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create environment map gen render pass!");
 
 
 	if (vkCreateRenderPass(m_base.device, &render_pass_dir_shadow_map_gen::create_info,
-		host_memory_manager, &m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN]) != VK_SUCCESS)
+		m_alloc, &m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create dir shadow map render pass!");
 
 
 	if (vkCreateRenderPass(m_base.device, &render_pass_gbuffer_assembler::create_info,
-		host_memory_manager, &m_passes[RENDER_PASS_GBUFFER_ASSEMBLER]) != VK_SUCCESS)
+		m_alloc, &m_passes[RENDER_PASS_GBUFFER_ASSEMBLER]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create render pass!");
 
 	if (vkCreateRenderPass(m_base.device, &render_pass_ssao_gen::create_info,
-		host_memory_manager, &m_passes[RENDER_PASS_SSAO_MAP_GEN]) != VK_SUCCESS)
+		m_alloc, &m_passes[RENDER_PASS_SSAO_MAP_GEN]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create render pass!");
 
 	if (vkCreateRenderPass(m_base.device, &render_pass_preimage_assembler::create_info,
-		host_memory_manager, &m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER]) != VK_SUCCESS)
+		m_alloc, &m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create render pass!");
 
 	if (vkCreateRenderPass(m_base.device, &render_pass_postprocessing::create_info,
-		host_memory_manager, &m_passes[RENDER_PASS_POSTPROCESSING]) != VK_SUCCESS)
+		m_alloc, &m_passes[RENDER_PASS_POSTPROCESSING]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create postprocessing render pass!");
 }
 
@@ -137,7 +138,7 @@ void gta5_pass::create_graphics_pipelines()
 	r2.fill_create_info(create_infos[GP_DIR_SHADOW_MAP_GEN]);
 	create_infos[GP_DIR_SHADOW_MAP_GEN].renderPass = m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN];
 
-	render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline::runtime_info r3(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline::mat_opaque::runtime_info r3(m_base.device, m_base.swap_chain_image_extent);
 	r3.fill_create_info(create_infos[GP_GBUFFER_GEN]);
 	create_infos[GP_GBUFFER_GEN].renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
@@ -172,48 +173,56 @@ void gta5_pass::create_graphics_pipelines()
 	render_pass_preimage_assembler::subpass_sun_drawer::pipeline::runtime_info r11(m_base.device, m_base.swap_chain_image_extent);
 	r11.fill_create_info(create_infos[GP_SUN_DRAWER]);
 	create_infos[GP_SUN_DRAWER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
+	
+	render_pass_preimage_assembler::subpass_terrain_drawer::pipeline::runtime_info r12(m_base.device, m_base.swap_chain_image_extent);
+	r12.fill_create_info(create_infos[GP_TERRAIN_DRAWER]);
+	create_infos[GP_TERRAIN_DRAWER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
 
 	//create layouts
 	m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].create_layout(m_base.device, 
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR),
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_EM)
-	});
+	}, m_alloc);
 
 	m_gps[GP_ENVIRONMENT_MAP_GEN_SKYBOX].create_layout(m_base.device, 
 	{ 
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX) 
-	});
+	}, m_alloc);
 
 	m_gps[GP_DIR_SHADOW_MAP_GEN].create_layout(m_base.device, 
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR)
-	});
+	}, m_alloc);
 
 	m_gps[GP_GBUFFER_GEN].create_layout(m_base.device, 
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TR),
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE)
-	});
+	}, m_alloc);
 
 	m_gps[GP_SKY_DRAWER].create_layout(m_base.device,
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
-	});
+	}, m_alloc);
 
-	m_gps[GP_SS_DIR_SHADOW_MAP_GEN].create_layout(m_base.device, {});
-	m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].create_layout(m_base.device, {});
-	m_gps[GP_SSAO_GEN].create_layout(m_base.device, {});
-	m_gps[GP_SSAO_BLUR].create_layout(m_base.device, {});
+	m_gps[GP_SS_DIR_SHADOW_MAP_GEN].create_layout(m_base.device, {}, m_alloc);
+	m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].create_layout(m_base.device, {}, m_alloc);
+	m_gps[GP_SSAO_GEN].create_layout(m_base.device, {}, m_alloc);
+	m_gps[GP_SSAO_BLUR].create_layout(m_base.device, {}, m_alloc);
 	m_gps[GP_IMAGE_ASSEMBLER].create_layout(m_base.device, 
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
-	});
+	}, m_alloc);
 	m_gps[GP_SUN_DRAWER].create_layout(m_base.device,
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
-	});
-	m_gps[GP_POSTPROCESSING].create_layout(m_base.device, {});
+	}, m_alloc);
+	m_gps[GP_TERRAIN_DRAWER].create_layout(m_base.device,
+	{
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN)
+	}, m_alloc);
+	m_gps[GP_POSTPROCESSING].create_layout(m_base.device, {}, m_alloc);
 
 	for (uint32_t i = 0; i < GP_COUNT; ++i)
 		create_infos[i].layout = m_gps[i].pl;
@@ -221,14 +230,13 @@ void gta5_pass::create_graphics_pipelines()
 
 	//create graphics pipelines 
 	std::array<VkPipeline, GP_COUNT> gps;
-	for (uint32_t i = 0; i < GP_COUNT; ++i)
+	/*for (uint32_t i = 0; i < GP_COUNT; ++i)
 	{
-		vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &create_infos[i], host_memory_manager, &gps[i]);
-		int k = i;
-	}
-	/*if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, GP_COUNT, create_infos.data(), host_memory_manager, gps.data())
+		vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &create_infos[i], m_alloc, &gps[i]);
+	}*/
+	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, GP_COUNT, create_infos.data(), m_alloc, gps.data())
 		!= VK_SUCCESS)
-		throw std::runtime_error("failed to create gta5 graphics pipelines!");*/
+		throw std::runtime_error("failed to create gta5 graphics pipelines!");
 
 	for (uint32_t i = 0; i < GP_COUNT; ++i)
 		m_gps[i].gp = gps[i];
@@ -239,46 +247,49 @@ void gta5_pass::create_dsls_and_allocate_dss()
 	//create dsls
 
 	m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].create_dsl(m_base.device,
-		render_pass_environment_map_gen::subpass_unique::pipelines::mat::dsl::create_info);
+		render_pass_environment_map_gen::subpass_unique::pipelines::mat::dsl::create_info, m_alloc);
 
 	m_gps[GP_ENVIRONMENT_MAP_GEN_SKYBOX].create_dsl(m_base.device,
-		render_pass_environment_map_gen::subpass_unique::pipelines::skybox::dsl::create_info);
+		render_pass_environment_map_gen::subpass_unique::pipelines::skybox::dsl::create_info, m_alloc);
 
 	m_gps[GP_DIR_SHADOW_MAP_GEN].create_dsl(m_base.device,
-		render_pass_dir_shadow_map_gen::subpass_unique::pipeline::dsl::create_info);
+		render_pass_dir_shadow_map_gen::subpass_unique::pipeline::dsl::create_info, m_alloc);
 
 
 	m_gps[GP_GBUFFER_GEN].create_dsl(m_base.device,
-		render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline::dsl::create_info);
+		render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline::mat_opaque::dsl::create_info, m_alloc);
 
 	m_gps[GP_SS_DIR_SHADOW_MAP_GEN].create_dsl(m_base.device,
-		render_pass_gbuffer_assembler::subpass_ss_dir_shadow_map_gen::pipeline::dsl::create_info);
+		render_pass_gbuffer_assembler::subpass_ss_dir_shadow_map_gen::pipeline::dsl::create_info, m_alloc);
 
 
 	m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].create_dsl(m_base.device,
-		render_pass_preimage_assembler::subpass_ss_dir_shadow_map_blur::pipeline::dsl::create_info);
+		render_pass_preimage_assembler::subpass_ss_dir_shadow_map_blur::pipeline::dsl::create_info, m_alloc);
 
 	m_gps[GP_SSAO_GEN].create_dsl(m_base.device,
-		render_pass_ssao_gen::subpass_unique::pipeline::dsl::create_info);
+		render_pass_ssao_gen::subpass_unique::pipeline::dsl::create_info, m_alloc);
 
 	m_gps[GP_SSAO_BLUR].create_dsl(m_base.device,
-		render_pass_preimage_assembler::subpass_ssao_map_blur::pipeline::dsl::create_info);
+		render_pass_preimage_assembler::subpass_ssao_map_blur::pipeline::dsl::create_info, m_alloc);
 
 	m_gps[GP_IMAGE_ASSEMBLER].create_dsl(m_base.device,
-		render_pass_preimage_assembler::subpass_image_assembler::pipeline::dsl::create_info);
+		render_pass_preimage_assembler::subpass_image_assembler::pipeline::dsl::create_info, m_alloc);
 
 	m_gps[GP_POSTPROCESSING].create_dsl(m_base.device,
-		render_pass_postprocessing::subpass_bypass::pipeline::dsl::create_info);
+		render_pass_postprocessing::subpass_bypass::pipeline::dsl::create_info, m_alloc);
 
 	m_gps[GP_SKY_DRAWER].create_dsl(m_base.device,
-		render_pass_preimage_assembler::subpass_sky_drawer::pipeline::dsl::create_info);
+		render_pass_preimage_assembler::subpass_sky_drawer::pipeline::dsl::create_info, m_alloc);
 
 	m_gps[GP_SUN_DRAWER].create_dsl(m_base.device,
-		render_pass_preimage_assembler::subpass_sun_drawer::pipeline::dsl::create_info);
+		render_pass_preimage_assembler::subpass_sun_drawer::pipeline::dsl::create_info, m_alloc);
+
+	m_gps[GP_TERRAIN_DRAWER].create_dsl(m_base.device,
+		render_pass_preimage_assembler::subpass_terrain_drawer::pipeline::dsl::create_info, m_alloc);
 
 	//create descriptor pool
 	if (vkCreateDescriptorPool(m_base.device, &dp::create_info,
-		host_memory_manager, &m_dp) != VK_SUCCESS)
+		m_alloc, &m_dp) != VK_SUCCESS)
 		throw std::runtime_error("failed to create descriptor pool!");
 
 	//allocate dss
@@ -323,7 +334,7 @@ void gta5_pass::send_memory_requirements()
 		buffer.size = size;
 		buffer.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-		if (vkCreateBuffer(m_base.device, &buffer, host_memory_manager, &m_res_data.staging_buffer) != VK_SUCCESS)
+		if (vkCreateBuffer(m_base.device, &buffer, m_alloc, &m_res_data.staging_buffer) != VK_SUCCESS)
 			throw std::runtime_error("failed to create buffer!");
 		
 		VkMemoryRequirements mr;
@@ -342,7 +353,7 @@ void gta5_pass::send_memory_requirements()
 		buffer.size = size;
 		buffer.usage = VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
-		if (vkCreateBuffer(m_base.device, &buffer, host_memory_manager, &m_res_data.buffer) != VK_SUCCESS)
+		if (vkCreateBuffer(m_base.device, &buffer, m_alloc, &m_res_data.buffer) != VK_SUCCESS)
 			throw std::runtime_error("failed to create buffer!");
 
 		VkMemoryRequirements mr;
@@ -371,7 +382,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -401,7 +412,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_SAMPLED_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -430,7 +441,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -459,7 +470,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -488,7 +499,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -517,7 +528,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_NORMAL_AO].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_GB_NORMAL_AO].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -546,7 +557,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_PREIMAGE].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_PREIMAGE].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -575,7 +586,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage =  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_GB_DEPTH].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_GB_DEPTH].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -604,7 +615,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -633,7 +644,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -662,7 +673,7 @@ void gta5_pass::send_memory_requirements()
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-		if (vkCreateImage(m_base.device, &image, host_memory_manager, &m_res_image[RES_IMAGE_SSAO_MAP].image)
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_SSAO_MAP].image)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
@@ -716,7 +727,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 6;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -737,7 +748,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 6;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -758,7 +769,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -779,7 +790,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -800,7 +811,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_METALNESS_SSDS].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_METALNESS_SSDS].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -821,7 +832,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_NORMAL_AO].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_NORMAL_AO].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -842,7 +853,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_PREIMAGE].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_PREIMAGE].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -862,7 +873,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_GB_DEPTH].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_DEPTH].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -883,7 +894,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = FRUSTUM_SPLIT_COUNT;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_DIR_SHADOW_MAP].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_DIR_SHADOW_MAP].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -904,7 +915,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -925,7 +936,7 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view, host_memory_manager, &m_res_image[RES_IMAGE_SSAO_MAP].view)
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_SSAO_MAP].view)
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
@@ -1059,7 +1070,7 @@ void gta5_pass::create_command_pool()
 	pool.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 	pool.queueFamilyIndex = m_base.queue_families.graphics_family;
 
-	if (vkCreateCommandPool(m_base.device, &pool, host_memory_manager, &m_cp) != VK_SUCCESS)
+	if (vkCreateCommandPool(m_base.device, &pool, m_alloc, &m_cp) != VK_SUCCESS)
 		throw std::runtime_error("failed to create command pool!");
 }
 
@@ -1416,6 +1427,24 @@ void gta5_pass::update_descriptor_sets()
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
 
+	//terrain drawer
+	{
+		VkDescriptorBufferInfo data = {};
+		data.buffer = m_res_data.buffer;
+		data.offset = m_res_data.offsets[RES_DATA_TERRAIN_DRAWER];
+		data.range = sizeof(terrain_drawer_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_TERRAIN_DRAWER].ds;
+		w[0].pBufferInfo = &data;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
 	//postprocessing
 	{
 		VkDescriptorImageInfo preimage = {};
@@ -1457,7 +1486,7 @@ void gta5_pass::create_samplers()
 		sampler.mipLodBias = 0.f;
 		sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
-		if (vkCreateSampler(m_base.device, &sampler, host_memory_manager, &m_samplers[SAMPLER_GENERAL]) != VK_SUCCESS)
+		if (vkCreateSampler(m_base.device, &sampler, m_alloc, &m_samplers[SAMPLER_GENERAL]) != VK_SUCCESS)
 			throw std::runtime_error("failed to create sampler!");
 	}
 
@@ -1478,7 +1507,7 @@ void gta5_pass::create_samplers()
 		sampler.mipLodBias = 0.f;
 		sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
-		if (vkCreateSampler(m_base.device, &sampler, host_memory_manager, &m_samplers[SAMPLER_UNNORMALIZED_COORD]) != VK_SUCCESS)
+		if (vkCreateSampler(m_base.device, &sampler, m_alloc, &m_samplers[SAMPLER_UNNORMALIZED_COORD]) != VK_SUCCESS)
 			throw std::runtime_error("failed to create sampler!");
 	}
 }
@@ -1487,21 +1516,21 @@ void gta5_pass::create_sync_objects()
 {
 	VkSemaphoreCreateInfo s = {};
 	s.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-	if (vkCreateSemaphore(m_base.device, &s, host_memory_manager, &m_image_available_s) != VK_SUCCESS ||
-		vkCreateSemaphore(m_base.device, &s, host_memory_manager, &m_render_finished_s) != VK_SUCCESS)
+	if (vkCreateSemaphore(m_base.device, &s, m_alloc, &m_image_available_s) != VK_SUCCESS ||
+		vkCreateSemaphore(m_base.device, &s, m_alloc, &m_render_finished_s) != VK_SUCCESS)
 		throw std::runtime_error("failed to create semaphores!");
 
 	m_present_ready_ss.resize(m_base.swap_chain_image_views.size());
 	for (auto& sem : m_present_ready_ss)
 	{
-		if (vkCreateSemaphore(m_base.device, &s, host_memory_manager, &sem) != VK_SUCCESS)
+		if (vkCreateSemaphore(m_base.device, &s, m_alloc, &sem) != VK_SUCCESS)
 			throw std::runtime_error("failed to create semaphore!");
 	}
 
 	VkFenceCreateInfo f = {};
 	f.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	f.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-	if (vkCreateFence(m_base.device, &f, host_memory_manager, &m_render_finished_f) != VK_SUCCESS)
+	if (vkCreateFence(m_base.device, &f, m_alloc, &m_render_finished_f) != VK_SUCCESS)
 		throw std::runtime_error("failed to create fence!");
 }
 
@@ -1526,7 +1555,7 @@ void gta5_pass::create_framebuffers()
 		fb.layers = 6;
 		fb.renderPass = m_passes[RENDER_PASS_ENVIRONMENT_MAP_GEN];
 
-		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.environment_map_gen) != VK_SUCCESS)
+		if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.environment_map_gen) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
@@ -1546,7 +1575,7 @@ void gta5_pass::create_framebuffers()
 		fb.layers = FRUSTUM_SPLIT_COUNT;
 		fb.renderPass = m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN];
 
-		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.dir_shadow_map_gen) != VK_SUCCESS)
+		if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.dir_shadow_map_gen) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
@@ -1571,7 +1600,7 @@ void gta5_pass::create_framebuffers()
 		fb.layers = 1;
 		fb.renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
-		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.gbuffer_assembler) != VK_SUCCESS)
+		if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.gbuffer_assembler) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
@@ -1591,7 +1620,7 @@ void gta5_pass::create_framebuffers()
 		fb.layers = 1;
 		fb.renderPass = m_passes[RENDER_PASS_SSAO_MAP_GEN];
 
-		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.ssao_map_gen) != VK_SUCCESS)
+		if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.ssao_map_gen) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
@@ -1614,7 +1643,7 @@ void gta5_pass::create_framebuffers()
 		fb.layers = 1;
 		fb.renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
 
-		if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.preimage_assembler) != VK_SUCCESS)
+		if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.preimage_assembler) != VK_SUCCESS)
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
@@ -1639,7 +1668,7 @@ void gta5_pass::create_framebuffers()
 		{
 			atts[ATT_SWAP_CHAIN_IMAGE] = m_base.swap_chain_image_views[i];
 
-			if (vkCreateFramebuffer(m_base.device, &fb, host_memory_manager, &m_fbs.postprocessing[i]) != VK_SUCCESS)
+			if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.postprocessing[i]) != VK_SUCCESS)
 				throw std::runtime_error("failed to create framebuffer!");
 		}
 	}
@@ -1868,6 +1897,9 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 				throw std::runtime_error("failed to record command buffer!");
 		}
 	}
+
+	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+	vkResetFences(m_base.device, 1, &m_render_finished_f);
 
 	//record primary cb
 	{
@@ -2176,6 +2208,15 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			vkCmdDraw(cb, 4, 1, 0, 0);
 
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
+			m_gps[GP_TERRAIN_DRAWER].bind(cb);
+			if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty())
+			{
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_TERRAIN_DRAWER].pl,
+					1, 1, &m_renderables[RENDERABLE_TYPE_TERRAIN][0].mat_light_ds, 0, nullptr);
+				vkCmdDraw(cb, 4, 1, 0, 0);
+			}
+
+			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
 			m_gps[GP_SKY_DRAWER].bind(cb);
 			if (!m_renderables[RENDERABLE_TYPE_SKY].empty())
 			{
@@ -2228,9 +2269,6 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 	uint32_t image_index;
 	vkAcquireNextImageKHR(m_base.device, m_base.swap_chain, std::numeric_limits<uint64_t>::max(), m_image_available_s,
 		VK_NULL_HANDLE, &image_index);
-
-	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
-	vkResetFences(m_base.device, 1, &m_render_finished_f);
 
 	//submit command buffers
 	{
@@ -2357,6 +2395,12 @@ void gta5_pass::process_settings(const render_settings & settings)
 		data->light_dir = settings.light_dir;
 		data->proj_x_view_at_origin = proj_x_view_at_origin;
 		data->helper_dir = get_orthonormal(settings.light_dir);
+	}
+
+	//terrain drawer data
+	{
+		auto data = m_res_data.get<terrain_drawer_data>();
+		data->proj_x_view = settings.proj*settings.view;
 	}
 
 }

@@ -25,7 +25,7 @@ int main()
 		}
 		delete sc;
 		rcq::engine::destroy();
- 		return EXIT_SUCCESS;
+  		return EXIT_SUCCESS;
 	}
 	catch (const std::runtime_error& e) 
 	{

@@ -21,6 +21,7 @@ namespace rcq
 		GP_SSAO_GEN,
 		GP_SSAO_BLUR,
 		GP_IMAGE_ASSEMBLER,
+		GP_TERRAIN_DRAWER,
 		GP_SKY_DRAWER,
 		GP_SUN_DRAWER,
 
@@ -209,7 +210,7 @@ namespace rcq
 						~runtime_info()
 						{
 							for (auto s : shaders)
-								vkDestroyShaderModule(device, s.module, host_memory_manager);
+								vkDestroyShaderModule(device, s.module, nullptr);
 						}
 
 						void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -399,7 +400,7 @@ namespace rcq
 						~runtime_info()
 						{
 							for (auto s : shaders)
-								vkDestroyShaderModule(device, s.module, host_memory_manager);
+								vkDestroyShaderModule(device, s.module, nullptr);
 						}
 
 						void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -505,11 +506,11 @@ namespace rcq
 			VkRenderPassCreateInfo pass = {};
 			pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 			pass.attachmentCount = ATT_COUNT;
-			pass.dependencyCount = DEP_COUNT;
+			//pass.dependencyCount = DEP_COUNT;
 			pass.pAttachments = atts.data();
 			pass.subpassCount = 1;
 			pass.pSubpasses = &sp_unique;
-			pass.pDependencies = deps.data();
+			//pass.pDependencies = deps.data();
 			return pass;
 		}
 
@@ -670,7 +671,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -765,11 +766,11 @@ namespace rcq
 			VkRenderPassCreateInfo pass = {};
 			pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 			pass.attachmentCount = ATT_COUNT;
-			pass.dependencyCount = DEP_COUNT;
+			//pass.dependencyCount = DEP_COUNT;
 			pass.pAttachments = atts.data();
 			pass.subpassCount = 1;
 			pass.pSubpasses = &sp_unique;
-			pass.pDependencies = deps.data();
+			//pass.pDependencies = deps.data();
 			return pass;
 		}
 		constexpr VkRenderPassCreateInfo create_info=create_create_info();
@@ -791,6 +792,7 @@ namespace rcq
 			SUBPASS_SS_DIR_SHADOW_MAP_BLUR,
 			SUBPASS_SSAO_MAP_BLUR,
 			SUBPASS_IMAGE_ASSEMBLER,
+			SUBPASS_TERRAIN_DRAWER,
 			SUBPASS_SKY_DRAWER,
 			SUBPASS_SUN_DRAWER,
 			SUBPASS_COUNT
@@ -800,7 +802,8 @@ namespace rcq
 		{
 			DEP_SSDS_BLUR_IMAGE_ASSEMBLER,
 			DEP_SSAO_BLUR_IMAGE_ASSEMBLER,
-			DEP_IMAGE_ASSEMBLER_SKY_DRAWER,
+			DEP_IMAGE_ASSEMBLER_TERRAIN_DRAWER,
+			DEP_TERRAIN_DRAWER_SKY_DRAWER,
 			DEP_SKY_DRAWER_SUN_DRAWER,
 			DEP_COUNT
 		};
@@ -945,7 +948,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -1134,7 +1137,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -1305,7 +1308,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -1488,7 +1491,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -1577,7 +1580,6 @@ namespace rcq
 
 			namespace pipeline
 			{
-
 				constexpr auto create_vertex_input()
 				{
 					VkPipelineVertexInputStateCreateInfo input = {};
@@ -1695,7 +1697,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -1762,9 +1764,209 @@ namespace rcq
 					}
 					constexpr auto create_info = create_create_info();
 				}//namespace dsl
+
 			}//namespace pipeline
 		}//namespace subpass_image_assembler
 
+		namespace subpass_terrain_drawer
+		{
+			VkAttachmentReference preimage = { ATT_PREIMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			VkAttachmentReference ref_depth = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
+
+			constexpr VkSubpassDescription create_subpass()
+			{
+				VkSubpassDescription s = {};
+				s.colorAttachmentCount = 1;
+				s.pColorAttachments = &preimage;
+				s.pDepthStencilAttachment = &ref_depth;
+				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				return s;
+			}
+
+			namespace pipeline
+			{
+				constexpr auto create_vertex_input()
+				{
+					VkPipelineVertexInputStateCreateInfo input = {};
+					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+					return input;
+				}
+				constexpr auto vertex_input = create_vertex_input();
+
+				constexpr auto create_input_assembly()
+				{
+
+					VkPipelineInputAssemblyStateCreateInfo assembly = {};
+					assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+					assembly.primitiveRestartEnable = VK_FALSE;
+					assembly.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+					return assembly;
+				}
+				constexpr auto input_assembly = create_input_assembly();
+
+				constexpr auto create_tessellation()
+				{
+					VkPipelineTessellationStateCreateInfo t = {};
+					t.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+					t.patchControlPoints = 4;
+					return t;
+				}
+				constexpr auto tessellation = create_tessellation();
+
+				constexpr auto create_rasterizer()
+				{
+					VkPipelineRasterizationStateCreateInfo r = {};
+					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+					r.cullMode = VK_CULL_MODE_BACK_BIT;
+					r.depthBiasEnable = VK_FALSE;
+					r.depthClampEnable = VK_FALSE;
+					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+					r.lineWidth = 1.f;
+					r.polygonMode = VK_POLYGON_MODE_FILL;
+					r.rasterizerDiscardEnable = VK_FALSE;
+					return r;
+				}
+				constexpr auto rasterizer = create_rasterizer();
+
+				constexpr auto create_depthstencil()
+				{
+					VkPipelineDepthStencilStateCreateInfo d = {};
+					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+					d.depthBoundsTestEnable = VK_FALSE;
+					d.depthTestEnable = VK_TRUE;
+					d.depthWriteEnable = VK_TRUE;
+					d.depthCompareOp = VK_COMPARE_OP_LESS;
+					d.stencilTestEnable = VK_FALSE;
+					return d;
+				}
+				constexpr auto depthstencil = create_depthstencil();
+
+				constexpr auto create_multisample()
+				{
+					VkPipelineMultisampleStateCreateInfo m = {};
+					m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+					m.alphaToCoverageEnable = VK_FALSE;
+					m.alphaToOneEnable = VK_FALSE;
+					m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+					m.sampleShadingEnable = VK_FALSE;
+					return m;
+				}
+				constexpr auto multisample = create_multisample();
+
+				constexpr auto create_blend_att()
+				{
+					VkPipelineColorBlendAttachmentState b = {};
+
+					b.blendEnable = VK_FALSE;
+					b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+						| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+					return b;
+				}
+				constexpr auto blend_att = create_blend_att();
+
+				constexpr auto create_blend()
+				{
+					VkPipelineColorBlendStateCreateInfo b = {};
+					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+					b.attachmentCount = 1;
+					b.pAttachments = &blend_att;
+					b.logicOpEnable = VK_FALSE;
+					return b;
+				}
+				constexpr auto blend = create_blend();
+
+				struct runtime_info
+				{
+					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
+					{
+
+						create_shaders(device,
+						{
+							"shaders/gta5_pass/terrain/vert.spv",
+							"shaders/gta5_pass/terrain/tesc.spv",
+							"shaders/gta5_pass/terrain/tese.spv",
+							"shaders/gta5_pass/terrain/frag.spv",
+						},
+						{
+							VK_SHADER_STAGE_VERTEX_BIT,
+							VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+							VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+							VK_SHADER_STAGE_FRAGMENT_BIT
+						},
+							shaders.data()
+						);
+
+						viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+						viewport.pScissors = &scissor;
+						viewport.scissorCount = 1;
+						viewport.pViewports = &vp;
+						viewport.viewportCount = 1;
+						scissor.extent = e;
+						scissor.offset = { 0,0 };
+						vp.height = static_cast<float>(e.height);
+						vp.width = static_cast<float>(e.width);
+						vp.maxDepth = 1.f;
+						vp.minDepth = 0.f;
+						vp.x = 0.f;
+						vp.y = 0.f;
+					}
+
+					~runtime_info()
+					{
+						for (auto s : shaders)
+							vkDestroyShaderModule(device, s.module, nullptr);
+					}
+
+					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
+					{
+						c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+						c.basePipelineHandle = VK_NULL_HANDLE;
+						c.basePipelineIndex = -1;
+						c.pDepthStencilState = &depthstencil;
+						c.pInputAssemblyState = &input_assembly;
+						c.pColorBlendState = &blend;
+						c.pMultisampleState = &multisample;
+						c.pRasterizationState = &rasterizer;
+						c.pStages = shaders.data();
+						c.pTessellationState = &tessellation;
+						c.stageCount = shaders.size();
+						c.pVertexInputState = &vertex_input;
+						c.pViewportState = &viewport;
+						c.subpass = SUBPASS_TERRAIN_DRAWER;
+					}
+
+					VkDevice device;
+					std::array<VkPipelineShaderStageCreateInfo, 4> shaders = {};
+					VkViewport vp;
+					VkRect2D scissor;
+					VkPipelineViewportStateCreateInfo viewport = {};
+				};
+				namespace dsl
+				{
+					constexpr auto create_binding()
+					{
+						VkDescriptorSetLayoutBinding binding = {};
+						binding.binding = 0;
+						binding.descriptorCount = 1;
+						binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+						binding.stageFlags = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+						return binding;
+					}
+					constexpr auto binding = create_binding();
+
+					constexpr auto create_create_info()
+					{
+						VkDescriptorSetLayoutCreateInfo dsl = {};
+						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+						dsl.bindingCount = 1;
+						dsl.pBindings = &binding;
+						return dsl;
+					}
+					constexpr auto create_info = create_create_info();
+				}//namespace dsl
+			}//namespace pipeline
+
+		}//namespace subpass terrain drawer
 		constexpr auto create_atts()
 		{
 			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
@@ -1827,12 +2029,19 @@ namespace rcq
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
 
-			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].srcSubpass = SUBPASS_IMAGE_ASSEMBLER;
-			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].dstSubpass = SUBPASS_SKY_DRAWER;
-			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			d[DEP_IMAGE_ASSEMBLER_TERRAIN_DRAWER].srcSubpass = SUBPASS_IMAGE_ASSEMBLER;
+			d[DEP_IMAGE_ASSEMBLER_TERRAIN_DRAWER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_IMAGE_ASSEMBLER_TERRAIN_DRAWER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			d[DEP_IMAGE_ASSEMBLER_TERRAIN_DRAWER].dstSubpass = SUBPASS_TERRAIN_DRAWER;
+			d[DEP_IMAGE_ASSEMBLER_TERRAIN_DRAWER].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_IMAGE_ASSEMBLER_TERRAIN_DRAWER].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+
+			d[DEP_TERRAIN_DRAWER_SKY_DRAWER].srcSubpass = SUBPASS_TERRAIN_DRAWER;
+			d[DEP_TERRAIN_DRAWER_SKY_DRAWER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_TERRAIN_DRAWER_SKY_DRAWER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			d[DEP_TERRAIN_DRAWER_SKY_DRAWER].dstSubpass = SUBPASS_SKY_DRAWER;
+			d[DEP_TERRAIN_DRAWER_SKY_DRAWER].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+			d[DEP_TERRAIN_DRAWER_SKY_DRAWER].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
 			d[DEP_SKY_DRAWER_SUN_DRAWER].srcSubpass = SUBPASS_SKY_DRAWER;
 			d[DEP_SKY_DRAWER_SUN_DRAWER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -1849,6 +2058,7 @@ namespace rcq
 			subpass_ss_dir_shadow_map_blur::create_subpass(),
 			subpass_ssao_map_blur::create_subpass(),
 			subpass_image_assembler::create_subpass(),
+			subpass_terrain_drawer::create_subpass(),
 			subpass_sky_drawer::create_subpass(),
 			subpass_sun_drawer::create_subpass()
 		};
@@ -1988,7 +2198,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -2147,180 +2357,183 @@ namespace rcq
 
 			namespace pipeline
 			{
-				constexpr auto attribs = get_vertex_input_attribute_descriptions();
-				constexpr auto bindings = get_vertex_input_binding_descriptions();
-
-				constexpr auto create_vertex_input()
+				namespace mat_opaque
 				{
-					VkPipelineVertexInputStateCreateInfo input = {};
-					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-					input.pVertexAttributeDescriptions = attribs.data();
-					input.pVertexBindingDescriptions = bindings.data();
-					input.vertexAttributeDescriptionCount = attribs.size();
-					input.vertexBindingDescriptionCount = bindings.size();
-					return input;
-				}
-				constexpr auto vertex_input = create_vertex_input();
+					constexpr auto attribs = get_vertex_input_attribute_descriptions();
+					constexpr auto bindings = get_vertex_input_binding_descriptions();
 
-				constexpr auto create_input_assembly()
-				{
-
-					VkPipelineInputAssemblyStateCreateInfo assembly = {};
-					assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-					assembly.primitiveRestartEnable = VK_FALSE;
-					assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-					return assembly;
-				}
-				constexpr auto input_assembly = create_input_assembly();
-
-				constexpr auto create_rasterizer()
-				{
-					VkPipelineRasterizationStateCreateInfo r = {};
-					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-					r.cullMode = VK_CULL_MODE_BACK_BIT;
-					r.depthBiasEnable = VK_FALSE;
-					r.depthClampEnable = VK_FALSE;
-					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-					r.lineWidth = 1.f;
-					r.polygonMode = VK_POLYGON_MODE_FILL;
-					r.rasterizerDiscardEnable = VK_FALSE;
-					return r;
-				}
-				constexpr auto rasterizer = create_rasterizer();
-
-				constexpr auto create_depthstencil()
-				{
-					VkPipelineDepthStencilStateCreateInfo d = {};
-					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-					d.depthBoundsTestEnable = VK_FALSE;
-					d.depthTestEnable = VK_TRUE;
-					d.depthWriteEnable = VK_TRUE;
-					d.depthCompareOp = VK_COMPARE_OP_LESS;
-					d.stencilTestEnable = VK_FALSE;
-					return d;
-				}
-				constexpr auto depthstencil = create_depthstencil();
-
-				constexpr auto create_multisample()
-				{
-					VkPipelineMultisampleStateCreateInfo m = {};
-					m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-					m.alphaToCoverageEnable = VK_FALSE;
-					m.alphaToOneEnable = VK_FALSE;
-					m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-					m.sampleShadingEnable = VK_FALSE;
-					return m;
-				}
-				constexpr auto multisample = create_multisample();
-
-				constexpr auto create_blend_atts()
-				{
-					std::array<VkPipelineColorBlendAttachmentState, 4> bs = {};
-					for (auto& b : bs)
+					constexpr auto create_vertex_input()
 					{
-						b.blendEnable = VK_FALSE;
-						b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-							| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+						VkPipelineVertexInputStateCreateInfo input = {};
+						input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+						input.pVertexAttributeDescriptions = attribs.data();
+						input.pVertexBindingDescriptions = bindings.data();
+						input.vertexAttributeDescriptionCount = attribs.size();
+						input.vertexBindingDescriptionCount = bindings.size();
+						return input;
 					}
-					return bs;
-				}
-				constexpr auto blend_atts = create_blend_atts();
+					constexpr auto vertex_input = create_vertex_input();
 
-				constexpr auto create_blend()
-				{
-					VkPipelineColorBlendStateCreateInfo b = {};
-					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-					b.attachmentCount = blend_atts.size();
-					b.pAttachments = blend_atts.data();
-					b.logicOpEnable = VK_FALSE;
-					return b;
-				}
-				constexpr auto blend = create_blend();
-
-				struct runtime_info
-				{
-					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
+					constexpr auto create_input_assembly()
 					{
 
-						create_shaders(device,
+						VkPipelineInputAssemblyStateCreateInfo assembly = {};
+						assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+						assembly.primitiveRestartEnable = VK_FALSE;
+						assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+						return assembly;
+					}
+					constexpr auto input_assembly = create_input_assembly();
+
+					constexpr auto create_rasterizer()
+					{
+						VkPipelineRasterizationStateCreateInfo r = {};
+						r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+						r.cullMode = VK_CULL_MODE_BACK_BIT;
+						r.depthBiasEnable = VK_FALSE;
+						r.depthClampEnable = VK_FALSE;
+						r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+						r.lineWidth = 1.f;
+						r.polygonMode = VK_POLYGON_MODE_FILL;
+						r.rasterizerDiscardEnable = VK_FALSE;
+						return r;
+					}
+					constexpr auto rasterizer = create_rasterizer();
+
+					constexpr auto create_depthstencil()
+					{
+						VkPipelineDepthStencilStateCreateInfo d = {};
+						d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+						d.depthBoundsTestEnable = VK_FALSE;
+						d.depthTestEnable = VK_TRUE;
+						d.depthWriteEnable = VK_TRUE;
+						d.depthCompareOp = VK_COMPARE_OP_LESS;
+						d.stencilTestEnable = VK_FALSE;
+						return d;
+					}
+					constexpr auto depthstencil = create_depthstencil();
+
+					constexpr auto create_multisample()
+					{
+						VkPipelineMultisampleStateCreateInfo m = {};
+						m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+						m.alphaToCoverageEnable = VK_FALSE;
+						m.alphaToOneEnable = VK_FALSE;
+						m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+						m.sampleShadingEnable = VK_FALSE;
+						return m;
+					}
+					constexpr auto multisample = create_multisample();
+
+					constexpr auto create_blend_atts()
+					{
+						std::array<VkPipelineColorBlendAttachmentState, 4> bs = {};
+						for (auto& b : bs)
 						{
-							"shaders/gta5_pass/gbuffer_gen/vert.spv",
-							"shaders/gta5_pass/gbuffer_gen/frag.spv"
-						},
+							b.blendEnable = VK_FALSE;
+							b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+								| VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+						}
+						return bs;
+					}
+					constexpr auto blend_atts = create_blend_atts();
+
+					constexpr auto create_blend()
+					{
+						VkPipelineColorBlendStateCreateInfo b = {};
+						b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+						b.attachmentCount = blend_atts.size();
+						b.pAttachments = blend_atts.data();
+						b.logicOpEnable = VK_FALSE;
+						return b;
+					}
+					constexpr auto blend = create_blend();
+
+					struct runtime_info
+					{
+						runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
 						{
-							VK_SHADER_STAGE_VERTEX_BIT,
-							VK_SHADER_STAGE_FRAGMENT_BIT
-						},
-							shaders.data()
-						);
 
-						viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-						viewport.pScissors = &scissor;
-						viewport.scissorCount = 1;
-						viewport.pViewports = &vp;
-						viewport.viewportCount = 1;
-						scissor.extent = e;
-						scissor.offset = { 0,0 };
-						vp.height = static_cast<float>(e.height);
-						vp.width = static_cast<float>(e.width);
-						vp.maxDepth = 1.f;
-						vp.minDepth = 0.f;
-						vp.x = 0.f;
-						vp.y = 0.f;
-					}
+							create_shaders(device,
+							{
+								"shaders/gta5_pass/gbuffer_gen/vert.spv",
+								"shaders/gta5_pass/gbuffer_gen/frag.spv"
+							},
+							{
+								VK_SHADER_STAGE_VERTEX_BIT,
+								VK_SHADER_STAGE_FRAGMENT_BIT
+							},
+								shaders.data()
+							);
 
-					~runtime_info()
+							viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+							viewport.pScissors = &scissor;
+							viewport.scissorCount = 1;
+							viewport.pViewports = &vp;
+							viewport.viewportCount = 1;
+							scissor.extent = e;
+							scissor.offset = { 0,0 };
+							vp.height = static_cast<float>(e.height);
+							vp.width = static_cast<float>(e.width);
+							vp.maxDepth = 1.f;
+							vp.minDepth = 0.f;
+							vp.x = 0.f;
+							vp.y = 0.f;
+						}
+
+						~runtime_info()
+						{
+							for (auto s : shaders)
+								vkDestroyShaderModule(device, s.module, nullptr);
+						}
+
+						void fill_create_info(VkGraphicsPipelineCreateInfo& c)
+						{
+							c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+							c.basePipelineHandle = VK_NULL_HANDLE;
+							c.basePipelineIndex = -1;
+							c.pDepthStencilState = &depthstencil;
+							c.pInputAssemblyState = &input_assembly;
+							c.pColorBlendState = &blend;
+							c.pMultisampleState = &multisample;
+							c.pRasterizationState = &rasterizer;
+							c.pStages = shaders.data();
+							c.stageCount = 2;
+							c.pVertexInputState = &vertex_input;
+							c.pViewportState = &viewport;
+							c.subpass = SUBPASS_GBUFFER_GEN;
+						}
+
+						VkDevice device;
+						std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
+						VkViewport vp;
+						VkRect2D scissor;
+						VkPipelineViewportStateCreateInfo viewport = {};
+					};
+					namespace dsl
 					{
-						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
-					}
+						constexpr auto create_binding()
+						{
+							VkDescriptorSetLayoutBinding binding = {};
+							binding.binding = 0;
+							binding.descriptorCount = 1;
+							binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+							binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+							return binding;
+						}
+						constexpr auto binding = create_binding();
 
-					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
-					{
-						c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-						c.basePipelineHandle = VK_NULL_HANDLE;
-						c.basePipelineIndex = -1;
-						c.pDepthStencilState = &depthstencil;
-						c.pInputAssemblyState = &input_assembly;
-						c.pColorBlendState = &blend;
-						c.pMultisampleState = &multisample;
-						c.pRasterizationState = &rasterizer;
-						c.pStages = shaders.data();
-						c.stageCount = 2;
-						c.pVertexInputState = &vertex_input;
-						c.pViewportState = &viewport;
-						c.subpass = SUBPASS_GBUFFER_GEN;
-					}
-
-					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
-					VkViewport vp;
-					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport = {};
-				};
-				namespace dsl
-				{
-					constexpr auto create_binding()
-					{
-						VkDescriptorSetLayoutBinding binding = {};
-						binding.binding = 0;
-						binding.descriptorCount = 1;
-						binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-						binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-						return binding;
-					}
-					constexpr auto binding = create_binding();
-
-					constexpr auto create_create_info()
-					{
-						VkDescriptorSetLayoutCreateInfo dsl = {};
-						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-						dsl.bindingCount = 1;
-						dsl.pBindings = &binding;
-						return dsl;
-					}
-					constexpr auto create_info = create_create_info();
-				}//namespace dsl
+						constexpr auto create_create_info()
+						{
+							VkDescriptorSetLayoutCreateInfo dsl = {};
+							dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+							dsl.bindingCount = 1;
+							dsl.pBindings = &binding;
+							return dsl;
+						}
+						constexpr auto create_info = create_create_info();
+					}//namespace dsl
+				}//namespace mat_opaque
 			}//namespace pipeline
 		}//namespace subpass_gbuffer_gen
 
@@ -2446,7 +2659,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -2749,7 +2962,7 @@ namespace rcq
 					~runtime_info()
 					{
 						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, host_memory_manager);
+							vkDestroyShaderModule(device, s.module, nullptr);
 					}
 
 					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
@@ -2841,11 +3054,11 @@ namespace rcq
 			VkRenderPassCreateInfo pass = {};
 			pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
 			pass.attachmentCount = ATT_COUNT;
-			pass.dependencyCount = DEP_COUNT;
+			//pass.dependencyCount = DEP_COUNT;
 			pass.pAttachments = atts.data();
 			pass.subpassCount = 1;
 			pass.pSubpasses = &sp_bypass;
-			pass.pDependencies = deps.data();
+			//pass.pDependencies = deps.data();
 			return pass;
 		}
 		constexpr VkRenderPassCreateInfo create_info = create_create_info();
@@ -2857,7 +3070,7 @@ namespace rcq
 		constexpr auto create_sizes()
 		{
 			std::array<VkDescriptorPoolSize, 3> sizes = {};
-			sizes[0].descriptorCount = 8;// ub_count;
+			sizes[0].descriptorCount = 9;// ub_count;
 			sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			sizes[1].descriptorCount = 11;// cis_count;
 			sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;

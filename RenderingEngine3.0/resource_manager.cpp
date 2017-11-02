@@ -18,7 +18,7 @@ resource_manager* resource_manager::m_instance = nullptr;
 void load_mesh(const std::string& file_name, std::vector<vertex>& vertices, std::vector<uint32_t>& indices,
 	bool make_vertex_ext, std::vector<vertex_ext>& vertices_ext);
 
-resource_manager::resource_manager(const base_info& info) : m_base(info)
+resource_manager::resource_manager(const base_info& info) : m_base(info), m_alloc("resource_manager")
 {
 	m_current_build_task_p.reset(new build_task_package);
 
@@ -65,8 +65,8 @@ resource_manager::~resource_manager()
 
 	vkUnmapMemory(m_base.device, m_single_cell_sb_mem);
 	vkUnmapMemory(m_base.device, m_sb_mem);
-	vkDestroyBuffer(m_base.device, m_single_cell_sb, host_memory_manager);
-	vkDestroyBuffer(m_base.device, m_sb, host_memory_manager);
+	vkDestroyBuffer(m_base.device, m_single_cell_sb, m_alloc);
+	vkDestroyBuffer(m_base.device, m_sb, m_alloc);
 	auto destroy = std::make_unique<destroy_package>();
 	destroy->ids[RESOURCE_TYPE_MEMORY].push_back(~0);
 	push_destroy_package(std::move(destroy));
@@ -75,16 +75,16 @@ resource_manager::~resource_manager()
 	m_destroy_thread.join();	
 
 	for (auto& sampler : m_samplers)
-		vkDestroySampler(m_base.device, sampler, host_memory_manager);
+		vkDestroySampler(m_base.device, sampler, m_alloc);
 	for (auto& dsl : m_dsls)
-		vkDestroyDescriptorSetLayout(m_base.device, dsl, host_memory_manager);
+		vkDestroyDescriptorSetLayout(m_base.device, dsl, m_alloc);
 	for (auto& dpp : m_dpps)
 	{
 		for (auto& dp : dpp.pools)
-			vkDestroyDescriptorPool(m_base.device, dp, host_memory_manager);
+			vkDestroyDescriptorPool(m_base.device, dp, m_alloc);
 	}
-	vkDestroyCommandPool(m_base.device, m_cp_build, host_memory_manager);
-	vkDestroyCommandPool(m_base.device, m_cp_update, host_memory_manager);
+	vkDestroyCommandPool(m_base.device, m_cp_build, m_alloc);
+	vkDestroyCommandPool(m_base.device, m_cp_update, m_alloc);
 
 	//checking that resources was destroyed properly
 	check_resource_leak(std::make_index_sequence<RESOURCE_TYPE_COUNT>());
@@ -306,7 +306,7 @@ mesh resource_manager::build<RESOURCE_TYPE_MESH>(const std::string& filename, bo
 	vb_info.size = vb_size;
 	vb_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-	if (vkCreateBuffer(m_base.device, &vb_info, host_memory_manager, &_mesh.vb) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &vb_info, m_alloc, &_mesh.vb) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create vertex buffer!");
 	}
@@ -321,7 +321,7 @@ mesh resource_manager::build<RESOURCE_TYPE_MESH>(const std::string& filename, bo
 	ib_info.size = ib_size;
 	ib_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-	if (vkCreateBuffer(m_base.device, &ib_info, host_memory_manager, &_mesh.ib) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &ib_info, m_alloc, &_mesh.ib) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create index buffer!");
 	}
@@ -342,7 +342,7 @@ mesh resource_manager::build<RESOURCE_TYPE_MESH>(const std::string& filename, bo
 		veb_info.size = veb_size;
 		veb_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-		if (vkCreateBuffer(m_base.device, &veb_info, host_memory_manager, &_mesh.veb) != VK_SUCCESS)
+		if (vkCreateBuffer(m_base.device, &veb_info, m_alloc, &_mesh.veb) != VK_SUCCESS)
 		{
 			throw std::runtime_error("failed to create vertex ext buffer!");
 		}
@@ -366,7 +366,7 @@ mesh resource_manager::build<RESOURCE_TYPE_MESH>(const std::string& filename, bo
 		veb_mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	alloc_info.allocationSize = size;
 
-	if (vkAllocateMemory(m_base.device, &alloc_info, host_memory_manager, &_mesh.memory) != VK_SUCCESS)
+	if (vkAllocateMemory(m_base.device, &alloc_info, m_alloc, &_mesh.memory) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to allocate buffer memory!");
 	}
@@ -380,7 +380,7 @@ mesh resource_manager::build<RESOURCE_TYPE_MESH>(const std::string& filename, bo
 	//create and fill staging buffer
 	VkBuffer sb;
 	VkDeviceMemory sb_mem;
-	create_staging_buffer(m_base, sb_size, sb, sb_mem);
+	create_staging_buffer(m_base, sb_size, sb, sb_mem, m_alloc);
 
 	void* raw_data;
 	vkMapMemory(m_base.device, sb_mem, 0, sb_size, 0, &raw_data);
@@ -413,8 +413,8 @@ mesh resource_manager::build<RESOURCE_TYPE_MESH>(const std::string& filename, bo
 	end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
 
 	//destroy staging buffer
-	vkDestroyBuffer(m_base.device, sb, host_memory_manager);
-	vkFreeMemory(m_base.device, sb_mem, host_memory_manager);
+	vkDestroyBuffer(m_base.device, sb, m_alloc);
+	vkFreeMemory(m_base.device, sb_mem, m_alloc);
 
 	return _mesh;
 }
@@ -440,7 +440,7 @@ material_opaque resource_manager::build<RESOURCE_TYPE_MAT_OPAQUE>(const material
 	buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	buffer_create_info.size = sizeof(material_opaque_data);
 	buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	if (vkCreateBuffer(m_base.device, &buffer_create_info, host_memory_manager, &mat.data) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &buffer_create_info, m_alloc, &mat.data) != VK_SUCCESS)
 		throw std::runtime_error("failed to create material data buffer!");
 
 	//allocate memory for material data buffer
@@ -537,7 +537,7 @@ transform resource_manager::build<RESOURCE_TYPE_TR>(const transform_data& data, 
 	buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 	if (usage == USAGE_STATIC)
 		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	if (vkCreateBuffer(m_base.device, &buffer_create_info, host_memory_manager, &tr.buffer) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &buffer_create_info, m_alloc, &tr.buffer) != VK_SUCCESS)
 		throw std::runtime_error("failed to create transform buffer!");
 
 	//allocate memory and copy
@@ -604,7 +604,7 @@ memory resource_manager::build<RESOURCE_TYPE_MEMORY>(const std::vector<VkMemoryA
 
 	for (size_t i = 0; i < mem.size(); ++i)
 	{
-		if (vkAllocateMemory(m_base.device, &alloc_infos[i], host_memory_manager, &mem[i]) != VK_SUCCESS)
+		if (vkAllocateMemory(m_base.device, &alloc_infos[i], m_alloc, &mem[i]) != VK_SUCCESS)
 			throw std::runtime_error("failed to allocate memory!");
 	}
 
@@ -613,12 +613,12 @@ memory resource_manager::build<RESOURCE_TYPE_MEMORY>(const std::vector<VkMemoryA
 
 void resource_manager::destroy(mesh&& _mesh)
 {
-	vkDestroyBuffer(m_base.device, _mesh.ib, host_memory_manager);
-	vkDestroyBuffer(m_base.device, _mesh.vb, host_memory_manager);
+	vkDestroyBuffer(m_base.device, _mesh.ib, m_alloc);
+	vkDestroyBuffer(m_base.device, _mesh.vb, m_alloc);
 	if (_mesh.veb != VK_NULL_HANDLE)
-		vkDestroyBuffer(m_base.device, _mesh.veb, host_memory_manager);
+		vkDestroyBuffer(m_base.device, _mesh.veb, m_alloc);
 
-	vkFreeMemory(m_base.device, _mesh.memory, host_memory_manager);
+	vkFreeMemory(m_base.device, _mesh.memory, m_alloc);
 }
 
 void resource_manager::destroy(material_opaque&& _mat)
@@ -630,13 +630,13 @@ void resource_manager::destroy(material_opaque&& _mat)
 	{
 		if (_mat.texs[i].view != VK_NULL_HANDLE)
 		{
-			vkDestroyImageView(m_base.device, _mat.texs[i].view, host_memory_manager);
-			vkDestroyImage(m_base.device, _mat.texs[i].image, host_memory_manager);
-			vkFreeMemory(m_base.device, _mat.texs[i].memory, host_memory_manager);
+			vkDestroyImageView(m_base.device, _mat.texs[i].view, m_alloc);
+			vkDestroyImage(m_base.device, _mat.texs[i].image, m_alloc);
+			vkFreeMemory(m_base.device, _mat.texs[i].memory, m_alloc);
 		}
 	}
 	
-	vkDestroyBuffer(m_base.device, _mat.data, host_memory_manager);
+	vkDestroyBuffer(m_base.device, _mat.data, m_alloc);
 	device_memory::instance()->free_buffer(USAGE_STATIC, _mat.cell);
 }
 
@@ -645,7 +645,7 @@ void resource_manager::destroy(transform&& _tr)
 	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TR].pools[_tr.pool_index], 1, &_tr.ds);
 	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TR].availability[_tr.pool_index];
 
-	vkDestroyBuffer(m_base.device, _tr.buffer, host_memory_manager);
+	vkDestroyBuffer(m_base.device, _tr.buffer, m_alloc);
 	device_memory::instance()->free_buffer(_tr.usage, _tr.cell);
 }
 
@@ -654,22 +654,22 @@ void resource_manager::destroy(light_omni&& l)
 	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_OMNI].pools[l.pool_index], 1, &l.ds);
 	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TR].availability[l.pool_index];
 
-	vkDestroyBuffer(m_base.device, l.buffer, host_memory_manager);
+	vkDestroyBuffer(m_base.device, l.buffer, m_alloc);
 	device_memory::instance()->free_buffer(l.usage, l.cell);
 
 	if (l.shadow_map.image!=VK_NULL_HANDLE)
 	{
-		vkDestroyFramebuffer(m_base.device, l.shadow_map_fb, host_memory_manager);
-		vkDestroyImageView(m_base.device, l.shadow_map.view, host_memory_manager);
-		vkDestroyImage(m_base.device, l.shadow_map.image, host_memory_manager);
-		vkFreeMemory(m_base.device, l.shadow_map.memory, host_memory_manager);
+		vkDestroyFramebuffer(m_base.device, l.shadow_map_fb, m_alloc);
+		vkDestroyImageView(m_base.device, l.shadow_map.view, m_alloc);
+		vkDestroyImage(m_base.device, l.shadow_map.image, m_alloc);
+		vkFreeMemory(m_base.device, l.shadow_map.memory, m_alloc);
 	}
 }
 
 void resource_manager::destroy(memory && _memory)
 {
 	for (auto mem : _memory)
-		vkFreeMemory(m_base.device, mem, host_memory_manager);
+		vkFreeMemory(m_base.device, mem, m_alloc);
 }
 
 void rcq::resource_manager::update_tr(const std::vector<update_tr_info>& trs)
@@ -735,7 +735,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	size_t image_size = width*height * 4;
 	VkBuffer sb;
 	VkDeviceMemory sb_mem;
-	create_staging_buffer(m_base, image_size, sb, sb_mem);
+	create_staging_buffer(m_base, image_size, sb, sb_mem, m_alloc);
 
 	void* data;
 	vkMapMemory(m_base.device, sb_mem, 0, image_size, 0, &data);
@@ -759,7 +759,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
 	image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-	if (vkCreateImage(m_base.device, &image_create_info, host_memory_manager, &tex.image) != VK_SUCCESS)
+	if (vkCreateImage(m_base.device, &image_create_info, m_alloc, &tex.image) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create texture image!");
 	}
@@ -774,7 +774,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	alloc_info.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	if (vkAllocateMemory(m_base.device, &alloc_info, host_memory_manager, &tex.memory) != VK_SUCCESS)
+	if (vkAllocateMemory(m_base.device, &alloc_info, m_alloc, &tex.memory) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to allocate texture memory!");
 	}
@@ -849,8 +849,8 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 		m_base.graphics_queue, cb);
 
 	//destroy staging buffer
-	vkDestroyBuffer(m_base.device, sb, host_memory_manager);
-	vkFreeMemory(m_base.device, sb_mem, host_memory_manager);
+	vkDestroyBuffer(m_base.device, sb, m_alloc);
+	vkFreeMemory(m_base.device, sb_mem, m_alloc);
 
 	//create image view
 	VkImageViewCreateInfo image_view_create_info = {};
@@ -864,7 +864,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	image_view_create_info.subresourceRange.levelCount = 1;
 	image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
 
-	if (vkCreateImageView(m_base.device, &image_view_create_info, host_memory_manager,
+	if (vkCreateImageView(m_base.device, &image_view_create_info, m_alloc,
 		&tex.view) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create texture image view!");
@@ -894,7 +894,7 @@ void rcq::resource_manager::create_samplers()
 	simple_sampler_info.minLod = 0.f;
 	simple_sampler_info.maxLod = 0.f;
 
-	if (vkCreateSampler(m_base.device, &simple_sampler_info, host_memory_manager, &m_samplers[SAMPLER_TYPE_SIMPLE]) != VK_SUCCESS)
+	if (vkCreateSampler(m_base.device, &simple_sampler_info, m_alloc, &m_samplers[SAMPLER_TYPE_SIMPLE]) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create texture sampler!");
 	}
@@ -914,7 +914,7 @@ void rcq::resource_manager::create_samplers()
 	omni_light_shadow_map_sampler.mipLodBias = 0.f;
 	omni_light_shadow_map_sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 
-	if (vkCreateSampler(m_base.device, &omni_light_shadow_map_sampler, host_memory_manager, 
+	if (vkCreateSampler(m_base.device, &omni_light_shadow_map_sampler, m_alloc, 
 		&m_samplers[SAMPLER_TYPE_CUBE]) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create texture sampler!");
@@ -932,7 +932,7 @@ void resource_manager::create_staging_buffers()
 	sb_info.size = cell_size;
 	sb_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-	if (vkCreateBuffer(m_base.device, &sb_info, host_memory_manager, &m_single_cell_sb) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &sb_info, m_alloc, &m_single_cell_sb) != VK_SUCCESS)
 		throw std::runtime_error("failed to create staging buffer!");
 
 	VkMemoryRequirements mr;
@@ -945,7 +945,7 @@ void resource_manager::create_staging_buffers()
 
 	//create sb
 	sb_info.size=STAGING_BUFFER_CELL_COUNT*device_memory::instance()->get_cell_size(USAGE_STATIC);
-	if (vkCreateBuffer(m_base.device, &sb_info, host_memory_manager, &m_sb) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &sb_info, m_alloc, &m_sb) != VK_SUCCESS)
 		throw std::runtime_error("failed to create staging buffer!");
 	vkGetBufferMemoryRequirements(m_base.device, m_sb, &mr);
 	alloc_infos[1].sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -984,7 +984,7 @@ void resource_manager::create_descriptor_set_layouts()
 	transform_dsl_create_info.bindingCount = 1;
 	transform_dsl_create_info.pBindings = &ub_binding;
 
-	if (vkCreateDescriptorSetLayout(m_base.device, &transform_dsl_create_info, host_memory_manager, 
+	if (vkCreateDescriptorSetLayout(m_base.device, &transform_dsl_create_info, m_alloc, 
 		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TR]) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create transform descriptor set layout!");
@@ -1010,7 +1010,7 @@ void resource_manager::create_descriptor_set_layouts()
 	material_dsl_create_info.bindingCount = TEX_TYPE_COUNT + 1;
 	material_dsl_create_info.pBindings = material_bindings;
 
-	if (vkCreateDescriptorSetLayout(m_base.device, &material_dsl_create_info, host_memory_manager, 
+	if (vkCreateDescriptorSetLayout(m_base.device, &material_dsl_create_info, m_alloc, 
 		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE]) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create material descriptor set layout!");
@@ -1029,7 +1029,7 @@ void resource_manager::create_descriptor_set_layouts()
 		dsl.bindingCount = 1;
 		dsl.pBindings = &tex_binding;
 
-		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, host_memory_manager, 
+		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, m_alloc, 
 			&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_MAT_EM]) != VK_SUCCESS)
 			throw std::runtime_error("failed to create dsl!");
 	}
@@ -1057,8 +1057,26 @@ void resource_manager::create_descriptor_set_layouts()
 		dsl.bindingCount = bindings.size();
 		dsl.pBindings = bindings.data();
 		
-		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, host_memory_manager,
+		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, m_alloc,
 			&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_SKY]) != VK_SUCCESS)
+			throw std::runtime_error("failed to create dsl!");
+	}
+
+	//create terrain dsl
+	{
+		VkDescriptorSetLayoutBinding binding = {};
+		binding.binding = 0;
+		binding.descriptorCount=1;
+		binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		binding.stageFlags = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+
+		VkDescriptorSetLayoutCreateInfo dsl = {};
+		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		dsl.bindingCount = 1;
+		dsl.pBindings = &binding;
+
+		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, m_alloc,
+			&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN]) != VK_SUCCESS)
 			throw std::runtime_error("failed to create dsl!");
 	}
 
@@ -1080,7 +1098,7 @@ void resource_manager::create_descriptor_set_layouts()
 	dsl_info.bindingCount = 2;
 	dsl_info.pBindings = light_bindings;
 
-	if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, host_memory_manager, 
+	if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, m_alloc, 
 		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_OMNI]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create light descriptor set layout!");
 
@@ -1096,7 +1114,7 @@ void resource_manager::create_descriptor_set_layouts()
 	skybox_dsl.bindingCount = 1;
 	skybox_dsl.pBindings = &cubemap_binding;
 
-	if (vkCreateDescriptorSetLayout(m_base.device, &skybox_dsl, host_memory_manager,
+	if (vkCreateDescriptorSetLayout(m_base.device, &skybox_dsl, m_alloc,
 		&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX]) != VK_SUCCESS)
 		throw std::runtime_error("failde to create skybox descriptor set layout!");
 }
@@ -1123,6 +1141,14 @@ inline void resource_manager::extend_descriptor_pool_pool()
 	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
 	{
 		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE*3;
+		dp_size[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+
+		dp_info.poolSizeCount = 1;
+	}
+
+	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN)
+	{
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
 		dp_size[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 		dp_info.poolSizeCount = 1;
@@ -1159,7 +1185,7 @@ inline void resource_manager::extend_descriptor_pool_pool()
 	}
 
 	VkDescriptorPool new_pool;
-	if (vkCreateDescriptorPool(m_base.device, &dp_info, host_memory_manager, &new_pool) != VK_SUCCESS)
+	if (vkCreateDescriptorPool(m_base.device, &dp_info, m_alloc, &new_pool) != VK_SUCCESS)
 		throw std::runtime_error("failed to create descriptor pool!");
 
 	m_dpps[dsl_type].pools.push_back(new_pool);
@@ -1173,8 +1199,8 @@ void resource_manager::create_command_pool()
 	cp_info.queueFamilyIndex = m_base.queue_families.graphics_family;
 	cp_info.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
-	if (vkCreateCommandPool(m_base.device, &cp_info, host_memory_manager, &m_cp_build) != VK_SUCCESS ||
-		vkCreateCommandPool(m_base.device, &cp_info, host_memory_manager, &m_cp_update) != VK_SUCCESS)
+	if (vkCreateCommandPool(m_base.device, &cp_info, m_alloc, &m_cp_build) != VK_SUCCESS ||
+		vkCreateCommandPool(m_base.device, &cp_info, m_alloc, &m_cp_update) != VK_SUCCESS)
 		throw std::runtime_error("failed to create command pool!");
 }
 
@@ -1192,7 +1218,7 @@ light_omni resource_manager::build<RESOURCE_TYPE_LIGHT_OMNI>(const light_omni_da
 	buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 	if (usage == USAGE_STATIC)
 		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
-	if (vkCreateBuffer(m_base.device, &buffer_create_info, host_memory_manager, &l.buffer) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &buffer_create_info, m_alloc, &l.buffer) != VK_SUCCESS)
 		throw std::runtime_error("failed to create transform buffer!");
 
 	//allocate memory and copy
@@ -1251,7 +1277,7 @@ light_omni resource_manager::build<RESOURCE_TYPE_LIGHT_OMNI>(const light_omni_da
 		image_info.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
-		if (vkCreateImage(m_base.device, &image_info, host_memory_manager, &l.shadow_map.image) != VK_SUCCESS)
+		if (vkCreateImage(m_base.device, &image_info, m_alloc, &l.shadow_map.image) != VK_SUCCESS)
 			throw std::runtime_error("failed to create image!");
 
 		//alloc memory
@@ -1263,7 +1289,7 @@ light_omni resource_manager::build<RESOURCE_TYPE_LIGHT_OMNI>(const light_omni_da
 		alloc_info.allocationSize = mr.size;
 		alloc_info.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-		if (vkAllocateMemory(m_base.device, &alloc_info, host_memory_manager, &l.shadow_map.memory) != VK_SUCCESS)
+		if (vkAllocateMemory(m_base.device, &alloc_info, m_alloc, &l.shadow_map.memory) != VK_SUCCESS)
 			throw std::runtime_error("failed to allocate memory!");
 		vkBindImageMemory(m_base.device, l.shadow_map.image, l.shadow_map.memory, 0);
 
@@ -1279,7 +1305,7 @@ light_omni resource_manager::build<RESOURCE_TYPE_LIGHT_OMNI>(const light_omni_da
 		view_info.subresourceRange.layerCount = 6;
 		view_info.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_base.device, &view_info, host_memory_manager, &l.shadow_map.view) != VK_SUCCESS)
+		if (vkCreateImageView(m_base.device, &view_info, m_alloc, &l.shadow_map.view) != VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 
 		//transition to shader read only optimal
@@ -1366,9 +1392,9 @@ void resource_manager::destroy(skybox&& sb)
 	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX].pools[sb.pool_index], 1, &sb.ds);
 	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX].availability[sb.pool_index];
 
-	vkDestroyImageView(m_base.device, sb.tex.view, host_memory_manager);
-	vkDestroyImage(m_base.device, sb.tex.image, host_memory_manager);
-	vkFreeMemory(m_base.device, sb.tex.memory, host_memory_manager);
+	vkDestroyImageView(m_base.device, sb.tex.view, m_alloc);
+	vkDestroyImage(m_base.device, sb.tex.image, m_alloc);
+	vkFreeMemory(m_base.device, sb.tex.memory, m_alloc);
 }
 
 template<>
@@ -1394,7 +1420,7 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 
 	VkBuffer sb;
 	VkDeviceMemory sb_mem;
-	create_staging_buffer(m_base, 6 * image_size, sb, sb_mem);
+	create_staging_buffer(m_base, 6 * image_size, sb, sb_mem, m_alloc);
 
 	void* raw_data;
 	vkMapMemory(m_base.device, sb_mem, 0, 6 * image_size, 0, &raw_data);
@@ -1425,7 +1451,7 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 	image_info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 	image_info.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
 
-	if (vkCreateImage(m_base.device, &image_info, host_memory_manager, &skyb.tex.image) != VK_SUCCESS)
+	if (vkCreateImage(m_base.device, &image_info, m_alloc, &skyb.tex.image) != VK_SUCCESS)
 		throw std::runtime_error("failed to create skybox image!");
 
 	//allocate memory
@@ -1437,7 +1463,7 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 	alloc_info.allocationSize = mr.size;
 	alloc_info.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	
-	if (vkAllocateMemory(m_base.device, &alloc_info, host_memory_manager, &skyb.tex.memory) != VK_SUCCESS)
+	if (vkAllocateMemory(m_base.device, &alloc_info, m_alloc, &skyb.tex.memory) != VK_SUCCESS)
 		throw std::runtime_error("failed to allocate memory for skybox!");
 
 	vkBindImageMemory(m_base.device, skyb.tex.image, skyb.tex.memory, 0);
@@ -1498,8 +1524,8 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 	end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);	
 
 	//destroy staging buffer
-	vkDestroyBuffer(m_base.device, sb, host_memory_manager);
-	vkFreeMemory(m_base.device, sb_mem, host_memory_manager);
+	vkDestroyBuffer(m_base.device, sb, m_alloc);
+	vkFreeMemory(m_base.device, sb_mem, m_alloc);
 
 	//create image view
 	VkImageViewCreateInfo view_info = {};
@@ -1513,7 +1539,7 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 	view_info.subresourceRange.layerCount = 6;
 	view_info.subresourceRange.levelCount = 1;
 
-	if (vkCreateImageView(m_base.device, &view_info, host_memory_manager, &skyb.tex.view) != VK_SUCCESS)
+	if (vkCreateImageView(m_base.device, &view_info, m_alloc, &skyb.tex.view) != VK_SUCCESS)
 		throw std::runtime_error("failed to create skybox image view!");
 
 	skyb.tex.sampler_type = SAMPLER_TYPE_CUBE;
@@ -1564,7 +1590,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 	VkDeviceMemory sb_mem;
 	VkDeviceSize sb_size = sizeof(glm::vec4)*std::max(sky_image_size.x*sky_image_size.y*sky_image_size.z,
 		transmittance_size.x*transmittance_size.y);
-	create_staging_buffer(m_base, sb_size, sb, sb_mem);
+	create_staging_buffer(m_base, sb_size, sb, sb_mem, m_alloc);
 	for (uint32_t i = 0; i < 2; ++i)
 	{
 
@@ -1591,7 +1617,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 			image.tiling = VK_IMAGE_TILING_OPTIMAL;
 			image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-			if (vkCreateImage(m_base.device, &image, host_memory_manager, &s.tex[i].image) != VK_SUCCESS)
+			if (vkCreateImage(m_base.device, &image, m_alloc, &s.tex[i].image) != VK_SUCCESS)
 				throw std::runtime_error("failed to create sky image!");
 
 			VkMemoryRequirements mr;
@@ -1600,7 +1626,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 			alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 			alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 			alloc.allocationSize = mr.size;
-			if (vkAllocateMemory(m_base.device, &alloc, host_memory_manager, &s.tex[i].memory) != VK_SUCCESS)
+			if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &s.tex[i].memory) != VK_SUCCESS)
 				throw std::runtime_error("failed to allocate memory!");
 
 			vkBindImageMemory(m_base.device, s.tex[i].image, s.tex[i].memory, 0);
@@ -1616,7 +1642,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 			view.subresourceRange.layerCount = 1;
 			view.subresourceRange.levelCount = 1;
 
-			if (vkCreateImageView(m_base.device, &view, host_memory_manager, &s.tex[i].view) != VK_SUCCESS)
+			if (vkCreateImageView(m_base.device, &view, m_alloc, &s.tex[i].view) != VK_SUCCESS)
 				throw std::runtime_error("failed to reate sky image view!");
 
 			s.tex[i].sampler_type = SAMPLER_TYPE_CUBE;
@@ -1713,7 +1739,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 			image.tiling = VK_IMAGE_TILING_OPTIMAL;
 			image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
-			if (vkCreateImage(m_base.device, &image, host_memory_manager, &s.tex[2].image) != VK_SUCCESS)
+			if (vkCreateImage(m_base.device, &image, m_alloc, &s.tex[2].image) != VK_SUCCESS)
 				throw std::runtime_error("failed to create sky image!");
 
 			VkMemoryRequirements mr;
@@ -1722,7 +1748,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 			alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 			alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 			alloc.allocationSize = mr.size;
-			if (vkAllocateMemory(m_base.device, &alloc, host_memory_manager, &s.tex[2].memory) != VK_SUCCESS)
+			if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &s.tex[2].memory) != VK_SUCCESS)
 				throw std::runtime_error("failed to allocate memory!");
 
 			vkBindImageMemory(m_base.device, s.tex[2].image, s.tex[2].memory, 0);
@@ -1738,7 +1764,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 			view.subresourceRange.layerCount = 1;
 			view.subresourceRange.levelCount = 1;
 
-			if (vkCreateImageView(m_base.device, &view, host_memory_manager, &s.tex[2].view) != VK_SUCCESS)
+			if (vkCreateImageView(m_base.device, &view, m_alloc, &s.tex[2].view) != VK_SUCCESS)
 				throw std::runtime_error("failed to reate sky image view!");
 
 			s.tex[2].sampler_type = SAMPLER_TYPE_CUBE;
@@ -1810,8 +1836,8 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 		}
 	}
 	//destroy staging buffer
-	vkDestroyBuffer(m_base.device, sb, host_memory_manager);
-	vkFreeMemory(m_base.device, sb_mem, host_memory_manager);
+	vkDestroyBuffer(m_base.device, sb, m_alloc);
+	vkFreeMemory(m_base.device, sb_mem, m_alloc);
 
 	//allocate descriptor set
 	{
@@ -1887,8 +1913,193 @@ void resource_manager::destroy(sky&& s)
 
 	for (auto& t : s.tex)
 	{
-		vkDestroyImageView(m_base.device, t.view, host_memory_manager);
-		vkDestroyImage(m_base.device, t.image, host_memory_manager);
-		vkFreeMemory(m_base.device, t.memory, host_memory_manager);
+		vkDestroyImageView(m_base.device, t.view, m_alloc);
+		vkDestroyImage(m_base.device, t.image, m_alloc);
+		vkFreeMemory(m_base.device, t.memory, m_alloc);
 	}
+}
+
+template<>
+terrain resource_manager::build<RESOURCE_TYPE_TERRAIN>(const std::string& filename, const glm::uvec2& terrain_image_size)
+{
+	terrain t;
+
+	//create staging buffer
+	VkBuffer sb;
+	VkDeviceMemory sb_mem;
+	VkDeviceSize sb_size = terrain_image_size.x*terrain_image_size.y * sizeof(glm::vec4);
+	create_staging_buffer(m_base, sb_size, sb, sb_mem, m_alloc);
+
+	//load image from file to staging buffer;
+	auto terr = read_file(filename);
+	void* data;
+	vkMapMemory(m_base.device, sb_mem, 0, terr.size(), 0, &data);
+	memcpy(data, terr.data(), terr.size());
+	vkUnmapMemory(m_base.device, sb_mem);
+	terr.clear();
+
+	//create texture
+	{
+		VkImageCreateInfo image = {};
+		image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		image.extent = { terrain_image_size.x, terrain_image_size.y, 1 };
+		image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		image.arrayLayers = 1;
+		image.imageType = VK_IMAGE_TYPE_2D;
+		image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image.mipLevels = 1;
+		image.samples = VK_SAMPLE_COUNT_1_BIT;
+		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		image.tiling = VK_IMAGE_TILING_OPTIMAL;
+		image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+		if (vkCreateImage(m_base.device, &image, m_alloc, &t.tex.image) != VK_SUCCESS)
+			throw std::runtime_error("failed to create sky image!");
+
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(m_base.device, t.tex.image, &mr);
+		VkMemoryAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		alloc.allocationSize = mr.size;
+		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.tex.memory) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate memory!");
+
+		vkBindImageMemory(m_base.device, t.tex.image, t.tex.memory, 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = t.tex.image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &t.tex.view) != VK_SUCCESS)
+			throw std::runtime_error("failed to reate sky image view!");
+
+		t.tex.sampler_type = SAMPLER_TYPE_CUBE;
+	}
+
+	//copy and transition layout
+	{
+		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+
+		//transition to transfer dst optimal
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = t.tex.image;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = 0;
+			b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
+				0, nullptr, 1, &b);
+		}
+
+		//copy from staging buffer
+		{
+			VkBufferImageCopy region = {};
+			region.bufferImageHeight = 0;
+			region.bufferOffset = 0;
+			region.bufferRowLength = 0;
+			region.imageExtent = { terrain_image_size.x, terrain_image_size.y, 1 };
+			region.imageOffset = { 0,0,0 };
+			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			region.imageSubresource.baseArrayLayer = 0;
+			region.imageSubresource.layerCount = 1;
+			region.imageSubresource.mipLevel = 0;
+
+			vkCmdCopyBufferToImage(cb, sb, t.tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+		}
+
+		//transition to shader read only optimal
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = t.tex.image;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
+
+		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
+	}
+
+	//destroy staging buffer
+	vkDestroyBuffer(m_base.device, sb, m_alloc);
+	vkFreeMemory(m_base.device, sb_mem, m_alloc);
+
+	//allocate descriptor set
+	{
+		VkDescriptorSetAllocateInfo alloc_info = {};
+		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc_info.descriptorSetCount = 1;
+		alloc_info.pSetLayouts = &m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN];
+		pool_id p_id = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].get_available_pool_id();
+		if (p_id == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools.size())
+		{
+			extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN>();
+		}
+		alloc_info.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools[p_id];
+		if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &t.ds) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate material descriptor set!");
+
+		--m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].availability[p_id];
+		t.pool_index = p_id;
+	}
+
+	//update ds
+	{
+		VkDescriptorImageInfo terrain_tex;
+		terrain_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		terrain_tex.imageView = t.tex.view;
+		terrain_tex.sampler = m_samplers[t.tex.sampler_type];
+		
+		VkWriteDescriptorSet w = {};
+		w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w.descriptorCount = 1;
+		w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w.dstArrayElement = 0;
+		w.dstBinding = 0;
+		w.dstSet = t.ds;
+		w.pImageInfo = &terrain_tex;
+
+		vkUpdateDescriptorSets(m_base.device, 1, &w, 0, nullptr);
+	}
+
+	return t;
+}
+
+void resource_manager::destroy(terrain&& t)
+{
+	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools[t.pool_index], 1, &t.ds);
+	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].availability[t.pool_index];
+
+	vkDestroyImageView(m_base.device, t.tex.view, m_alloc);
+	vkDestroyImage(m_base.device, t.tex.image, m_alloc);
+	vkFreeMemory(m_base.device, t.tex.memory, m_alloc);
 }

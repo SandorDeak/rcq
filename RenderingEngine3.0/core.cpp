@@ -58,6 +58,7 @@ void rcq::core::loop()
 	{
 		if (m_package)
 		{
+
 			std::unique_ptr<core_package> package;
 			{
 				std::unique_lock<std::mutex> lock(m_package_mutex);
@@ -102,27 +103,23 @@ void rcq::core::loop()
 					record_mask.set(i);
 			}
 
-			//update tr
+			/*//update tr
 			if (!package->update_tr.empty())
 			{
 				//wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
 				//basic_pass::instance()->wait_for_finish();
 				resource_manager::instance()->update_tr(package->update_tr);
-			}
+			}*/
 
 			if (package->render)
 			{
-				/*record_and_render(package->view, package->proj_info, record_mask);
-				record_mask.reset();*/
-				m_render_settings = package->settings;
-				gta5_pass::instance()->render(m_render_settings, record_mask);
+				//m_render_settings = package->settings;
+				gta5_pass::instance()->render(package->settings, record_mask);
 				record_mask.reset();
 			}
 
 			if (package->confirm_destroy)
 			{
-				//wait_for_finish(std::make_index_sequence<RENDER_PASS_COUNT>());
-				//basic_pass::instance()->wait_for_finish();
 				package->confirm_destroy->set_value();
 			}
 		}

@@ -5,7 +5,7 @@ using namespace rcq;
 base* base::m_instance = nullptr;
 
 
-base::base(const base_create_info& info) : m_info(info)
+base::base(const base_create_info& info) : m_info(info), m_alloc("base")
 {
 	create_window();
 	create_instance();
@@ -26,13 +26,13 @@ base::base(const base_create_info& info) : m_info(info)
 base::~base()
 {
 	for (size_t i = 0; i < m_swap_chain_image_views.size(); ++i)
-		vkDestroyImageView(m_device, m_swap_chain_image_views[i], host_memory_manager);
-	vkDestroySwapchainKHR(m_device, m_swap_chain, host_memory_manager);
-	vkDestroyDevice(m_device, host_memory_manager);
-	vkDestroySurfaceKHR(m_vk_instance, m_surface, host_memory_manager);
+		vkDestroyImageView(m_device, m_swap_chain_image_views[i], m_alloc);
+	vkDestroySwapchainKHR(m_device, m_swap_chain, m_alloc);
+	vkDestroyDevice(m_device, m_alloc);
+	vkDestroySurfaceKHR(m_vk_instance, m_surface, m_alloc);
 	if (m_info.enable_validation_layers)
-		DestroyDebugReportCallbackEXT(m_vk_instance, m_callback, host_memory_manager);
-	vkDestroyInstance(m_vk_instance, host_memory_manager);
+		DestroyDebugReportCallbackEXT(m_vk_instance, m_callback, m_alloc);
+	vkDestroyInstance(m_vk_instance, m_alloc);
 
 	glfwDestroyWindow(m_window);
 	glfwTerminate();
@@ -138,7 +138,7 @@ void base::create_instance()
 		create_info.ppEnabledLayerNames = nullptr;
 	}
 
-	if (vkCreateInstance(&create_info, host_memory_manager, &m_vk_instance) != VK_SUCCESS)
+	if (vkCreateInstance(&create_info, m_alloc, &m_vk_instance) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create instance!");
 	}
@@ -149,10 +149,10 @@ void base::setup_debug_callbacks()
 {
 	VkDebugReportCallbackCreateInfoEXT create_info = {};
 	create_info.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-	create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT;
+	create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
 	create_info.pfnCallback = debug_callback;
 
-	if (CreateDebugReportCallbackEXT(m_vk_instance, &create_info, host_memory_manager, &m_callback) != VK_SUCCESS)
+	if (CreateDebugReportCallbackEXT(m_vk_instance, &create_info, m_alloc, &m_callback) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to set up debug callback!");
 	}
@@ -184,7 +184,7 @@ void base::DestroyDebugReportCallbackEXT(VkInstance instance,
 
 void base::create_surface()
 {
-	if (glfwCreateWindowSurface(m_vk_instance, m_window, host_memory_manager, &m_surface) != VK_SUCCESS)
+	if (glfwCreateWindowSurface(m_vk_instance, m_window, m_alloc, &m_surface) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create surface!");
 	}
@@ -362,7 +362,7 @@ void base::create_logical_device()
 		create_info.enabledLayerCount = 0;
 	}
 
-	if (vkCreateDevice(m_physical_device, &create_info, host_memory_manager, &m_device) != VK_SUCCESS)
+	if (vkCreateDevice(m_physical_device, &create_info, m_alloc, &m_device) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create logical device!");
 	}
@@ -417,7 +417,7 @@ void base::create_swap_chain()
 	create_info.clipped = VK_TRUE;
 	create_info.oldSwapchain = VK_NULL_HANDLE;
 
-	if (vkCreateSwapchainKHR(m_device, &create_info, host_memory_manager, &m_swap_chain) != VK_SUCCESS)
+	if (vkCreateSwapchainKHR(m_device, &create_info, m_alloc, &m_swap_chain) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create swap chain!");
 	}
@@ -489,7 +489,7 @@ void base::create_swap_cain_image_views()
 		create_info.subresourceRange.layerCount = 1;
 		create_info.subresourceRange.levelCount = 1;
 
-		if (vkCreateImageView(m_device, &create_info, host_memory_manager, &m_swap_chain_image_views[i]) != VK_SUCCESS)
+		if (vkCreateImageView(m_device, &create_info, m_alloc, &m_swap_chain_image_views[i]) != VK_SUCCESS)
 		{
 			throw std::runtime_error("failed to create image view!");
 		}

@@ -27,6 +27,7 @@ private:
 	std::vector<transform> m_trs;
 	std::vector<light_omni> m_light_omni;
 	rcq::unique_id m_sky;
+	rcq::unique_id m_terrain;
 	skybox m_skybox;
 
 	rcq::render_settings m_render_settings;

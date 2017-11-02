@@ -79,6 +79,9 @@ namespace rcq
 		std::vector<VkImageView> m_swap_chain_image_views;
 		VkFormat m_swap_chin_image_format;
 		VkExtent2D m_swap_chain_extent;
+
+		//allocator
+		allocator m_alloc;
 	};
 
 }

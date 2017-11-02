@@ -15,6 +15,7 @@ scene::~scene()
 {
 	//rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKYBOX>(m_skybox.id);
 	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST);
+	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_TERRAIN>(TERRAIN_TRY);
 
 	for (auto& m : m_meshes)
 		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_MESH>(m.id);
@@ -149,13 +150,16 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST, "textures/sky/try_12",
 		glm::uvec3(32), glm::uvec2(512));
 
+	//terrain res
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TERRAIN>(TERRAIN_TRY, "textures/terrain/t.terr", glm::uvec2(256));
+
 	//create transforms
 	transform tr;
 	//buddha
 	tr.data.model = glm::mat4(1.f);
 	tr.data.scale = glm::vec3(1.f);
 	tr.id = ENTITY_GOLD_BUDDHA;
-	tr.usage = rcq::USAGE_DYNAMIC;
+	tr.usage = rcq::USAGE_STATIC;
 
 	for (int i = 0; i < buddha_count; ++i)
 	{
@@ -170,7 +174,7 @@ void scene::build()
 	tr.data.scale = glm::vec3(6.f);
 	tr.data.tex_scale = glm::vec2(1.f);
 	tr.id = ENTITY_FLOOR;
-	tr.usage = rcq::USAGE_DYNAMIC;
+	tr.usage = rcq::USAGE_STATIC;
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
@@ -341,6 +345,13 @@ void scene::build()
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, 0, 0, e.m_material_light_id, e.m_rend_type, rcq::LIFE_EXPECTANCY_LONG);
 	m_entities.push_back(e);
 
+	//terrain
+	e.m_material_light_id = TERRAIN_TRY;
+	e.m_id = ENTITY_TERRAIN;
+	e.m_rend_type = rcq::RENDERABLE_TYPE_TERRAIN;
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, 0, 0, e.m_material_light_id, e.m_rend_type, rcq::LIFE_EXPECTANCY_LONG);
+	m_entities.push_back(e);
+
 	//dispatch
 	rcq::engine::instance()->cmd_dispatch();
 
@@ -376,7 +387,6 @@ void scene::update(float dt)
 		rcq::engine::instance()->cmd_update_transform(m_trs[i].id, m_trs[i].data);
 	}*/
 	update_settings(dt);
-	std::cout << m_render_settings.light_dir.x << ' ' << m_render_settings.light_dir.y << ' ' << m_render_settings.light_dir.z << '\n';
 
 	rcq::engine::instance()->cmd_render(m_render_settings);
 	rcq::engine::instance()->cmd_dispatch();
@@ -423,8 +433,13 @@ void scene::update_settings(float dt)
 
 	if (move != glm::vec3(0.f))
 	{
+		move = glm::normalize(move);
+
+		if (glfwGetKey(m_window, GLFW_KEY_LEFT_SHIFT))
+			move *= 20.f;
+
 		m_camera.pos += dt*glm::mat3(m_camera.look_dir, glm::vec3(0.f, -1.f, 0.f), glm::vec3(-m_camera.look_dir.z, 0.f, m_camera.look_dir.x))
-			*glm::normalize(move);
+			*move;
 	}
 
 	m_camera.data.pos = m_camera.pos;

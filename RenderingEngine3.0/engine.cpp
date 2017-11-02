@@ -33,6 +33,7 @@ engine::engine()
 	base_info.window_name = "RCQ Engine";
 	base_info.device_features.samplerAnisotropy = VK_TRUE;
 	base_info.device_features.geometryShader = VK_TRUE;
+	base_info.device_features.tessellationShader = VK_TRUE;
 	base_info.device_features.depthBounds = VK_TRUE;
 
 	base::init(base_info);

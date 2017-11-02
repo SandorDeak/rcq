@@ -37,6 +37,12 @@ enum SKY : rcq::unique_id
 	SKY_COUNT
 };
 
+enum TERRAIN : rcq::unique_id
+{
+	TERRAIN_TRY,
+	TERRAIN_COUNT
+};
+
 enum ENTITIY : rcq::unique_id
 {
 	ENTITY_FLOOR,

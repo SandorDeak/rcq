@@ -1,10 +1,7 @@
 #include "foundation.h"
 #include <fstream>
 
-
-const VkAllocationCallbacks* rcq::host_memory_manager = nullptr;
 const uint32_t rcq::OMNI_SHADOW_MAP_SIZE=128;
-
 
 
 std::vector<char> rcq::read_file(const std::string_view& filename)
@@ -31,7 +28,7 @@ VkShaderModule rcq::create_shader_module(VkDevice device, const std::vector<char
 	info.pCode = reinterpret_cast<const uint32_t*>(code.data());
 	
 	VkShaderModule shader_m;
-	if (vkCreateShaderModule(device, &info, rcq::host_memory_manager, &shader_m) != VK_SUCCESS)
+	if (vkCreateShaderModule(device, &info, nullptr, &shader_m) != VK_SUCCESS)
 		throw std::runtime_error("failed to create shader module!");
 	return shader_m;
 }
@@ -51,7 +48,7 @@ void rcq::create_shaders(VkDevice device, const std::vector<std::string_view> & 
 	}
 }
 
-VkPipelineLayout rcq::create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls)
+VkPipelineLayout rcq::create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls, const VkAllocationCallbacks* alloc)
 {
 	VkPipelineLayoutCreateInfo l = {};
 	l.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -59,7 +56,7 @@ VkPipelineLayout rcq::create_layout(VkDevice device, const std::vector<VkDescrip
 	l.setLayoutCount = dsls.size();
 
 	VkPipelineLayout layout;
-	if (vkCreatePipelineLayout(device, &l, rcq::host_memory_manager, &layout) != VK_SUCCESS)
+	if (vkCreatePipelineLayout(device, &l, alloc, &layout) != VK_SUCCESS)
 		throw std::runtime_error("failed to create layout!");
 
 	return layout;
@@ -95,7 +92,8 @@ uint32_t rcq::find_memory_type(VkPhysicalDevice device, uint32_t type_filter, Vk
 	throw std::runtime_error("failed to find suitable memory type!");
 }
 
-void rcq::create_staging_buffer(const base_info& base, VkDeviceSize size, VkBuffer & buffer, VkDeviceMemory & mem)
+void rcq::create_staging_buffer(const base_info& base, VkDeviceSize size, VkBuffer & buffer, VkDeviceMemory & mem, 
+	const VkAllocationCallbacks* alloc)
 {
 	VkBufferCreateInfo sb_info = {};
 	sb_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -103,7 +101,7 @@ void rcq::create_staging_buffer(const base_info& base, VkDeviceSize size, VkBuff
 	sb_info.size = size;
 	sb_info.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
-	if (vkCreateBuffer(base.device, &sb_info, host_memory_manager, &buffer) != VK_SUCCESS)
+	if (vkCreateBuffer(base.device, &sb_info, alloc, &buffer) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to create staging buffer!");
 	}
@@ -116,7 +114,7 @@ void rcq::create_staging_buffer(const base_info& base, VkDeviceSize size, VkBuff
 	alloc_info.memoryTypeIndex = find_memory_type(base.physical_device, memory_requirements.memoryTypeBits,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	if (vkAllocateMemory(base.device, &alloc_info, host_memory_manager, &mem) != VK_SUCCESS)
+	if (vkAllocateMemory(base.device, &alloc_info, alloc, &mem) != VK_SUCCESS)
 	{
 		throw std::runtime_error("failed to allocate staging buffer memory");
 	}
@@ -156,3 +154,5 @@ void rcq::end_single_time_command_buffer(VkDevice device, VkCommandPool cp, VkQu
 	vkQueueWaitIdle(queue_for_submit);
 	vkFreeCommandBuffers(device, cp, 1, &cb);
 }
+
+

@@ -6,7 +6,7 @@ const size_t device_memory::BLOCK_SIZE[USAGE_COUNT] = { 128, 128 };
 
 device_memory* device_memory::m_instance = nullptr;
 
-device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info{}
+device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info{}, m_alloc("device_memory")
 {
 	VkPhysicalDeviceProperties props;
 	vkGetPhysicalDeviceProperties(m_base.physical_device, &props);
@@ -23,7 +23,7 @@ device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info
 	buffer_info.size = ideal_cell_size;
 	buffer_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 	VkBuffer temp_buffer;
-	if (vkCreateBuffer(m_base.device, &buffer_info, host_memory_manager, &temp_buffer) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &buffer_info, m_alloc, &temp_buffer) != VK_SUCCESS)
 		throw std::runtime_error("failed to create buffer!");
 
 	VkMemoryRequirements mr;
@@ -35,11 +35,11 @@ device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info
 	m_alloc_info[USAGE_STATIC].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, 
 		VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	vkDestroyBuffer(m_base.device, temp_buffer, host_memory_manager);
+	vkDestroyBuffer(m_base.device, temp_buffer, m_alloc);
 
 	buffer_info.size = ideal_cell_size;
 	buffer_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-	if (vkCreateBuffer(m_base.device, &buffer_info, host_memory_manager, &temp_buffer) != VK_SUCCESS)
+	if (vkCreateBuffer(m_base.device, &buffer_info, m_alloc, &temp_buffer) != VK_SUCCESS)
 		throw std::runtime_error("failed to create buffer!");
 
 	vkGetBufferMemoryRequirements(m_base.device, temp_buffer, &mr);
@@ -50,7 +50,7 @@ device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info
 	m_alloc_info[USAGE_DYNAMIC].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	vkDestroyBuffer(m_base.device, temp_buffer, host_memory_manager);
+	vkDestroyBuffer(m_base.device, temp_buffer, m_alloc);
 }
 
 
@@ -61,7 +61,7 @@ device_memory::~device_memory()
 		for (auto block : blocks)
 		{
 			if (block != VK_NULL_HANDLE)
-				vkFreeMemory(m_base.device, block, host_memory_manager);
+				vkFreeMemory(m_base.device, block, m_alloc);
 		}
 	}
 }
@@ -103,7 +103,7 @@ cell_info device_memory::alloc_buffer_memory(USAGE usage, VkBuffer buffer, void*
 	}
 
 	VkDeviceMemory new_block;
-	if (vkAllocateMemory(m_base.device, m_alloc_info + usage, host_memory_manager, &new_block) != VK_SUCCESS)
+	if (vkAllocateMemory(m_base.device, m_alloc_info + usage, m_alloc, &new_block) != VK_SUCCESS)
 		throw std::runtime_error("failed to allocate memory!");
 	uint32_t block_id = m_blocks[usage].size();
 	m_blocks[usage].push_back(new_block);
@@ -130,7 +130,7 @@ void device_memory::free_buffer(USAGE usage, const cell_info& cell)
 		std::distance(range.first, range.second) ==BLOCK_SIZE[usage] && m_available_cells[usage].size() > BLOCK_SIZE[usage])
 	{
 		m_available_cells[usage].erase(range.first, range.second);
-		vkFreeMemory(m_base.device, m_blocks[usage][cell.first], host_memory_manager); 
+		vkFreeMemory(m_base.device, m_blocks[usage][cell.first], m_alloc); 
 		m_blocks[usage][cell.first] = VK_NULL_HANDLE;
 	}
 }
