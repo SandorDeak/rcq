@@ -2401,6 +2401,7 @@ void gta5_pass::process_settings(const render_settings & settings)
 	{
 		auto data = m_res_data.get<terrain_drawer_data>();
 		data->proj_x_view = settings.proj*settings.view;
+		data->light_dir = settings.light_dir;
 	}
 
 }

@@ -151,7 +151,7 @@ void scene::build()
 		glm::uvec3(32), glm::uvec2(512));
 
 	//terrain res
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TERRAIN>(TERRAIN_TRY, "textures/terrain/t.terr", glm::uvec2(256));
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TERRAIN>(TERRAIN_TRY, "textures/terrain/t.terr", glm::uvec2(512));
 
 	//create transforms
 	transform tr;

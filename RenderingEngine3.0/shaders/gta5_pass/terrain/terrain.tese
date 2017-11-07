@@ -5,7 +5,7 @@ const vec3 water_color=vec3(0.f, 0.f, 1.f);
 const vec3 sand_color=vec3(1.f, 1.f, 0.f);
 const vec3 rock_color=vec3(0.5f, 0.5f, 0.5f);
 
-const float height_scale=0.1f;
+const float height_scale=10.f;
 
 
 layout(quads, equal_spacing) in;
@@ -13,6 +13,7 @@ layout(quads, equal_spacing) in;
 layout(set=0, binding=0) uniform terrain_data
 {
 	mat4 proj_x_view;
+	vec3 light_dir;
 } data;
 
 layout(set=1, binding=0) uniform sampler2D terrain_tex;
@@ -26,13 +27,62 @@ void main()
 	vec4 pos = mix(mid1, mid2, gl_TessCoord.y);
 
 	vec4 tex_val=texture(terrain_tex, gl_TessCoord.xy);
-	
-	float height=tex_val.x;
-	float water=tex_val.y;
-	float sand=tex_val.z;
+	vec3 n=normalize(vec3(height_scale*tex_val.x, tex_val.y, height_scale*tex_val.z));
+	float height=tex_val.w;
 	
 	pos.y=height*height_scale;
-	color_out=water*water_color+sand*sand_color+max(1.f-water-sand, 0.f)*rock_color;
+	color_out=vec3(max(dot(n, -data.light_dir), 0.f));//water*water_color+sand*sand_color+max(1.f-water-sand, 0.f)*rock_color;
 	
 	gl_Position=data.proj_x_view*pos;
 }
+
+
+////////////////////////////
+
+layout(set=0, binding=0) terrain_drawer_data
+{
+	mat4 proj_x_view;	
+	vec3 view_pos;
+	float far;
+	float tessellation_scale;
+} data;
+
+patch in vec3 control_points_in[8];
+
+layout(location=0) out color_out;
+
+
+void main()
+{
+	float u=gl_TessCoord.x;
+	float v=gl_TessCoord.y;
+	
+	vec3 mid1=gl_in[0].gl_Position.xyz*pow(u, 3.f)+control_points_in[0]*3.f*u*u*(1.f-u)+control_points_in[3]*3.f*u*(1.f-u)*(1.f-u)+gl_in[1].gl_Position.xyz*pow(1.f-u, 3.f);
+	vec3 mid1=gl_in[0].gl_Position.xyz*pow(u, 3.f)+control_points_in[0]*3.f*u*u*(1.f-u)+control_points_in[3]*3.f*u*(1.f-u)*(1.f-u)+gl_in[1].gl_Position.xyz*pow(1.f-u, 3.f);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

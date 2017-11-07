@@ -1,0 +1,125 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+const uint CLIPMAP_LEVEL_COUNT=6;
+
+layout(local_size_x=32, local_size_y=32, local_size_z=CLIPMAP_LEVEL_COUNT) in;
+
+layout(set=0, binding=0) uniform terrain_clipmaps_update_data
+{
+	uvec4 update_ranges[CLIPMAP_LEVEL_COUNT];
+	vec2 offsets[CLIPMAP_LEVEL_COUNT];
+	vec2 view_pos;
+	float persistence;
+	float base_frequency;
+	uint octave_count;
+	float global_scale //meter per pixel length value of level0
+} data;
+
+layout(set=1, binding=0) uniform writeonly image2D terrain_tex;
+layout(set=1, binding=1) uniform sampler2D noise_tex; //should be sampled with unnormalized coords
+
+float fade(float t)
+{
+	return t*t*t*(10.f + t*(6.f*t - 15.f));
+}
+
+float dfade(float t)
+{
+	return 30.f*t*t*(1.f+t*(t-2.f));
+}
+
+vec3 raw_noise(vec2 coords)
+{
+	vec2 coords0=floor(coords);
+	coords-=coords0;
+	
+	vec2 grads[4]=vec2[4]
+	(
+		texture(noise_tex, coords0).xy,
+		texture(noise_tex, coords0+vec2(1.f, 0.f)).xy,
+		texture(noise_tex, coords0+vec2(0.f, 1.f)).xy,
+		texture(noise_tex, coords0+1.f).xy
+	);
+	
+	float dots[4]=float[4]
+	(
+		dot(coords, grads[0]),
+		dot(vec2(coords.x-1.f, coords.y), grads[1]),
+		dot(vec2(coords.x, coords.y-1.f), grads[2]),
+		dot(coords-1.f, grads[3])
+	);
+	
+	float fades[4]=float[4]
+	(
+		fade(1.f-coords.x),
+		fade(coords.x),
+		fade(1.f-coords.y),
+		fade(coords.y)
+	);
+	
+	float dfades[4]=float[4]
+	(
+		dfade(1.f-coords.x),
+		dfade(coords.x),
+		dfade(1.f-coords.y),
+		dfade(coords.y)
+	);
+	
+	
+	float a=fades[0]*dots[0]+fades[1]*dots[1];
+	float b=fades[0]*dots[2]+fades[1]*dots[3];
+	
+	float height=fades[2]*a+ fades[3]*b;
+	
+	
+	a=-dfades[0]*dots[0]+fades[0]*grads[0].x+dfades[1]*dots[1]+fades[1]*grads[1].x;
+	b=-dfades[0]*dots[2]+fades[0]*grads[2].x+dfades[1]*dots[3]+fades[1]*grads[3].x;
+	float dheight_over_dx=fades[2]*a+fades[3]*b;
+	
+	a=-dfades[2]*dots[0]+fades[2]*grads[0].y+dfades[3]*dots[2]+fades[3]*grads[2].y;
+	b=-dfades[2]*dots[1]+fades[2]*grads[1].y+dfades[3]*dots[3]+fades[3]*grads[3].y;
+	float dheight_over_dy=fades[0]*a+fades[1]*b;
+	
+	return vec3(dheight_over_dx, dheight_over_dy, height);
+}
+
+vec3 noise(vec2 pos)
+{
+	vec3 sum=vec3(0.f);
+	vec3 coeff=vec3(data.base_frequency, data.base_frequency, 1.f);
+	
+	pos*=data.base_frequency;
+	
+	for(uint i=0; i<data.octave_count; ++i)
+	{
+		sum+=(coeff*raw_noise(pos));
+		pos*=2.f;
+		coeff*=vec3(data.persistence*2.f, data.persistence*2.f, data.persistence);
+	}
+	return sum;
+}
+
+
+
+bool should_update()
+{
+	uint level=gl_GlobalInvocationID.z;
+	return gl_GlobalInvocationID.x>=data.update_ranges[level][0] && gl_GlobalInvocationID.x<data.update_ranges[level][1] 
+		&& gl_GlobalInvocationID.y>=data.update_ranges[level][2] && gl_GlobalInvocationID.y<data.update_ranges[level][3];
+}
+
+void main()
+{
+	if (should_update())
+	{
+		uint level=gl_GlobalInvocationID.z;
+		vec2 normalized_coord=vec2(gl_GlobalInvocationID.xy)-data.offsets[level];
+		
+		vec2 world_pos=data.view_pos+(data.global_scale*pow(2.f, level))*normalized_coord;
+		
+		vec4 noise_val=vec4(noise(world_pos), 1.f);
+		
+		imageStore(terrain_tex, ivec2(gl_GlobalInvocationID.xy), noise_val);
+	}
+}

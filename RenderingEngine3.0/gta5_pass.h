@@ -214,6 +214,7 @@ namespace rcq
 		struct terrain_drawer_data
 		{
 			glm::mat4 proj_x_view;
+			glm::vec3 light_dir;
 		};
 
 		struct framebuffers

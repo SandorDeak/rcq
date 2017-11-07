@@ -1922,51 +1922,212 @@ void resource_manager::destroy(sky&& s)
 template<>
 terrain resource_manager::build<RESOURCE_TYPE_TERRAIN>(const std::string& filename, const glm::uvec2& terrain_image_size)
 {
+	//variables
+	uint32_t mip_level_count=8;
+	glm::uvec2 level0_image_size = {};
+	glm::uvec2 level0_tile_size = {};
+
 	terrain t;
 
-	//create staging buffer
-	VkBuffer sb;
-	VkDeviceMemory sb_mem;
-	VkDeviceSize sb_size = terrain_image_size.x*terrain_image_size.y * sizeof(glm::vec4);
-	create_staging_buffer(m_base, sb_size, sb, sb_mem, m_alloc);
+	//open files
+	t.files_count = mip_level_count;
+	t.files = new std::ifstream[mip_level_count];
+	for (uint32_t i = 0; i < mip_level_count; ++i)
+	{
+		std::string s(filename);
+		s = s + std::to_string(i) + ".terr";
+		t.files[i].open(s.c_str());
+		if (!t.files[i].is_open())
+			throw std::runtime_error("failed to open file: " + s);
+	}
 
-	//load image from file to staging buffer;
-	auto terr = read_file(filename);
-	void* data;
-	vkMapMemory(m_base.device, sb_mem, 0, terr.size(), 0, &data);
-	memcpy(data, terr.data(), terr.size());
-	vkUnmapMemory(m_base.device, sb_mem);
-	terr.clear();
+	t.tex.mip_level_count = mip_level_count;
+	t.tex.tile_count = level0_image_size / level0_tile_size;
 
-	//create texture
+	t.tex.tiles.resize(t.tex.tile_count.x);
+	for (auto& v : t.tex.tiles)
+	{
+		v.resize(t.tex.tile_count.y);
+		for (auto& t : v)
+			t.current_min_mip_level = mip_level_count;
+	}
+
+
+	//create image
 	{
 		VkImageCreateInfo image = {};
 		image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image.extent = { terrain_image_size.x, terrain_image_size.y, 1 };
-		image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 		image.arrayLayers = 1;
+		image.extent.width = level0_image_size.x;
+		image.extent.height = level0_image_size.y;
+		image.extent.depth = 1;
+		image.flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT;
+		image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 		image.imageType = VK_IMAGE_TYPE_2D;
 		image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		image.mipLevels = 1;
+		image.mipLevels = mip_level_count;
 		image.samples = VK_SAMPLE_COUNT_1_BIT;
 		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
 		image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 		if (vkCreateImage(m_base.device, &image, m_alloc, &t.tex.image) != VK_SUCCESS)
-			throw std::runtime_error("failed to create sky image!");
+			throw std::runtime_error("failed to create image");
+	}
+
+	//calculate page size and allocate dummy page and mip tail
+	{
+		uint32_t mr_count;
+		vkGetImageSparseMemoryRequirements(m_base.device, t.tex.image, &mr_count, nullptr);
+		assert(mr_count == 1);
+		VkSparseImageMemoryRequirements sparse_mr;
+		vkGetImageSparseMemoryRequirements(m_base.device, t.tex.image, &mr_count, &sparse_mr);
+
+		if (sparse_mr.formatProperties.flags & VK_SPARSE_IMAGE_FORMAT_NONSTANDARD_BLOCK_SIZE_BIT)
+			throw std::runtime_error("nonstandard block size support for sparse images!");
+		//block size should be 128x128
+
+		t.tex.page_size.x = sparse_mr.formatProperties.imageGranularity.width;
+		t.tex.page_size.y = sparse_mr.formatProperties.imageGranularity.height;
+		t.tex.page_size_in_bytes = t.tex.page_size.x*t.tex.page_size.y * sizeof(glm::vec4);
 
 		VkMemoryRequirements mr;
 		vkGetImageMemoryRequirements(m_base.device, t.tex.image, &mr);
+		t.tex.page_size_in_bytes = calc_offset(static_cast<size_t>(mr.alignment), t.tex.page_size_in_bytes);
+		t.tex.mip_tail_size = static_cast<size_t>(calc_offset(mr.alignment, sparse_mr.imageMipTailSize));
+		t.tex.mip_tail_offset = static_cast<size_t>(sparse_mr.imageMipTailOffset);
+
+		size_t mem_size = t.tex.page_size_in_bytes + t.tex.mip_tail_size;
+
 		VkMemoryAllocateInfo alloc = {};
 		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.allocationSize = mem_size;
 		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		alloc.allocationSize = mr.size;
-		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.tex.memory) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate memory!");
 
-		vkBindImageMemory(m_base.device, t.tex.image, t.tex.memory, 0);
+		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.tex.dummy_page_and_mip_tail) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate memory or dummy page and mip tail!");
 
+		//set pool
+		t.pool.set_alloc_info(m_base.device, m_alloc, alloc.memoryTypeIndex, 64, t.tex.page_size_in_bytes, false);
+	}
+
+	//bound dummy page, mip tail, and transition to shader read only optimal layout
+	{
+		//mip tail bind
+		VkSparseMemoryBind mip_tail = {};
+		mip_tail.memory = t.tex.dummy_page_and_mip_tail;
+		mip_tail.memoryOffset = t.tex.page_size_in_bytes;
+		mip_tail.resourceOffset = t.tex.mip_tail_offset;
+		mip_tail.size = t.tex.mip_tail_size;
+
+		VkSparseImageOpaqueMemoryBindInfo mip_tail_bind = {};
+		mip_tail_bind.bindCount = 1;
+		mip_tail_bind.image = t.tex.image;
+		mip_tail_bind.pBinds = &mip_tail;
+
+		size_t pages_count = 0;
+		for (const auto& s : t.tex.tile_size_in_pages)
+			pages_count += (s.x*s.y);
+		pages_count *= (t.tex.tile_count.x*t.tex.tile_count.y);
+		std::vector<VkSparseImageMemoryBind> page_binds(pages_count);
+
+		size_t page_index = 0;
+		for (uint32_t mip_level = 0; mip_level < mip_level_count; ++mip_level)
+		{
+			for (size_t i = 0; i < t.tex.tile_count.x; ++i)
+			{
+				for (size_t j = 0; j < t.tex.tile_count.y; ++j)
+				{
+					//at tile(i,j) in mip level mip_level
+					VkOffset3D tile_offset =
+					{
+						i*t.tex.tile_size_in_pages[mip_level].x*t.tex.page_size.x,
+						j*t.tex.tile_size_in_pages[mip_level].y*t.tex.page_size.y,
+						0
+					};
+
+					for (size_t u = 0; u < t.tex.tile_size_in_pages[mip_level].x; ++u)
+					{
+						for (size_t v = 0; v < t.tex.tile_size_in_pages[mip_level].y; ++v)
+						{
+							//at page (u,v)
+							VkOffset3D page_offset_in_tile =
+							{
+								u*t.tex.page_size.x,
+								v*t.tex.page_size.y,
+								0
+							};
+							page_binds[page_index].memory = t.tex.dummy_page_and_mip_tail;
+							page_binds[page_index].memoryOffset = 0;
+							page_binds[page_index].offset =
+							{
+								tile_offset.x + page_offset_in_tile.x,
+								tile_offset.y + page_offset_in_tile.y,
+								0
+							};
+							page_binds[page_index].extent =
+							{
+								t.tex.page_size.x,
+								t.tex.page_size.y,
+								1
+							};
+							page_binds[page_index].subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+							page_binds[page_index].subresource.arrayLayer = 0;
+							page_binds[page_index].subresource.mipLevel = mip_level;
+
+							++page_index;
+						}
+					}
+				}
+			}
+		}
+		VkSparseImageMemoryBindInfo image_bind;
+		image_bind.bindCount = page_binds.size();
+		image_bind.pBinds = page_binds.data();
+		image_bind.image = t.tex.image;
+
+		VkBindSparseInfo bind_info = {};
+		bind_info.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+		bind_info.imageOpaqueBindCount = 1;
+		bind_info.pImageOpaqueBinds = &mip_tail_bind;
+		bind_info.imageBindCount = 1;
+		bind_info.pImageBinds = &image_bind;
+
+		//VkSemaphoreCreateInfo s = {};
+		//s.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+		//VkSemaphore binding_finished_s;
+		//if (vkCreateSemaphore(m_base.device, &s, m_alloc, &binding_finished_s) != VK_SUCCESS)
+		//	throw std::runtime_error("failed to create semaphore!");
+
+		//bind_info.signalSemaphoreCount = 1;
+		//bind_info.pSignalSemaphores = &binding_finished_s;
+
+		vkQueueBindSparse(m_base.graphics_queue, 1, &bind_info, VK_NULL_HANDLE);
+
+		//transition to shader read only optimal
+		VkImageMemoryBarrier b = {};
+		b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		b.image = t.tex.image;
+		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		b.srcAccessMask = 0;
+		b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+
+		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+
+		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			0, 0, nullptr, 0, nullptr, 1, &b);
+
+		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
+
+		//vkDestroySemaphore(m_base.device, binding_finished_s, m_alloc);
+	}
+
+	//create image view
+	{
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -1974,132 +2135,46 @@ terrain resource_manager::build<RESOURCE_TYPE_TERRAIN>(const std::string& filena
 		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		view.subresourceRange.baseArrayLayer = 0;
-		view.subresourceRange.baseMipLevel = 0;
 		view.subresourceRange.layerCount = 1;
-		view.subresourceRange.levelCount = 1;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.levelCount = mip_level_count;
 
 		if (vkCreateImageView(m_base.device, &view, m_alloc, &t.tex.view) != VK_SUCCESS)
-			throw std::runtime_error("failed to reate sky image view!");
-
-		t.tex.sampler_type = SAMPLER_TYPE_CUBE;
+			throw std::runtime_error("failed to create image view!");
 	}
 
-	//copy and transition layout
-	{
-		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
 
-		//transition to transfer dst optimal
-		{
-			VkImageMemoryBarrier b = {};
-			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			b.image = t.tex.image;
-			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.srcAccessMask = 0;
-			b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-			b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			b.subresourceRange.baseArrayLayer = 0;
-			b.subresourceRange.baseMipLevel = 0;
-			b.subresourceRange.layerCount = 1;
-			b.subresourceRange.levelCount = 1;
-
-			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr,
-				0, nullptr, 1, &b);
-		}
-
-		//copy from staging buffer
-		{
-			VkBufferImageCopy region = {};
-			region.bufferImageHeight = 0;
-			region.bufferOffset = 0;
-			region.bufferRowLength = 0;
-			region.imageExtent = { terrain_image_size.x, terrain_image_size.y, 1 };
-			region.imageOffset = { 0,0,0 };
-			region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			region.imageSubresource.baseArrayLayer = 0;
-			region.imageSubresource.layerCount = 1;
-			region.imageSubresource.mipLevel = 0;
-
-			vkCmdCopyBufferToImage(cb, sb, t.tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-		}
-
-		//transition to shader read only optimal
-		{
-			VkImageMemoryBarrier b = {};
-			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-			b.image = t.tex.image;
-			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-			b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-			b.subresourceRange.baseArrayLayer = 0;
-			b.subresourceRange.baseMipLevel = 0;
-			b.subresourceRange.layerCount = 1;
-			b.subresourceRange.levelCount = 1;
-
-			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT,
-				0, 0, nullptr, 0, nullptr, 1, &b);
-		}
-
-		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
-	}
-
-	//destroy staging buffer
-	vkDestroyBuffer(m_base.device, sb, m_alloc);
-	vkFreeMemory(m_base.device, sb_mem, m_alloc);
-
-	//allocate descriptor set
-	{
-		VkDescriptorSetAllocateInfo alloc_info = {};
-		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		alloc_info.descriptorSetCount = 1;
-		alloc_info.pSetLayouts = &m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN];
-		pool_id p_id = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].get_available_pool_id();
-		if (p_id == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools.size())
-		{
-			extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN>();
-		}
-		alloc_info.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools[p_id];
-		if (vkAllocateDescriptorSets(m_base.device, &alloc_info, &t.ds) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate material descriptor set!");
-
-		--m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].availability[p_id];
-		t.pool_index = p_id;
-	}
-
-	//update ds
-	{
-		VkDescriptorImageInfo terrain_tex;
-		terrain_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		terrain_tex.imageView = t.tex.view;
-		terrain_tex.sampler = m_samplers[t.tex.sampler_type];
-		
-		VkWriteDescriptorSet w = {};
-		w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		w.descriptorCount = 1;
-		w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		w.dstArrayElement = 0;
-		w.dstBinding = 0;
-		w.dstSet = t.ds;
-		w.pImageInfo = &terrain_tex;
-
-		vkUpdateDescriptorSets(m_base.device, 1, &w, 0, nullptr);
-	}
+	//should create descriptor set!!!
 
 	return t;
 }
 
+
+
+
 void resource_manager::destroy(terrain&& t)
 {
-	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools[t.pool_index], 1, &t.ds);
+	/*vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools[t.pool_index], 1, &t.ds);
 	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].availability[t.pool_index];
 
 	vkDestroyImageView(m_base.device, t.tex.view, m_alloc);
 	vkDestroyImage(m_base.device, t.tex.image, m_alloc);
-	vkFreeMemory(m_base.device, t.tex.memory, m_alloc);
+	vkFreeMemory(m_base.device, t.tex.memory, m_alloc);*/
+}
+
+template<>
+terrain_tile resource_manager::build<RESOURCE_TYPE_TERRAIN_TILE>(unique_id terrain_id, uint32_t mip_level, const glm::uvec2& tile_id)
+{
+	auto& terr = std::get<RESOURCE_TYPE_TERRAIN>(m_resources_ready)[terrain_id];
+	auto& t = terr.tex.get_tile(tile_id);
+	uint32_t new_mip_level = t.current_min_mip_level - 1u;
+
+
+
+	return terrain_tile();
+}
+
+void resource_manager::destroy(terrain_tile&& tt)
+{
+
 }

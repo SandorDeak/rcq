@@ -100,7 +100,8 @@ namespace rcq
 		RESOURCE_TYPE_LIGHT_OMNI,
 		RESOURCE_TYPE_SKYBOX,
 		RESOURCE_TYPE_MESH,
-		RESOURCE_TYPE_TR,		
+		RESOURCE_TYPE_TR,
+		RESOURCE_TYPE_TERRAIN_TILE,
 		RESOURCE_TYPE_MEMORY,
 		RESOURCE_TYPE_COUNT
 	};
@@ -167,6 +168,15 @@ namespace rcq
 		BUILD_TERRAIN_INFO_ID,
 		BUILD_TERRAIN_INFO_FILENAME,
 		BUILD_TERRAIN_INFO_SIZE
+	};
+
+	typedef std::tuple<unique_id, unique_id, uint32_t, glm::uvec2> build_terrain_tile_info;
+	enum
+	{
+		BUILD_TERRAIN_TILE_INFO_ID,
+		BUILD_TERRAIN_TILE_INFO_TERRAIN_ID,
+		BUILD_TERRAIN_TILE_INFO_MIP_LEVEL,
+		BUILD_TERRAIN_TILE_INFO_TILE_ID
 	};
 
 	typedef std::tuple<unique_id, std::string, bool> build_mesh_info;
@@ -357,6 +367,81 @@ namespace rcq
 		return ret;
 	}
 
+	class device_memory_pool
+	{
+	public:
+		struct cell_info
+		{
+			size_t chunk_id;
+			size_t cell_id;
+		};
+		device_memory_pool()
+		{
+			m_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		}
+		~device_memory_pool()
+		{
+			for (auto c : m_chunks)
+				vkFreeMemory(m_device, c, m_alloc);
+		}
+
+		void set_alloc_info(VkDevice device, const VkAllocationCallbacks* alloc, uint32_t memory_type_index,
+			size_t chunk_size, size_t sizeof_cell, bool map)
+		{
+			m_device = device;
+			m_alloc = alloc;
+			m_alloc_info.memoryTypeIndex = memory_type_index;
+			m_alloc_info.allocationSize = chunk_size*sizeof_cell;
+			m_chunk_size = chunk_size;
+			m_sizeof_cell = sizeof_cell;
+			m_map = map;
+		}
+		cell_info pop_cell()
+		{
+			if (!m_cell_pool.empty())
+			{
+				auto ret = m_cell_pool.top();
+				m_cell_pool.pop();
+				return ret;
+			}
+			VkDeviceMemory chunk;
+			if (vkAllocateMemory(m_device, &m_alloc_info, m_alloc, &chunk) != VK_SUCCESS)
+				throw std::runtime_error("failed to allocate memory!");
+			for (size_t i = 1; i < m_chunk_size; ++i)
+				m_cell_pool.push({ m_chunks.size(), i });
+			m_chunks.push_back(chunk);
+			if (m_map)
+			{
+				void* raw_data;
+				vkMapMemory(m_device, chunk, 0, m_alloc_info.allocationSize, 0, &raw_data);
+				m_mapped_chunks.push_back(reinterpret_cast<char*>(raw_data));
+			}
+			return { m_chunks.size() - 1, 0 };
+		}
+		void push_cell(const cell_info& c)
+		{
+			m_cell_pool.push(c);
+		}
+		size_t calc_offset(const cell_info& c)
+		{
+			return c.cell_id*m_sizeof_cell;
+		}
+		char* get_pointer(const cell_info& c)
+		{
+			return m_mapped_chunks[c.chunk_id] + c.cell_id*m_sizeof_cell;
+		}
+	private:
+		std::vector<VkDeviceMemory> m_chunks;
+		std::vector<char*> m_mapped_chunks;
+		bool m_map;
+		VkMemoryAllocateInfo m_alloc_info;
+		size_t m_chunk_size;
+		size_t m_sizeof_cell;
+		std::stack<cell_info> m_cell_pool;
+		const VkAllocationCallbacks* m_alloc;
+		VkDevice m_device;
+	};
+
 	extern const uint32_t OMNI_SHADOW_MAP_SIZE;
 
 	struct base_create_info
@@ -436,12 +521,184 @@ namespace rcq
 		uint32_t pool_index;
 	};
 
+	struct tile
+	{
+		uint32_t current_min_mip_level;
+		std::vector<std::vector<unique_id>> used_pages;
+	};
+
+	struct virtual_texture
+	{
+		VkImage image;
+		VkImageView view;
+		VkDeviceMemory dummy_page_and_mip_tail;
+		SAMPLER_TYPE sampler_type;
+		uint32_t mip_level_count;
+		std::vector<std::vector<tile>> tiles;
+		//glm::uvec2 image_size;
+		glm::uvec2 tile_count;
+		std::vector<glm::uvec2> tile_size_in_pages;
+		glm::uvec2 page_size;
+		size_t page_size_in_bytes;
+		size_t mip_tail_size;
+		size_t mip_tail_offset;
+
+		tile& get_tile(const glm::uvec2& tile_id) { return tiles[tile_id.x][tile_id.y]; }
+	};
+
 	struct terrain
 	{
+		virtual_texture tex;
+		std::ifstream* files;
+		size_t files_count; //=mip level count
 		VkDescriptorSet ds;
-		texture tex;
-		uint32_t pool_index;
+		device_memory_pool pool;
 	};
+
+	struct terrain_tile
+	{
+		device_memory_pool::cell_info cell;
+	};
+
+	/*struct vt_page
+	{
+		size_t memory_offset;
+	};
+
+	struct request
+	{
+		glm::uvec2 tile_id;
+		uint32_t mip_level;
+	};
+
+	struct terrain
+	{
+		terrain(const std::string_view& filename, uint32_t mip_level_count)
+		{
+			files.resize(mip_level_count);
+			for (uint32_t i = 0; i < mip_level_count; ++i)
+			{
+				std::string s(filename);
+				s = s + std::to_string(i) + ".terr";
+				files[i].open(s.c_str());
+				if (!files[i].is_open())
+					throw std::runtime_error("failed to open file: " + s);
+			}
+		}
+		~terrain() 
+		{ 
+			for(auto& f : files)
+				f.close(); 
+		}
+
+		void process_requests(const std::vector<request>& requests)
+		{
+			for (auto& r : requests)
+			{
+				auto& t = tiles[r.tile_id.x][r.tile_id.y];
+				if (t.mip_level < r.mip_level)
+				{
+					for (uint32_t mip_level = t.mip_level; mip_level < r.mip_level; ++mip_level)
+					{
+						for (auto page_id : t.used_pages[mip_level])
+						{
+							page_pool.push(page_id);
+						}
+						t.used_pages[mip_level].clear();
+					}
+					t.mip_level = r.mip_level;
+				}
+				else if (t.mip_level>r.mip_level) //assuming the difference is only 1!!!
+				{
+					auto& file = files[r.mip_level];
+					glm::uvec2 page_count_per_tile = page_counts_per_tile[r.mip_level];
+					glm::uvec2 file_size = page_count_per_tile * 128u * tile_count;
+					size_t tile_offset_in_file = r.tile_id.y*page_count_per_tile.y * 128u * file_size.x +
+						r.tile_id.x*page_count_per_tile.x * 128u;
+					tile_offset_in_file *= sizeof(glm::vec4);
+					char* staging_buffer_pointer = staging_buffer_data[r.mip_level];
+					size_t read_size = 128u * sizeof(glm::vec4);
+					for (uint32_t i = 0; i < page_count_per_tile.x; ++i)
+					{
+						for (uint32_t j = 0; j < page_count_per_tile.y; ++j)
+						{
+							for (uint32_t k = 0; k < 128u; ++k)
+							{
+								size_t offset = tile_offset_in_file + j * 128u * file_size.x + i * 128u + k*file_size.x;
+								file.seekg(offset);
+								file.read(staging_buffer_pointer, read_size);
+								staging_buffer_pointer += read_size;
+							}
+						}
+					}
+
+					size_t page_count = page_count_per_tile.x*page_count_per_tile.y;
+
+					t.used_pages[r.mip_level].resize(page_count);
+					for (auto& p : t.used_pages[r.mip_level])
+					{
+						p = page_pool.top();
+						page_pool.pop();
+					}
+
+					std::vector<VkSparseImageMemoryBind> binds(page_count);
+					size_t index = 0;
+					for (uint32_t i = 0; i < page_count_per_tile.x; ++i)
+					{
+						for (uint32_t j = 0; j < page_count_per_tile.y; ++j)
+						{
+							binds[index].memory = virtual_tex.memory;
+							binds[index].memoryOffset = pages[t.used_pages[r.mip_level][index]].memory_offset;
+							binds[index].offset = { r.tile_id.x*page_count_per_tile.x * 128u, r.tile_id.y*page_count_per_tile.y * 128u, 0 };
+							binds[index].extent = { 128u, 128u, 1 };
+							binds[index].subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+							binds[index].subresource.arrayLayer = 0;
+							binds[index].subresource.mipLevel = r.mip_level;
+						}
+					}
+					VkSparseImageMemoryBindInfo image_bind_info;
+					image_bind_info.bindCount = binds.size();
+					image_bind_info.image = virtual_tex.image;
+					image_bind_info.pBinds = binds.data();
+
+
+				}
+			}
+		}
+
+		VkDescriptorSet ds;
+		texture virtual_tex;
+		VkFence bind_finished_f;
+		VkSemaphore bind_finished_s;
+
+		request* requests;
+		uint32_t* requests_count;
+		VkBuffer requests_buffer;
+		VkDeviceMemory requests_buffer_memory;
+		static const uint32_t REQUESTS_MAX_COUNT = 1024;
+
+		uint32_t* tiles_mip_level;
+		VkBuffer tiles_mip_level_buffer;
+		VkDeviceMemory tiles_mip_level_buffer_memory;
+
+		std::vector<vt_page> pages;
+		std::vector<std::vector<tile>> tiles;
+		std::vector<glm::uvec2> page_counts_per_tile;
+		glm::uvec2 tile_count;
+		std::stack<size_t> page_pool;
+		vt_page dummy_page;
+		size_t mip_tail_memory_offset;
+
+		std::vector<VkBuffer> staging_buffers;
+		std::vector<VkDeviceMemory> staging_buffer_memories;
+		std::vector<char*> staging_buffer_data;
+
+		std::vector<std::ifstream> files;
+		std::thread request_processing_thread;
+
+		
+		uint32_t pool_index;
+	};*/
 
 	struct mesh
 	{
@@ -544,7 +801,8 @@ namespace rcq
 		std::vector<build_light_omni_info>,
 		std::vector<build_skybox_info>,
 		std::vector<build_mesh_info>, 
-		std::vector<build_tr_info>, 
+		std::vector<build_tr_info>,
+		std::vector<build_terrain_tile_info>,
 		std::vector<build_memory_info>
 	> build_package;
 
@@ -556,13 +814,6 @@ namespace rcq
 		std::optional<std::future<void>> destroy_confirmation;
 	};
 
-	/*struct command_package
-	{
-		std::optional<core_package> core_p;
-		std::optional<build_package> resource_manager_build_p;
-		std::optional<destroy_package> resource_mananger_destroy_p;
-	};*/
-
 	typedef std::packaged_task<material_opaque()> build_mat_opaque_task;
 	typedef std::packaged_task<material_em()> build_mat_em_task;
 	typedef std::packaged_task<sky()> build_sky_task;
@@ -571,6 +822,7 @@ namespace rcq
 	typedef std::packaged_task<skybox()> build_skybox_task;
 	typedef std::packaged_task<mesh()> build_mesh_task;
 	typedef std::packaged_task<transform()> build_tr_task;
+	typedef std::packaged_task<terrain_tile()> build_terrain_tile_task;
 	typedef std::packaged_task<memory()> build_memory_task;
 
 	typedef std::tuple<
@@ -582,6 +834,7 @@ namespace rcq
 		std::vector<build_skybox_task>,
 		std::vector<build_mesh_task>,
 		std::vector<build_tr_task>, 
+		std::vector<build_terrain_tile_task>,
 		std::vector<build_memory_task>
 	> build_task_package;
 
@@ -598,6 +851,7 @@ namespace rcq
 	template<> struct resource_typename<RESOURCE_TYPE_LIGHT_OMNI> { typedef light_omni type; };
 	template<> struct resource_typename<RESOURCE_TYPE_SKYBOX> { typedef skybox type; };
 	template<> struct resource_typename<RESOURCE_TYPE_TERRAIN> { typedef terrain type; };
+	template<> struct resource_typename<RESOURCE_TYPE_TERRAIN_TILE> { typedef terrain_tile type; };
 
 	typedef uint32_t pool_id;
 
@@ -617,6 +871,7 @@ namespace rcq
 			return id;
 		}
 	};
+
 
 	class basic_pass;
 	class omni_light_shadow_pass;
