@@ -119,6 +119,12 @@ namespace rcq
 			GP_COUNT
 		};
 
+		enum CP
+		{
+			CP_TERRAIN_TILE_REQUEST,
+			CP_COUNT
+		};
+
 		struct pipeline
 		{
 			VkPipeline gp;
@@ -137,11 +143,10 @@ namespace rcq
 				if (vkCreateDescriptorSetLayout(device, &create_info, alloc, &dsl) != VK_SUCCESS)
 					throw std::runtime_error("failed to create dsl!");
 			}
-			void bind(VkCommandBuffer cb)
+			void bind(VkCommandBuffer cb, VkPipelineBindPoint bind_point= VK_PIPELINE_BIND_POINT_GRAPHICS)
 			{
 				vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, gp);
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pl,
-					0, 1, &ds, 0, nullptr);
+				vkCmdBindDescriptorSets(cb, bind_point, pl, 0, 1, &ds, 0, nullptr);
 			}
 		};
 
@@ -296,6 +301,7 @@ namespace rcq
 		void create_render_passes();
 		void create_dsls_and_allocate_dss();
 		void create_graphics_pipelines();
+		void create_compute_pipelines();
 		void send_memory_requirements();
 		void get_memory_and_build_resources();
 		void update_descriptor_sets();
@@ -310,6 +316,7 @@ namespace rcq
 
 		std::array<VkRenderPass, GP_COUNT> m_passes;
 		std::array<pipeline, GP_COUNT> m_gps;
+		std::array<pipeline, CP_COUNT> m_cps;
 
 		//resources
 		VkDescriptorPool m_dp;

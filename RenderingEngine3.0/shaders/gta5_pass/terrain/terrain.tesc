@@ -1,48 +1,49 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const float scale=512.f;
+const uint MAX_REQUEST_COUNT=256;
+const uint MAX_TILE_COUNT=2048;
+const uint MAX_TILE_COUNT_LOG2=11;
 
 layout(vertices=4) out;
+
+layout(set=1, binding=0) uniform terrain_buffer
+{
+	float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
+	float mip_level_count;
+	float scale; //meter per tile side length
+	float height_scale;
+	vec2 terrain_size;
+	uint request_count;
+	uint requests[MAX_REQUEST_COUNT];
+} terr;
+
+layout(location=0) in float mip_level_in[];
+
+layout(location=0) patch out float mip_level_out;
 
 void main()
 {
 	if (gl_InvocationID==0)
 	{
-		gl_TessLevelInner[0]=scale;
-		gl_TessLevelInner[1]=scale;
+		float tess_level=terr.scale*pow(2.f, terr.mip_level_count-mip_level_in[0]);
+		mip_level_out=mip_level_in[0];
+		gl_TessLevelInner[0]=tess_level;
+		gl_TessLevelInner[1]=tess_level;
 		
-		gl_TessLevelOuter[0] = scale;
-		gl_TessLevelOuter[1] = scale;
-		gl_TessLevelOuter[2] = scale;
-		gl_TessLevelOuter[3] = scale;
+		gl_TessLevelOuter[0] = tess_level;
+		gl_TessLevelOuter[1] = tess_level;
+		gl_TessLevelOuter[2] = tess_level;
+		gl_TessLevelOuter[3] = tess_level;
 	}
-	
-	gl_out[gl_InvocationID].gl_Position=gl_in[gl_InvocationID].gl_Position;
+	gl_out[gl_InvocationID].gl_Position=vec4(terr.scale*gl_in[gl_InvocationID].gl_Position.xyz, 1.f);
 }
 
 
-/////////////
 
-layout(vertices=4) out;
 
-layout(set=0, binding=0) terrain_drawer_data
-{
-	mat4 proj_x_view;	
-	vec3 view_pos;
-	float far;
-	float tessellation_scale;
-} data;
 
-layout(location=0) in normals_in[];
-
-out vec2 screen_space[];
-out float tessellation_levels[];
-out bool neg_z[];
-
-patch out vec3 control_points_out[8];
-
-void main()
+/*void main()
 {
 	vec4 pos_proj=data.proj_x_view*gl_in[gl_InvocationID].gl_Position;
 	pos_proj/=pos_proj.w;
@@ -81,4 +82,4 @@ void main()
 			gl_TessLevelInner[1]=max(tessellation_levels[0], tessellation_levels[2]);
 		}
 	}
-}
+}*/

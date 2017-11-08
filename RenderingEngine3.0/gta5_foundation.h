@@ -29,6 +29,68 @@ namespace rcq
 		GP_COUNT
 	};
 
+	enum CP
+	{
+		CP_TERRAIN_TILE_REQUEST,
+		CP_COUNT
+	};
+
+	namespace compute_pipeline_terrain_tile_request
+	{
+		struct runtime_info
+		{
+			runtime_info(VkDevice d) : device(d) 
+			{
+				create_shaders(device,
+				{
+					"shaders/gta5_pass/terrain_page_request/comp.spv"
+				},
+				{
+					VK_SHADER_STAGE_COMPUTE_BIT
+				}, &shader);
+			}
+			~runtime_info()
+			{
+				vkDestroyShaderModule(device, shader.module, nullptr);
+			}
+
+			void fill_create_info(VkComputePipelineCreateInfo& info)
+			{
+				info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+				info.basePipelineHandle = VK_NULL_HANDLE;
+				info.basePipelineIndex = -1;
+				info.stage = shader;				
+			}
+			VkDevice device;
+			VkPipelineShaderStageCreateInfo shader;
+		};
+
+		namespace dsl
+		{
+			constexpr auto create_binding()
+			{
+				VkDescriptorSetLayoutBinding binding = {};
+				binding.binding = 0;
+				binding.descriptorCount = 1;
+				binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+				binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+				return binding;
+			}
+			constexpr auto binding = create_binding();
+
+			constexpr auto create_create_info()
+			{
+				VkDescriptorSetLayoutCreateInfo dsl = {};
+				dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				dsl.bindingCount = 1;
+				dsl.pBindings = &binding;
+				return dsl;
+			}
+			constexpr auto create_info = create_create_info();
+		}
+	}//namespace compute_pipeline_terrain_tile_request
+
+
 	namespace render_pass_environment_map_gen
 	{
 		enum ATT

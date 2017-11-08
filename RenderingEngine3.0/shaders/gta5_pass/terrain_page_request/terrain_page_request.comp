@@ -1,0 +1,59 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+const uint REQUEST_TYPE_DECREASE_MIN_MIP_LEVEL=1<<31; //otherwise increase
+const uint MAX_REQUEST_COUNT=256;
+const uint MAX_TILE_COUNT=2048;
+const uint MAX_TILE_COUNT_LOG2=11;
+
+layout(set=0, binding=0) uniform terrain_tile_request_data
+{
+	vec3 view_pos;
+	float near;
+	float far;
+} data;
+
+layout(set=1, binding=0) buffer terrain_buffer
+{
+	float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
+	float mip_level_count;
+	float scale; //meter per tile side length
+	uint request_count;
+	uint requests[MAX_REQUEST_COUNT];
+	
+} terr;
+
+
+void main()
+{
+	vec2 tile_center=(vec2(gl_GlobalInvocationID.xy)+0.5)*terr.scale;
+	float d=distance(tile_center, data.view_pos.xz);
+	float current_level=terr.current_mip_levels[gl_GlobalInvocationID.x][gl_GlobalInvocationID.y];
+	float required_level=terr.mip_level_count*(d-data.near)/(data.far-data.near);
+	required_level=min(required_level, terr.mip_level_count-1);
+	
+	float tolerance=0.5f;
+	
+	if (current_level<required_level-tolerance)
+	{
+		uint request_index=atomicAdd(terr.request_count, 1);
+		if (request_index>=MAX_REQUEST_COUNT)
+		{
+			atomicAdd(terr.request_count, -1);
+			return;
+		}
+		uint request=gl_GlobalInvocationID.x | (gl_GlobalInvocationID.y<<MAX_TILE_COUNT_LOG2);
+		terr.requests[request_index]=request;
+	}
+	else if (current_level>required_level+tolerance)
+	{
+		uint request_index=atomicAdd(terr.request_count, 1);
+		if (request_index>=MAX_REQUEST_COUNT)
+		{
+			atomicAdd(terr.request_count, -1);
+			return;
+		}
+		uint request=gl_GlobalInvocationID.x | (gl_GlobalInvocationID.y<<MAX_TILE_COUNT_LOG2) | REQUEST_TYPE_DECREASE_MIN_MIP_LEVEL;
+		terr.requests[request_index]=request;
+	}
+}

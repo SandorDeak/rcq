@@ -122,6 +122,7 @@ namespace rcq
 		DESCRIPTOR_SET_LAYOUT_TYPE_LIGHT_OMNI,
 		DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX,
 		DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN,
+		DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN_COMPUTE,
 		DESCRIPTOR_SET_LAYOUT_TYPE_COUNT
 	};
 
@@ -283,6 +284,21 @@ namespace rcq
 		uint32_t padding0;
 	};
 
+	const uint32_t MAX_REQUEST_COUNT = 256;
+	const uint32_t MAX_TILE_COUNT = 2048;
+	const uint32_t MAX_TILE_COUNT_LOG2 = 11;
+
+	struct terrain_data
+	{
+		float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
+		glm::vec2 terrain_size;
+		float mip_level_count;
+		float scale; //meter per tile side length
+		float height_scale;
+		uint32_t request_count;
+		uint32_t requests[MAX_REQUEST_COUNT];
+	};
+
 
 	//engine related
 
@@ -422,9 +438,13 @@ namespace rcq
 		{
 			m_cell_pool.push(c);
 		}
-		size_t calc_offset(const cell_info& c)
+		size_t get_offset(const cell_info& c)
 		{
 			return c.cell_id*m_sizeof_cell;
+		}
+		VkDeviceMemory get_memory(const cell_info& c)
+		{
+			return m_chunks[c.chunk_id];
 		}
 		char* get_pointer(const cell_info& c)
 		{
@@ -533,8 +553,7 @@ namespace rcq
 		VkImageView view;
 		VkDeviceMemory dummy_page_and_mip_tail;
 		SAMPLER_TYPE sampler_type;
-		uint32_t mip_level_count;
-		std::vector<std::vector<tile>> tiles;
+		//std::vector<std::vector<tile>> tiles; //should contain the terrain_tile-s!!!!!!!!!!!!!
 		//glm::uvec2 image_size;
 		glm::uvec2 tile_count;
 		std::vector<glm::uvec2> tile_size_in_pages;
@@ -543,21 +562,44 @@ namespace rcq
 		size_t mip_tail_size;
 		size_t mip_tail_offset;
 
-		tile& get_tile(const glm::uvec2& tile_id) { return tiles[tile_id.x][tile_id.y]; }
+		//tile& get_tile(const glm::uvec2& tile_id) { return tiles[tile_id.x][tile_id.y]; }
 	};
+
+	struct terrain_tile_mipmaps;
 
 	struct terrain
 	{
 		virtual_texture tex;
+		glm::uvec2 tile_count;
+		std::vector<glm::uvec2> tile_size_in_pages;
+		std::vector<std::vector<terrain_tile_mipmaps>> tile_mipmaps;
 		std::ifstream* files;
-		size_t files_count; //=mip level count
+		size_t mip_level_count;
 		VkDescriptorSet ds;
-		device_memory_pool pool;
+		device_memory_pool page_pool;
+		device_memory_pool staging_buffer_memory_pool;
+		VkBuffer staging_buffer;
+
+		VkBuffer data_buffer;
+		VkDeviceMemory data_buffer_memory;
+		terrain_data* data;
+
+		terrain_tile_mipmaps& get_terrain_tile_mipmaps(const glm::uvec2& tile_id) { return tile_mipmaps[tile_id.x][tile_id.y]; }
 	};
 
 	struct terrain_tile
 	{
-		device_memory_pool::cell_info cell;
+		std::vector<std::vector<device_memory_pool::cell_info>> pages;
+		uint32_t mip_level;
+		unique_id terrain_id;
+		glm::uvec2 tile_id;
+	};
+
+	struct terrain_tile_mipmaps
+	{
+		std::vector<terrain_tile*> tiles;
+		std::vector<unique_id> tile_ids;
+		uint32_t min_mip_level;
 	};
 
 	/*struct vt_page
@@ -772,6 +814,10 @@ namespace rcq
 		VkDescriptorSet tr_ds;
 		VkDescriptorSet mat_light_ds;
 		bool destroy = false;
+
+		//for terrain
+		glm::uvec2 tiles_count;
+		terrain_data* t_data;
 
 		//for lights
 		texture shadow_map;

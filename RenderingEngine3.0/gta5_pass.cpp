@@ -230,10 +230,6 @@ void gta5_pass::create_graphics_pipelines()
 
 	//create graphics pipelines 
 	std::array<VkPipeline, GP_COUNT> gps;
-	/*for (uint32_t i = 0; i < GP_COUNT; ++i)
-	{
-		vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, &create_infos[i], m_alloc, &gps[i]);
-	}*/
 	if (vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, GP_COUNT, create_infos.data(), m_alloc, gps.data())
 		!= VK_SUCCESS)
 		throw std::runtime_error("failed to create gta5 graphics pipelines!");
@@ -241,6 +237,30 @@ void gta5_pass::create_graphics_pipelines()
 	for (uint32_t i = 0; i < GP_COUNT; ++i)
 		m_gps[i].gp = gps[i];
 }
+
+void gta5_pass::create_compute_pipelines()
+{
+	std::array<VkComputePipelineCreateInfo, CP_COUNT> create_infos = {};
+
+	compute_pipeline_terrain_tile_request::runtime_info r0(m_base.device);
+	r0.fill_create_info(create_infos[CP_TERRAIN_TILE_REQUEST]);
+
+	//create_layouts
+	m_cps[CP_TERRAIN_TILE_REQUEST].create_layout(m_base.device, 
+	{
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN_COMPUTE)
+	}, m_alloc);
+
+	//create compute pipelines
+	std::array<VkPipeline, CP_COUNT> cps;
+	if (vkCreateComputePipelines(m_base.device, VK_NULL_HANDLE, CP_COUNT, create_infos.data(), m_alloc, cps.data())
+		!= VK_SUCCESS)
+		throw std::runtime_error("failed to create gta5 graphics pipelines!");
+
+	for (uint32_t i = 0; i < CP_COUNT; ++i)
+		m_cps[i].gp = cps[i];
+}
+
 
 void gta5_pass::create_dsls_and_allocate_dss()
 {
@@ -287,29 +307,54 @@ void gta5_pass::create_dsls_and_allocate_dss()
 	m_gps[GP_TERRAIN_DRAWER].create_dsl(m_base.device,
 		render_pass_preimage_assembler::subpass_terrain_drawer::pipeline::dsl::create_info, m_alloc);
 
+	m_cps[CP_TERRAIN_TILE_REQUEST].create_dsl(m_base.device,
+		compute_pipeline_terrain_tile_request::dsl::create_info, m_alloc);
+
 	//create descriptor pool
 	if (vkCreateDescriptorPool(m_base.device, &dp::create_info,
 		m_alloc, &m_dp) != VK_SUCCESS)
 		throw std::runtime_error("failed to create descriptor pool!");
 
-	//allocate dss
-	std::array<VkDescriptorSet, GP_COUNT> dss;
-	std::array<VkDescriptorSetLayout, GP_COUNT> dsls;
+	//allocate graphics dss
+	{
+		std::array<VkDescriptorSet, GP_COUNT> dss;
+		std::array<VkDescriptorSetLayout, GP_COUNT> dsls;
 
-	VkDescriptorSetAllocateInfo alloc = {};
-	alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	alloc.descriptorPool = m_dp;
-	alloc.descriptorSetCount = GP_COUNT;
-	alloc.pSetLayouts = dsls.data();
+		VkDescriptorSetAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc.descriptorPool = m_dp;
+		alloc.descriptorSetCount = GP_COUNT;
+		alloc.pSetLayouts = dsls.data();
 
-	for (uint32_t i = 0; i < GP_COUNT; ++i)
-		dsls[i] = m_gps[i].dsl;
+		for (uint32_t i = 0; i < GP_COUNT; ++i)
+			dsls[i] = m_gps[i].dsl;
 
-	if (vkAllocateDescriptorSets(m_base.device, &alloc, dss.data()) != VK_SUCCESS)
-		throw std::runtime_error("failed to allocate descriptor sets!");
+		if (vkAllocateDescriptorSets(m_base.device, &alloc, dss.data()) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate descriptor sets!");
 
-	for (uint32_t i = 0; i < GP_COUNT; ++i)
-		m_gps[i].ds = dss[i];
+		for (uint32_t i = 0; i < GP_COUNT; ++i)
+			m_gps[i].ds = dss[i];
+	}
+	//allocate compute dss
+	{
+		std::array<VkDescriptorSet, CP_COUNT> dss;
+		std::array<VkDescriptorSetLayout, CP_COUNT> dsls;
+
+		VkDescriptorSetAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc.descriptorPool = m_dp;
+		alloc.descriptorSetCount = CP_COUNT;
+		alloc.pSetLayouts = dsls.data();
+
+		for (uint32_t i = 0; i < CP_COUNT; ++i)
+			dsls[i] = m_cps[i].dsl;
+
+		if (vkAllocateDescriptorSets(m_base.device, &alloc, dss.data()) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate descriptor sets!");
+
+		for (uint32_t i = 0; i < CP_COUNT; ++i)
+			m_cps[i].ds = dss[i];
+	}
 }
 
 void gta5_pass::send_memory_requirements()
@@ -1901,6 +1946,31 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
 	vkResetFences(m_base.device, 1, &m_render_finished_f);
 
+	//process terrain tile requests
+	if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty())
+	{
+		terrain_data* data = m_renderables[RENDERABLE_TYPE_TERRAIN][0].t_data;
+		if (data->request_count != 0)
+		{
+			auto destroy=std::make_unique<destroy_package>();
+			auto build = std::make_unique<build_package>();
+
+			for (uint32_t i = 0; i < data->request_count; ++i)
+			{
+				uint32_t request = data->requests[i];
+				glm::uvec2 tile_id=
+				{
+					request & (MAX_TILE_COUNT-1u),
+					(request>>MAX_TILE_COUNT_LOG2) & (MAX_TILE_COUNT-1u)
+				};
+				if (request >> 31) //decrease min mip level
+				{
+					std::get<RESOURCE_TYPE_TERRAIN_TILE>(*build.get()).emplace_back()
+				}
+			}
+		}
+	}
+
 	//record primary cb
 	{
 		auto cb = m_render_cb;
@@ -1934,6 +2004,16 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr,
 				1, &barrier, 0, nullptr);
+		}
+
+		//terrain tile request
+		if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty())
+		{
+			m_cps[CP_TERRAIN_TILE_REQUEST].bind(cb, VK_PIPELINE_BIND_POINT_COMPUTE);
+			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, m_cps[CP_TERRAIN_TILE_REQUEST].pl,
+				1, 1, &m_renderables[RENDERABLE_TYPE_TERRAIN][0].mat_light_ds, 0, nullptr);
+			glm::uvec2 group_count=m_renderables[RENDERABLE_TYPE_TERRAIN][0].tiles_count/32u;
+			vkCmdDispatch(cb, group_count.x, group_count.y, 1);
 		}
 
 		//environment map gen

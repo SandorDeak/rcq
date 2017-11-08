@@ -1,12 +1,9 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const vec3 water_color=vec3(0.f, 0.f, 1.f);
-const vec3 sand_color=vec3(1.f, 1.f, 0.f);
-const vec3 rock_color=vec3(0.5f, 0.5f, 0.5f);
-
-const float height_scale=10.f;
-
+const uint MAX_REQUEST_COUNT=256;
+const uint MAX_TILE_COUNT=2048;
+const uint MAX_TILE_COUNT_LOG2=11;
 
 layout(quads, equal_spacing) in;
 
@@ -16,7 +13,20 @@ layout(set=0, binding=0) uniform terrain_data
 	vec3 light_dir;
 } data;
 
-layout(set=1, binding=0) uniform sampler2D terrain_tex;
+layout(set=1, binding=0) uniform terrain_buffer
+{
+	float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
+	float mip_level_count;
+	float scale; //meter per tile side length
+	float height_scale;
+	vec2 terrain_size;
+	uint request_count;
+	uint requests[MAX_REQUEST_COUNT];	
+} terr;
+
+layout(set=1, binding=1) uniform sampler2D terrain_tex;
+
+layout(location=0) patch in float mip_level_in;
 
 layout(location=0) out vec3 color_out;
 
@@ -25,13 +35,16 @@ void main()
 	vec4 mid1 = mix(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_TessCoord.x);
 	vec4 mid2 = mix(gl_in[3].gl_Position, gl_in[2].gl_Position, gl_TessCoord.x);
 	vec4 pos = mix(mid1, mid2, gl_TessCoord.y);
-
-	vec4 tex_val=texture(terrain_tex, gl_TessCoord.xy);
-	vec3 n=normalize(vec3(height_scale*tex_val.x, tex_val.y, height_scale*tex_val.z));
-	float height=tex_val.w;
 	
-	pos.y=height*height_scale;
-	color_out=vec3(max(dot(n, -data.light_dir), 0.f));//water*water_color+sand*sand_color+max(1.f-water-sand, 0.f)*rock_color;
+	vec2 tex_coords=pos.xz/terr.terrain_size;
+	
+	/*float level=textureQueryLod(terrain_tex, tex_coords).x;
+	level=max(level, mip_level_in);	*/
+	vec3 tex_val=textureLod(terrain_tex, tex_coords, mip_level_in).xyz*terr.height_scale;
+	pos.y=tex_val.y;
+	vec3 n=normalize(vec3(tex_val.x, 1.f, tex_val.z));
+	
+	color_out=vec3(max(dot(n, -data.light_dir), 0.f));
 	
 	gl_Position=data.proj_x_view*pos;
 }
@@ -39,7 +52,7 @@ void main()
 
 ////////////////////////////
 
-layout(set=0, binding=0) terrain_drawer_data
+/*layout(set=0, binding=0) terrain_drawer_data
 {
 	mat4 proj_x_view;	
 	vec3 view_pos;
@@ -59,7 +72,7 @@ void main()
 	
 	vec3 mid1=gl_in[0].gl_Position.xyz*pow(u, 3.f)+control_points_in[0]*3.f*u*u*(1.f-u)+control_points_in[3]*3.f*u*(1.f-u)*(1.f-u)+gl_in[1].gl_Position.xyz*pow(1.f-u, 3.f);
 	vec3 mid1=gl_in[0].gl_Position.xyz*pow(u, 3.f)+control_points_in[0]*3.f*u*u*(1.f-u)+control_points_in[3]*3.f*u*(1.f-u)*(1.f-u)+gl_in[1].gl_Position.xyz*pow(1.f-u, 3.f);
-}
+}*/
 
 
 

@@ -2166,15 +2166,189 @@ template<>
 terrain_tile resource_manager::build<RESOURCE_TYPE_TERRAIN_TILE>(unique_id terrain_id, uint32_t mip_level, const glm::uvec2& tile_id)
 {
 	auto& terr = std::get<RESOURCE_TYPE_TERRAIN>(m_resources_ready)[terrain_id];
-	auto& t = terr.tex.get_tile(tile_id);
-	uint32_t new_mip_level = t.current_min_mip_level - 1u;
+	auto& terr_tile_mipmaps = terr.get_terrain_tile_mipmaps(tile_id);
+	uint32_t new_mip_level = terr_tile_mipmaps.min_mip_level - 1u;
+
+	terrain_tile tt;
+	tt.terrain_id = terrain_id;
+	tt.mip_level = new_mip_level;
+	tt.tile_id = tile_id;
+
+	auto& file = terr.files[new_mip_level];
+	glm::uvec2 tile_size_in_pages = terr.tile_size_in_pages[new_mip_level];
+	glm::uvec2 page_size = terr.tex.page_size;
+	glm::uvec2 file_size = terr.tile_count*tile_size_in_pages*page_size;
+	glm::uvec2 tile_offset2D_in_file = tile_id*tile_size_in_pages*page_size;
+	
+	tt.pages.resize(tile_size_in_pages.x);
+	std::vector<std::vector<device_memory_pool::cell_info>> staging_pages(tile_size_in_pages.x);
+	for (auto& v : tt.pages)
+		v.resize(tile_size_in_pages.y);
+	for (auto& v : staging_pages)
+		v.resize(tile_size_in_pages.y);
+
+	size_t tile_offset_in_bytes = (tile_offset2D_in_file.y*file_size.x + tile_offset2D_in_file.x) * sizeof(glm::vec4);
+	for (uint32_t i = 0; i < tile_size_in_pages.x; ++i)
+	{
+		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
+		{
+			tt.pages[i][j] = terr.page_pool.pop_cell();
+			staging_pages[i][j] = terr.staging_buffer_memory_pool.pop_cell();
+
+			char* staging_page_data = terr.staging_buffer_memory_pool.get_pointer(staging_pages[i][j]);
+
+			size_t page_offset_in_bytes = tile_offset_in_bytes
+				+ (file_size.x*page_size.y*j + i*page_size.x) * sizeof(glm::vec4);
+
+			for (uint32_t k = 0; k < page_size.y; ++k)
+			{
+				size_t offset_in_bytes = page_offset_in_bytes + k*file_size.x * sizeof(glm::vec4);
+				file.seekg(offset_in_bytes);
+				file.read(staging_page_data, page_size.x * sizeof(glm::vec4));
+				staging_page_data += (page_size.x * sizeof(glm::vec4));
+			}
+		}
+	}
+
+	//bind pages to virtual texture and staging buffer
+	size_t page_count = tile_size_in_pages.x*tile_size_in_pages.y;
+	std::vector<VkSparseImageMemoryBind> image_binds(page_count);
+	std::vector<VkSparseMemoryBind> staging_buffer_binds(page_count);
+	size_t index = 0;
+	for (uint32_t i = 0; i < tile_size_in_pages.x; ++i)
+	{
+		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
+		{
+			auto& b = image_binds[index];
+			b.extent = { page_size.x, page_size.y, 1 };
+			b.offset = { tile_offset2D_in_file.x + i*page_size.x, tile_offset2D_in_file.y + j*page_size.y, 0 };
+			b.memory = terr.page_pool.get_memory(tt.pages[i][j]);
+			b.memoryOffset = terr.page_pool.get_offset(tt.pages[i][j]);
+			b.subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresource.arrayLayer = 0;
+			b.subresource.mipLevel = new_mip_level;
+
+			auto& s = staging_buffer_binds[index];
+			s.memory = terr.staging_buffer_memory_pool.get_memory(staging_pages[i][j]);
+			s.memoryOffset = terr.staging_buffer_memory_pool.get_offset(staging_pages[i][j]);
+			s.resourceOffset = index*terr.tex.page_size_in_bytes;
+			s.size = terr.tex.page_size_in_bytes;
+			++index;
+		}
+	}
+
+	VkSparseImageMemoryBindInfo image_bind_info = {};
+	image_bind_info.bindCount = page_count;
+	image_bind_info.image = terr.tex.image;
+	image_bind_info.pBinds = image_binds.data();
+
+	VkSparseBufferMemoryBindInfo buffer_bind_info = {};
+	buffer_bind_info.bindCount = page_count;
+	buffer_bind_info.buffer = terr.staging_buffer;
+	buffer_bind_info.pBinds = staging_buffer_binds.data();
+
+	VkBindSparseInfo bind_info = {};
+	bind_info.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+	bind_info.imageBindCount = 1;
+	bind_info.pImageBinds = &image_bind_info;
+	bind_info.bufferBindCount = 1;
+	bind_info.pBufferBinds = &buffer_bind_info;
+
+	VkSemaphoreCreateInfo s = {};
+	s.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	VkSemaphore memory_bind_finished_s;
+	if (vkCreateSemaphore(m_base.device, &s, m_alloc, &memory_bind_finished_s) != VK_SUCCESS)
+		throw std::runtime_error("failed to create semaphore!");
+	bind_info.signalSemaphoreCount = 1;
+	bind_info.pSignalSemaphores = &memory_bind_finished_s;
+
+	vkQueueBindSparse(m_base.graphics_queue, 1, &bind_info, VK_NULL_HANDLE);
 
 
+	//copy from staging buffers
+	std::vector<VkBufferImageCopy> regions(page_count);
+	index = 0;
+	for (uint32_t i = 0; i < tile_size_in_pages.x; ++i)
+	{
+		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
+		{
+			auto& r = regions[index];
+			r.bufferOffset= index*terr.tex.page_size_in_bytes;
+			r.imageOffset= { tile_offset2D_in_file.x + i*page_size.x, tile_offset2D_in_file.y + j*page_size.y, 0 };
+			r.imageExtent= { page_size.x, page_size.y, 1 };
+			r.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			r.imageSubresource.baseArrayLayer = 0;
+			r.imageSubresource.layerCount = 1;
+			r.imageSubresource.mipLevel = new_mip_level;
+			
+			++index;
+		}
+	}
+	VkCommandBuffer cb;
+	VkCommandBufferAllocateInfo cb_alloc = {};
+	cb_alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	cb_alloc.commandBufferCount = 1;
+	cb_alloc.commandPool = m_cp_build;
+	cb_alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	if (vkAllocateCommandBuffers(m_base.device, &cb_alloc, &cb) != VK_SUCCESS)
+		throw std::runtime_error("failed to allocate command buffer!");
 
-	return terrain_tile();
+	VkCommandBufferBeginInfo begin = {};
+	begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	if (vkBeginCommandBuffer(cb, &begin) != VK_SUCCESS)
+		throw std::runtime_error("failed to begin command buffer!");
+	
+	vkCmdCopyBufferToImage(cb, terr.staging_buffer, terr.tex.image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, page_count, regions.data());
+
+	if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+		throw std::runtime_error("failed to end command buffer!");
+
+	VkFenceCreateInfo f = {};
+	f.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	VkFence copy_finished_f;
+	if (vkCreateFence(m_base.device, &f, m_alloc, &copy_finished_f) != VK_SUCCESS)
+		throw std::runtime_error("failed to create fence!");
+
+	VkSubmitInfo submit = {};
+	submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.commandBufferCount = 1;
+	submit.pCommandBuffers=&cb;
+	VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	submit.waitSemaphoreCount = 1;
+	submit.pWaitDstStageMask = &wait_stage;
+	submit.pWaitSemaphores = &memory_bind_finished_s;
+	if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, copy_finished_f) != VK_SUCCESS)
+		throw std::runtime_error("failed to submit command buffer!");
+	vkWaitForFences(m_base.device, 1, &copy_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+
+	vkDestroySemaphore(m_base.device, memory_bind_finished_s, m_alloc);
+	vkDestroyFence(m_base.device, copy_finished_f, m_alloc);
+	vkFreeCommandBuffers(m_base.device, m_cp_build, 1, &cb);
+
+	for (uint32_t i = 0; i < tile_size_in_pages.x; ++i)
+	{
+		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
+		{
+			terr.staging_buffer_memory_pool.push_cell(staging_pages[i][j]);
+		}
+	}
+
+	return tt;
 }
 
 void resource_manager::destroy(terrain_tile&& tt)
 {
+	auto& terr = std::get<RESOURCE_TYPE_TERRAIN>(m_resources_ready)[tt.terrain_id];
+	auto& terr_tile_mipmaps = terr.get_terrain_tile_mipmaps(tt.tile_id);
 
+	uint32_t mip_level = terr_tile_mipmaps.min_mip_level;
+
+	for (uint32_t i = 0; i < tt.pages.size(); ++i)
+	{
+		for (uint32_t j = 0; j < tt.pages[i].size(); ++j)
+		{
+			terr.page_pool.push_cell(tt.pages[i][j]);
+		}
+	}
 }
