@@ -339,6 +339,44 @@ namespace rcq
 
 		//allocator
 		allocator m_alloc;
+
+		//terrain managing
+		class terrain_manager
+		{
+		public:
+			terrain_manager(const base_info& base);
+			~terrain_manager();
+			
+			void poll_requests();
+			void poll_results();
+			void init(terrain* terr, VkCommandPool cp);
+			void destroy();
+
+		private:
+			void loop();
+			void decrease_min_mip_level(const glm::uvec2& tile_id);
+			void increase_min_mip_level(const glm::uvec2& tile_id);
+
+			const base_info& m_base;
+			allocator m_alloc;
+			terrain* m_terrain;
+
+			std::queue<uint32_t> m_request_queue;
+			std::mutex m_request_queue_mutex;
+
+			std::queue<uint32_t> m_result_queue;
+			std::mutex m_result_queue_mutex;
+			std::thread m_thread;
+			bool m_should_end;
+
+			VkCommandBuffer m_cb;
+			VkCommandPool m_cp;
+			VkSemaphore m_binding_finished_s;
+			VkFence m_copy_finished_f;
+			std::vector<std::vector<std::vector<std::vector<device_memory_pool::cell_info>>>> m_pages; //mip_level, tile_id.x // tile_id.y
+		};
+
+		terrain_manager m_terrain_manager;
 	};
 }
 

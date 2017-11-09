@@ -1,21 +1,19 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const uint MAX_REQUEST_COUNT=256;
-const uint MAX_TILE_COUNT=2048;
+const uint MAX_TILE_COUNT=128;//2048;
 const uint MAX_TILE_COUNT_LOG2=11;
 
 layout(vertices=4) out;
 
 layout(set=1, binding=0) uniform terrain_buffer
 {
-	float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
+	//float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
+	vec2 terrain_size;
 	float mip_level_count;
 	float scale; //meter per tile side length
 	float height_scale;
-	vec2 terrain_size;
-	uint request_count;
-	uint requests[MAX_REQUEST_COUNT];
+	ivec2 tile_count;
 } terr;
 
 layout(location=0) in float mip_level_in[];

@@ -3132,7 +3132,7 @@ namespace rcq
 		constexpr auto create_sizes()
 		{
 			std::array<VkDescriptorPoolSize, 3> sizes = {};
-			sizes[0].descriptorCount = 9;// ub_count;
+			sizes[0].descriptorCount = 10;// ub_count;
 			sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 			sizes[1].descriptorCount = 11;// cis_count;
 			sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -3146,7 +3146,7 @@ namespace rcq
 		{
 			VkDescriptorPoolCreateInfo pool = {};
 			pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-			pool.maxSets = GP_COUNT;
+			pool.maxSets = GP_COUNT+CP_COUNT;
 			pool.poolSizeCount = sizes.size();
 			pool.pPoolSizes = sizes.data();
 			return pool;

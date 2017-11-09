@@ -24,8 +24,8 @@ namespace rcq
 		}
 
 
-		template<size_t res_type>
-		const auto& get_res(unique_id id);
+		template<size_t res_type, RESOURCE_GET res_get = RESOURCE_GET::IMMEDIATELY>
+		decltype(auto) get_res(unique_id id);
 
 		void update_tr(const std::vector<update_tr_info>& trs);
 		VkDescriptorSetLayout get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE type) { return m_dsls[type]; }
@@ -79,7 +79,6 @@ namespace rcq
 			std::map<unique_id, skybox>,
 			std::map<unique_id, mesh>,
 			std::map<unique_id, transform>,
-			std::map<unique_id, terrain_tile>,
 			std::map<unique_id, memory>
 		> m_resources_ready;
 		std::mutex m_resources_ready_mutex;
@@ -93,7 +92,6 @@ namespace rcq
 			std::map<unique_id, std::future<skybox>>,
 			std::map<unique_id, std::future<mesh>>,
 			std::map<unique_id, std::future<transform>>,
-			std::map<unique_id, std::future<terrain_tile>>,
 			std::map<unique_id, std::future<memory>>
 		> m_resources_proc;
 		std::mutex m_resources_proc_mutex;
@@ -171,9 +169,6 @@ namespace rcq
 		typename std::enable_if_t<std::is_same_v<terrain, typename resource_typename<res_type>::type>, terrain>
 			build(const std::string& filename, const glm::uvec2& terrain_image_size);
 
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<terrain_tile, typename resource_typename<res_type>::type>, terrain_tile>
-			build(unique_id terrain_id, uint32_t mip_level, const glm::uvec2& tile_id);
 
 		texture load_texture(const std::string& filename);
 
@@ -194,7 +189,6 @@ namespace rcq
 			std::vector<skybox>,
 			std::vector<mesh>,
 			std::vector<transform>,
-			std::vector<terrain_tile>,
 			std::vector<memory>
 		> m_destroyables;
 
@@ -224,7 +218,6 @@ namespace rcq
 		void destroy(material_em&& _mat) {}
 		void destroy(sky&& _sky);
 		void destroy(terrain&& t);
-		void destroy(terrain_tile&& tt);
 
 		//allocator
 		allocator m_alloc;
@@ -232,28 +225,56 @@ namespace rcq
 	};
 
 
-	//implementations
-	template<size_t res_type>
-	const auto& resource_manager::get_res(unique_id id)
+	template<size_t res_type, RESOURCE_GET res_get=RESOURCE_GET::IMMEDIATELY>
+	decltype(auto) resource_manager::get_res(unique_id id)
 	{
 		auto& res_ready = std::get<res_type>(m_resources_ready);
 		auto& res_proc = std::get<res_type>(m_resources_proc);
 		{
 			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
 			if (auto itr = res_ready.find(id); itr != res_ready.end())
-				return itr->second;
+			{
+				if constexpr (res_get == RESOURCE_GET::IMMEDIATELY)
+				{
+					return itr->second;
+				}
+				if constexpr (res_get==RESOURCE_GET::IF_READY)
+				{
+					std::optional<typename resource_typename<res_type>::type *> ret;
+					ret.emplace(&(itr->second));
+					return ret;
+				}
+			}
 		}
 
 		std::lock_guard<std::mutex> lock_proc(m_resources_proc_mutex);
 		if (auto itp = res_proc.find(id); itp != res_proc.end())
 		{
-			auto ready_resource = itp->second.get();
-			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
-			auto[itr, insert] = res_ready.insert_or_assign(id, ready_resource);
-			if (!insert)
-				throw std::runtime_error("id conflict!");
-			res_proc.erase(itp);
-			return itr->second;
+			if constexpr (res_get == RESOURCE_GET::IMMEDIATELY)
+			{
+				auto ready_resource = itp->second.get();
+				std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
+				auto[itr, insert] = res_ready.insert_or_assign(id, ready_resource);
+				if (!insert)
+					throw std::runtime_error("id conflict!");
+				res_proc.erase(itp);
+				return itr->second;
+			}
+			if constexpr (res_get == RESOURCE_GET::IF_READY)
+			{
+				std::optional<typename resource_typename<res_type>::type *> ret;
+				if (itp->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+				{
+					auto ready_resource = itp->second.get();
+					std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
+					auto[itr, insert] = res_ready.insert_or_assign(id, ready_resource);
+					if (!insert)
+						throw std::runtime_error("id conflict!");
+					res_proc.erase(itp);
+					ret.emplace(&(itr->second));
+				}
+				return ret;
+			}
 		}
 
 		throw std::runtime_error("invalid id!");

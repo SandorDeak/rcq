@@ -8,7 +8,8 @@ using namespace rcq;
 gta5_pass* gta5_pass::m_instance = nullptr;
 
 gta5_pass::gta5_pass(const base_info& info, const renderable_container& rends) : m_base(info), m_renderables(rends), 
-	m_alloc("gta5_pass")
+	m_alloc("gta5_pass"),
+	m_terrain_manager(m_base)
 {
 	send_memory_requirements();
 	create_render_passes();
@@ -255,7 +256,7 @@ void gta5_pass::create_compute_pipelines()
 	std::array<VkPipeline, CP_COUNT> cps;
 	if (vkCreateComputePipelines(m_base.device, VK_NULL_HANDLE, CP_COUNT, create_infos.data(), m_alloc, cps.data())
 		!= VK_SUCCESS)
-		throw std::runtime_error("failed to create gta5 graphics pipelines!");
+		throw std::runtime_error("failed to create gta5 compute pipelines!");
 
 	for (uint32_t i = 0; i < CP_COUNT; ++i)
 		m_cps[i].gp = cps[i];
@@ -1943,32 +1944,19 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 		}
 	}
 
+	//check if tile requests are done
+	if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty())
+	{
+		m_terrain_manager.poll_results();
+	}
+
 	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
 	vkResetFences(m_base.device, 1, &m_render_finished_f);
 
 	//process terrain tile requests
 	if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty())
 	{
-		terrain_data* data = m_renderables[RENDERABLE_TYPE_TERRAIN][0].t_data;
-		if (data->request_count != 0)
-		{
-			auto destroy=std::make_unique<destroy_package>();
-			auto build = std::make_unique<build_package>();
-
-			for (uint32_t i = 0; i < data->request_count; ++i)
-			{
-				uint32_t request = data->requests[i];
-				glm::uvec2 tile_id=
-				{
-					request & (MAX_TILE_COUNT-1u),
-					(request>>MAX_TILE_COUNT_LOG2) & (MAX_TILE_COUNT-1u)
-				};
-				if (request >> 31) //decrease min mip level
-				{
-					std::get<RESOURCE_TYPE_TERRAIN_TILE>(*build.get()).emplace_back()
-				}
-			}
-		}
+		m_terrain_manager.poll_requests();
 	}
 
 	//record primary cb
@@ -2543,4 +2531,290 @@ std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> gta5_pass::calc_projs(const render_se
 void gta5_pass::wait_for_finish()
 {
 	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+}
+
+
+gta5_pass::terrain_manager::terrain_manager(const base_info& base):
+	m_base(base),
+	m_alloc("terrain_manager: ")
+
+{}
+
+gta5_pass::terrain_manager::~terrain_manager()
+{
+	vkDestroyFence(m_base.device, m_copy_finished_f, m_alloc);
+	vkDestroySemaphore(m_base.device, m_binding_finished_s, m_alloc);
+	vkFreeCommandBuffers(m_base.device, m_cp, 1, &m_cb);
+}
+
+void gta5_pass::terrain_manager::poll_requests()
+{
+	std::lock_guard<std::mutex> lock(m_request_queue_mutex);
+	for (uint32_t i = 0; i < m_terrain->request_data->request_count; ++i)
+	{
+		m_request_queue.push(m_terrain->request_data->requests[i]);
+	}
+}
+void gta5_pass::terrain_manager::poll_results()
+{
+	std::lock_guard<std::mutex> lock(m_result_queue_mutex);
+	while (!m_result_queue.empty())
+	{
+		uint32_t result = m_result_queue.front();
+		m_result_queue.pop();
+
+		glm::uvec2 tile_id =
+		{
+			result & (MAX_TILE_COUNT - 1u),
+			(result >> MAX_TILE_COUNT_LOG2) & (MAX_TILE_COUNT - 1u)
+		};
+
+		if (result >> 31)
+			m_terrain->current_mip_levels_data[tile_id.x + tile_id.y*m_terrain->tile_count.x] -= 1.f;
+		else
+			m_terrain->current_mip_levels_data[tile_id.x + tile_id.y*m_terrain->tile_count.x] += 1.f;
+	}
+}
+
+void gta5_pass::terrain_manager::loop()
+{
+	while (!m_should_end)
+	{
+		if (!m_request_queue.empty())
+		{
+			uint32_t request;
+			{
+				std::lock_guard<std::mutex> lock(m_request_queue_mutex);
+				request = m_request_queue.front();
+				m_request_queue.pop();
+			}
+
+			glm::uvec2 tile_id =
+			{
+				request & (MAX_TILE_COUNT - 1u),
+				(request >> MAX_TILE_COUNT_LOG2) & (MAX_TILE_COUNT - 1u)
+			};
+			if (request >> 31)
+			{
+				decrease_min_mip_level(tile_id);
+			}
+			else
+			{
+				increase_min_mip_level(tile_id);
+			}		
+			{
+				std::lock_guard<std::mutex> lock(m_result_queue_mutex);
+				m_result_queue.push(request);
+			}
+		}
+	}
+
+}
+
+void gta5_pass::terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
+{
+	uint32_t new_mip_level = static_cast<uint32_t>(m_terrain->current_mip_levels_data[tile_id.x + tile_id.y*m_terrain->tile_count.x]) - 1u;
+
+	auto& file = m_terrain->files[new_mip_level];
+	glm::uvec2 tile_size_in_pages = m_terrain->tile_size_in_pages[new_mip_level];
+	glm::uvec2 page_size = m_terrain->tex.page_size;
+	glm::uvec2 file_size = m_terrain->tile_count*tile_size_in_pages*page_size;
+	glm::uvec2 tile_offset2D_in_file = tile_id*tile_size_in_pages*page_size;
+
+	auto& pages = m_pages[new_mip_level][tile_id.x][tile_id.y];
+	pages.resize(tile_size_in_pages.x*tile_size_in_pages.y);
+
+	std::vector<device_memory_pool::cell_info> staging_pages(pages.size());
+
+	size_t tile_offset_in_bytes = (tile_offset2D_in_file.y*file_size.x + tile_offset2D_in_file.x) * sizeof(glm::vec4);
+	size_t page_index=0;
+	for (uint32_t i = 0; i < tile_size_in_pages.x; ++i)
+	{
+		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
+		{
+			pages[page_index] = m_terrain->page_pool.pop_cell();
+			staging_pages[page_index] = m_terrain->staging_buffer_memory_pool.pop_cell();
+
+			char* staging_page_data = m_terrain->staging_buffer_memory_pool.get_pointer(staging_pages[page_index]);
+
+			size_t page_offset_in_bytes = tile_offset_in_bytes
+				+ (file_size.x*page_size.y*j + i*page_size.x) * sizeof(glm::vec4);
+
+			for (uint32_t k = 0; k < page_size.y; ++k)
+			{
+				size_t offset_in_bytes = page_offset_in_bytes + k*file_size.x * sizeof(glm::vec4);
+				file.seekg(offset_in_bytes);
+				file.read(staging_page_data, page_size.x * sizeof(glm::vec4));
+				staging_page_data += (page_size.x * sizeof(glm::vec4));
+			}
+		}
+	}
+
+	//bind pages to virtual texture and staging buffer
+	size_t page_count = tile_size_in_pages.x*tile_size_in_pages.y;
+	std::vector<VkSparseImageMemoryBind> image_binds(page_count);
+	std::vector<VkSparseMemoryBind> staging_buffer_binds(page_count);
+	page_index = 0;
+	for (uint32_t i = 0; i < tile_size_in_pages.x; ++i)
+	{
+		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
+		{
+			auto& b = image_binds[page_index];
+			b.extent = { page_size.x, page_size.y, 1 };
+			b.offset = {
+				static_cast<int32_t>(tile_offset2D_in_file.x + i*page_size.x),
+				static_cast<int32_t>(tile_offset2D_in_file.y + j*page_size.y),
+				0 };
+			b.memory = m_terrain->page_pool.get_memory(pages[page_index]);
+			b.memoryOffset = m_terrain->page_pool.get_offset(pages[page_index]);
+			b.subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresource.arrayLayer = 0;
+			b.subresource.mipLevel = new_mip_level;
+
+			auto& s = staging_buffer_binds[page_index];
+			s.memory = m_terrain->staging_buffer_memory_pool.get_memory(staging_pages[page_index]);
+			s.memoryOffset = m_terrain->staging_buffer_memory_pool.get_offset(staging_pages[page_index]);
+			s.resourceOffset = page_index*m_terrain->tex.page_size_in_bytes;
+			s.size = m_terrain->tex.page_size_in_bytes;
+			++page_index;
+		}
+	}
+
+	VkSparseImageMemoryBindInfo image_bind_info = {};
+	image_bind_info.bindCount = page_count;
+	image_bind_info.image = m_terrain->tex.image;
+	image_bind_info.pBinds = image_binds.data();
+
+	VkSparseBufferMemoryBindInfo buffer_bind_info = {};
+	buffer_bind_info.bindCount = page_count;
+	buffer_bind_info.buffer = m_terrain->staging_buffer;
+	buffer_bind_info.pBinds = staging_buffer_binds.data();
+
+	VkBindSparseInfo bind_info = {};
+	bind_info.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
+	bind_info.imageBindCount = 1;
+	bind_info.pImageBinds = &image_bind_info;
+	bind_info.bufferBindCount = 1;
+	bind_info.pBufferBinds = &buffer_bind_info;
+	bind_info.signalSemaphoreCount = 1;
+	bind_info.pSignalSemaphores = &m_binding_finished_s;
+
+	vkQueueBindSparse(m_base.graphics_queue, 1, &bind_info, VK_NULL_HANDLE);
+
+	//copy from staging buffers
+	std::vector<VkBufferImageCopy> regions(page_count);
+	page_index = 0;
+	for (uint32_t i = 0; i < tile_size_in_pages.x; ++i)
+	{
+		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
+		{
+			auto& r = regions[page_index];
+			r.bufferOffset = page_index*m_terrain->tex.page_size_in_bytes;
+			r.imageOffset = {
+				static_cast<int32_t>(tile_offset2D_in_file.x + i*page_size.x),
+				static_cast<int32_t>(tile_offset2D_in_file.y + j*page_size.y),
+				0 };
+			r.imageExtent = { page_size.x, page_size.y, 1 };
+			r.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			r.imageSubresource.baseArrayLayer = 0;
+			r.imageSubresource.layerCount = 1;
+			r.imageSubresource.mipLevel = new_mip_level;
+
+			++page_index;
+		}
+	}
+
+	VkCommandBufferBeginInfo begin = {};
+	begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+	if (vkBeginCommandBuffer(m_cb, &begin) != VK_SUCCESS)
+		throw std::runtime_error("failed to begin command buffer!");
+
+	vkCmdCopyBufferToImage(m_cb, m_terrain->staging_buffer, m_terrain->tex.image, 
+		VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, page_count, regions.data());
+
+	if (vkEndCommandBuffer(m_cb) != VK_SUCCESS)
+		throw std::runtime_error("failed to end command buffer!");
+
+	VkSubmitInfo submit = {};
+	submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submit.commandBufferCount = 1;
+	submit.pCommandBuffers = &m_cb;
+	VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	submit.waitSemaphoreCount = 1;
+	submit.pWaitDstStageMask = &wait_stage;
+	submit.pWaitSemaphores = &m_binding_finished_s;
+	if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, m_copy_finished_f) != VK_SUCCESS)
+		throw std::runtime_error("failed to submit command buffer!");
+	vkWaitForFences(m_base.device, 1, &m_copy_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+
+	for (uint32_t i = 0; i < page_count; ++i)
+		m_terrain->staging_buffer_memory_pool.push_cell(staging_pages[i]);
+}
+
+
+void gta5_pass::terrain_manager::increase_min_mip_level(const glm::uvec2& tile_id)
+{
+	uint32_t destroy_mip_level = static_cast<uint32_t>(m_terrain->current_mip_levels_data[tile_id.x + tile_id.y*m_terrain->tile_count.x]) - 1u;
+	auto& pages = m_pages[destroy_mip_level][tile_id.x][tile_id.y];
+
+	for (uint32_t i = 0; i < pages.size(); ++i)
+		m_terrain->page_pool.push_cell(pages[i]);
+
+	pages.clear();
+}
+
+void gta5_pass::terrain_manager::init(terrain* terr, VkCommandPool cp)
+{
+	m_terrain = terr;
+	m_cp = cp;
+
+	VkSemaphoreCreateInfo s = {};
+	s.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+	if (vkCreateSemaphore(m_base.device, &s, m_alloc, &m_binding_finished_s) != VK_SUCCESS)
+		throw std::runtime_error("failed to create semaphore!");
+
+	VkFenceCreateInfo f = {};
+	f.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	f.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+	if (vkCreateFence(m_base.device, &f, m_alloc, &m_copy_finished_f) != VK_SUCCESS)
+		throw std::runtime_error("failed to create fence!");
+
+	VkCommandBufferAllocateInfo alloc = {};
+	alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	alloc.commandBufferCount = 1;
+	alloc.commandPool = m_cp;
+	alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+	if (vkAllocateCommandBuffers(m_base.device, &alloc, &m_cb) != VK_SUCCESS)
+		throw std::runtime_error("failed to allocate command buffer!");
+
+	m_pages.resize(m_terrain->mip_level_count);
+	for (auto& v : m_pages)
+	{
+		v.resize(m_terrain->tile_count.x);
+		for (auto& w : v)
+			w.resize(m_terrain->tile_count.y);
+	}
+
+	m_should_end = false;
+	m_thread = std::thread([this]()
+	{
+		try
+		{
+			loop();
+		}
+		catch (const std::runtime_error& e)
+		{
+			std::cout << "terrain manager thread: " << e.what() << '\n';
+		}
+	});
+}
+
+void gta5_pass::terrain_manager::destroy()
+{
+	m_should_end = true;
+	m_thread.join();
 }
