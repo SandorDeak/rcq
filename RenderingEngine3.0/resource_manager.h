@@ -25,7 +25,7 @@ namespace rcq
 
 
 		template<size_t res_type, RESOURCE_GET res_get = RESOURCE_GET::IMMEDIATELY>
-		decltype(auto) get_res(unique_id id);
+		auto& get_res(unique_id id);
 
 		void update_tr(const std::vector<update_tr_info>& trs);
 		VkDescriptorSetLayout get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE type) { return m_dsls[type]; }
@@ -167,7 +167,8 @@ namespace rcq
 
 		template<size_t res_type>
 		typename std::enable_if_t<std::is_same_v<terrain, typename resource_typename<res_type>::type>, terrain>
-			build(const std::string& filename, const glm::uvec2& terrain_image_size);
+			build(const std::string& filename, uint32_t mip_level_count, const glm::uvec2& level0_image_size, 
+				const glm::vec3& size_in_meters, const glm::uvec2& level0_tile_size);
 
 
 		texture load_texture(const std::string& filename);
@@ -226,7 +227,7 @@ namespace rcq
 
 
 	template<size_t res_type, RESOURCE_GET res_get=RESOURCE_GET::IMMEDIATELY>
-	decltype(auto) resource_manager::get_res(unique_id id)
+	auto& resource_manager::get_res(unique_id id)
 	{
 		auto& res_ready = std::get<res_type>(m_resources_ready);
 		auto& res_proc = std::get<res_type>(m_resources_proc);
@@ -287,7 +288,7 @@ namespace rcq
 		task_vector.reserve(build_infos.size());
 		//std::map<unique_id, std::future<resource_typename<res_type>::type>> m;
 		//std::remove_reference_t<decltype(std::get<res_type>(m_resources_proc))> m;
-		std::tuple_element_t<res_type, decltype(m_resources_proc)> m;
+		std::tuple_element_t<res_type, decltype(m_resources_proc)> m; 
 		using TaskType = std::remove_reference_t<decltype(*task_vector.data())>;
 
 		for (auto& build_info : build_infos)

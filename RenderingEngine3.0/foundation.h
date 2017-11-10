@@ -169,12 +169,15 @@ namespace rcq
 		BUILD_SKY_INFO_TRANSMITTANCE_SIZE
 	};
 
-	typedef std::tuple<unique_id, std::string, glm::uvec2> build_terrain_info;
+	typedef std::tuple<unique_id, std::string, uint32_t, glm::uvec2, glm::vec3, glm::uvec2> build_terrain_info;
 	enum
 	{
 		BUILD_TERRAIN_INFO_ID,
 		BUILD_TERRAIN_INFO_FILENAME,
-		BUILD_TERRAIN_INFO_SIZE
+		BUILD_TERRAIN_INFO_MIP_LEVEL_COUNT,
+		BUILD_TERRAIN_INFO_LEVEL0_IMAGE_SIZE,
+		BUILD_TERRAIN_INFO_SIZE_IN_METERS,
+		BUILD_TERRAIN_INFO_LEVEL0_TILE_SIZE
 	};
 
 	typedef std::tuple<unique_id, std::string, bool> build_mesh_info;
@@ -282,24 +285,22 @@ namespace rcq
 	};
 
 	const uint32_t MAX_REQUEST_COUNT = 256;
-	const uint32_t MAX_TILE_COUNT = 2048;
-	const uint32_t MAX_TILE_COUNT_LOG2 = 11;
+	const uint32_t MAX_TILE_COUNT = 128;
+	const uint32_t MAX_TILE_COUNT_LOG2 = 7;
 
 	struct terrain_data
 	{
-		//float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
-		glm::vec2 terrain_size;
-		float mip_level_count;
-		float scale; //meter per tile side length
-		float height_scale;
+		glm::vec2 terrain_size_in_meters;
+		glm::vec2 meter_per_tile_size_length;
 		glm::ivec2 tile_count;
+		float mip_level_count;
+		float height_scale;
 	};
 
 	struct terrain_request_data
 	{
-		//float requested_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
+		glm::vec2 tile_size_in_meter;
 		float mip_level_count;
-		float scale; //meter per tile side length
 		uint32_t request_count;
 		uint32_t requests[MAX_REQUEST_COUNT];
 	};
@@ -401,11 +402,6 @@ namespace rcq
 		{
 			m_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 		}
-		~device_memory_pool()
-		{
-			for (auto c : m_chunks)
-				vkFreeMemory(m_device, c, m_alloc);
-		}
 
 		void set_alloc_info(VkDevice device, const VkAllocationCallbacks* alloc, uint32_t memory_type_index,
 			size_t chunk_size, size_t sizeof_cell, bool map)
@@ -418,6 +414,13 @@ namespace rcq
 			m_sizeof_cell = sizeof_cell;
 			m_map = map;
 		}
+
+		void free()
+		{
+			for (auto c : m_chunks)
+				vkFreeMemory(m_device, c, m_alloc);
+		}
+
 		cell_info pop_cell()
 		{
 			if (!m_cell_pool.empty())
@@ -486,10 +489,11 @@ namespace rcq
 	{
 		int graphics_family = -1;
 		int present_family = -1;
+		int compute_family = -1;
 
 		bool complete()
 		{
-			return graphics_family >= 0 && present_family >= 0;
+			return graphics_family >= 0 && present_family >= 0 && compute_family>=0;
 		}
 	};
 
@@ -511,6 +515,7 @@ namespace rcq
 		queue_family_indices queue_families;
 		VkQueue graphics_queue;
 		VkQueue present_queue;
+		VkQueue compute_queue;
 		GLFWwindow* window;
 		VkFormatProperties format_properties;
 	};
@@ -556,8 +561,6 @@ namespace rcq
 		VkDeviceMemory dummy_page_and_mip_tail;
 		//std::vector<std::vector<tile>> tiles; //should contain the terrain_tile-s!!!!!!!!!!!!!
 		//glm::uvec2 image_size;
-		glm::uvec2 tile_count;
-		std::vector<glm::uvec2> tile_size_in_pages;
 		glm::uvec2 page_size;
 		size_t page_size_in_bytes;
 		size_t mip_tail_size;
@@ -576,8 +579,10 @@ namespace rcq
 		VkDescriptorSet ds;
 		VkDescriptorSet request_ds;
 		device_memory_pool page_pool;
-		device_memory_pool staging_buffer_memory_pool;
+
 		VkBuffer staging_buffer;
+		VkDeviceMemory staging_buffer_memory;
+		char* staging_buffer_data;
 
 		VkBuffer data_buffer;
 		VkDeviceMemory data_buffer_memory;
@@ -676,6 +681,7 @@ namespace rcq
 
 		//for terrain
 		glm::uvec2 tiles_count;
+		VkDescriptorSet request_ds;
 
 		//for lights
 		texture shadow_map;

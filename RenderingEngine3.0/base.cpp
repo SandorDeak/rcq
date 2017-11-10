@@ -238,7 +238,7 @@ bool base::device_is_suitable(VkPhysicalDevice device)
 
 	//should write an algorithm for feature compare
 
-	return device_features.samplerAnisotropy;
+	return true; //device_features.samplerAnisotropy;
 }
 
 swap_chain_support_details base::query_swap_chain_support_details(VkPhysicalDevice device)
@@ -283,14 +283,18 @@ queue_family_indices base::find_queue_family_indices(VkPhysicalDevice device)
 			continue;
 		}
 
-		if (family.queueFlags | VK_QUEUE_GRAPHICS_BIT)
+		if ((family.queueFlags & VK_QUEUE_GRAPHICS_BIT) && (family.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT))
 			indices.graphics_family = i;
+
+		if (family.queueFlags & VK_QUEUE_COMPUTE_BIT)
+			indices.compute_family = i;
 
 		VkBool32 present_support = false;
 		vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &present_support);
 
 		if (present_support)
 			indices.present_family = i;
+
 		if (indices.complete())
 			break;
 
@@ -330,7 +334,8 @@ bool base::check_device_extension_support(VkPhysicalDevice device)
 void base::create_logical_device()
 {
 	std::vector<VkDeviceQueueCreateInfo> queue_create_infos;
-	std::set<int> unique_queue_families = { m_queue_family_indices.graphics_family, m_queue_family_indices.present_family };
+	std::set<int> unique_queue_families = { m_queue_family_indices.graphics_family, m_queue_family_indices.present_family,
+		m_queue_family_indices.compute_family};
 
 	float queue_priority = 1.0f;
 
@@ -369,6 +374,7 @@ void base::create_logical_device()
 
 	vkGetDeviceQueue(m_device, m_queue_family_indices.graphics_family, 0, &m_graphics_queue);
 	vkGetDeviceQueue(m_device, m_queue_family_indices.present_family, 0, &m_present_queue);
+	vkGetDeviceQueue(m_device, m_queue_family_indices.compute_family, 0, &m_compute_queue);
 }
 
 void base::create_swap_chain()
@@ -503,6 +509,7 @@ base_info base::get_info()
 	info.graphics_queue = m_graphics_queue;
 	info.physical_device = m_physical_device;
 	info.present_queue = m_present_queue;
+	info.compute_queue = m_compute_queue;
 	info.queue_families = m_queue_family_indices;
 	info.swap_chain = m_swap_chain;
 	info.swap_chain_image_extent = m_swap_chain_extent;

@@ -8,12 +8,11 @@ layout(vertices=4) out;
 
 layout(set=1, binding=0) uniform terrain_buffer
 {
-	//float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
 	vec2 terrain_size;
-	float mip_level_count;
-	float scale; //meter per tile side length
-	float height_scale;
+	vec2 meter_per_tile_size_length;
 	ivec2 tile_count;
+	float mip_level_count;
+	float height_scale;
 } terr;
 
 layout(location=0) in float mip_level_in[];
@@ -24,7 +23,7 @@ void main()
 {
 	if (gl_InvocationID==0)
 	{
-		float tess_level=terr.scale*pow(2.f, terr.mip_level_count-mip_level_in[0]);
+		float tess_level=max(terr.meter_per_tile_size_length.x, terr.meter_per_tile_size_length.y)*pow(2.f, terr.mip_level_count-mip_level_in[0]);
 		mip_level_out=mip_level_in[0];
 		gl_TessLevelInner[0]=tess_level;
 		gl_TessLevelInner[1]=tess_level;
@@ -34,7 +33,10 @@ void main()
 		gl_TessLevelOuter[2] = tess_level;
 		gl_TessLevelOuter[3] = tess_level;
 	}
-	gl_out[gl_InvocationID].gl_Position=vec4(terr.scale*gl_in[gl_InvocationID].gl_Position.xyz, 1.f);
+	/*gl_out[gl_InvocationID].gl_Position=vec4(terr.meter_per_tile_size_length.x*gl_in[gl_InvocationID].gl_Position.x, 0.f, 
+		terr.meter_per_tile_size_length.y*gl_in[gl_InvocationID].gl_Position.z, 1.f);*/
+		
+	gl_out[gl_InvocationID].gl_Position=vec4(10.f*gl_in[gl_InvocationID].gl_Position.xyz, 1.f);
 }
 
 

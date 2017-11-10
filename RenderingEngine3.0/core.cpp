@@ -81,6 +81,8 @@ void rcq::core::loop()
 							if (r.id == id)
 							{
 								r.destroy = true;
+								if (i == RENDERABLE_TYPE_TERRAIN)
+									gta5_pass::instance()->delete_terrain();
 								found = true;
 								break;
 							}
@@ -101,6 +103,7 @@ void rcq::core::loop()
 			{
 				if (!package->build_renderable[i].empty())
 					record_mask.set(i);
+
 			}
 
 			/*//update tr
@@ -142,7 +145,7 @@ void rcq::core::build_renderables_impl(const std::vector<build_renderable_info>&
 		renderable r;
 		r.id = std::get<BUILD_RENDERABLE_INFO_RENDERABLE_ID>(info);
 		r.destroy = false;
-		auto res = resource_manager::instance()->get_res<rend_type>(
+		auto& res = resource_manager::instance()->get_res<rend_type>(
 			std::get<BUILD_RENDERABLE_INFO_MAT_OR_LIGHT_ID>(info));
 
 		r.mat_light_ds = res.ds;
@@ -159,6 +162,13 @@ void rcq::core::build_renderables_impl(const std::vector<build_renderable_info>&
 				std::get<BUILD_RENDERABLE_INFO_MESH_ID>(info));
 			r.tr_ds = resource_manager::instance()->get_res<RESOURCE_TYPE_TR>(
 				std::get<BUILD_RENDERABLE_INFO_TR_ID>(info)).ds;
+		}
+
+		if constexpr (rend_type == RENDERABLE_TYPE_TERRAIN)
+		{
+			r.tiles_count = res.tile_count;
+			r.request_ds = res.request_ds;
+			gta5_pass::instance()->set_terrain(&res);
 		}
 
 		m_renderables[rend_type].push_back(r);

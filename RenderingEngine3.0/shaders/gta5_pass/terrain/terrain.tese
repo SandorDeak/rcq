@@ -14,12 +14,11 @@ layout(set=0, binding=0) uniform terrain_data
 
 layout(set=1, binding=0) uniform terrain_buffer
 {
-	//float current_mip_levels[MAX_TILE_COUNT][MAX_TILE_COUNT];
-	vec2 terrain_size;
-	float mip_level_count;
-	float scale; //meter per tile side length
-	float height_scale;
+	vec2 terrain_size_in_meters;
+	vec2 meter_per_tile_size_length;
 	ivec2 tile_count;
+	float mip_level_count;
+	float height_scale;
 } terr;
 
 layout(set=1, binding=1) uniform sampler2D terrain_tex;
@@ -34,15 +33,16 @@ void main()
 	vec4 mid2 = mix(gl_in[3].gl_Position, gl_in[2].gl_Position, gl_TessCoord.x);
 	vec4 pos = mix(mid1, mid2, gl_TessCoord.y);
 	
-	vec2 tex_coords=pos.xz/terr.terrain_size;
+	vec2 tex_coords=pos.xz/terr.terrain_size_in_meters;
 	
 	/*float level=textureQueryLod(terrain_tex, tex_coords).x;
 	level=max(level, mip_level_in);	*/
 	vec3 tex_val=textureLod(terrain_tex, tex_coords, mip_level_in).xyz*terr.height_scale;
-	pos.y=tex_val.y;
+	//pos.y=tex_val.y;
 	vec3 n=normalize(vec3(tex_val.x, 1.f, tex_val.z));
 	
-	color_out=vec3(max(dot(n, -data.light_dir), 0.f));
+	//color_out=vec3(max(dot(n, -data.light_dir), 0.f));
+	color_out=vec3(pos.y);
 	
 	gl_Position=data.proj_x_view*pos;
 }

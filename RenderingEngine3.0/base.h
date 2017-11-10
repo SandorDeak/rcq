@@ -72,6 +72,7 @@ namespace rcq
 
 		queue_family_indices m_queue_family_indices;
 		VkQueue m_graphics_queue;
+		VkQueue m_compute_queue;
 		VkQueue m_present_queue;
 
 		VkSwapchainKHR m_swap_chain;

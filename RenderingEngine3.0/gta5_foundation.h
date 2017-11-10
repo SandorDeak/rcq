@@ -39,7 +39,7 @@ namespace rcq
 	{
 		struct runtime_info
 		{
-			runtime_info(VkDevice d) : device(d) 
+			runtime_info(VkDevice d) : device(d), shader{}
 			{
 				create_shaders(device,
 				{
@@ -2011,7 +2011,8 @@ namespace rcq
 						binding.binding = 0;
 						binding.descriptorCount = 1;
 						binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-						binding.stageFlags = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+						binding.stageFlags = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |VK_SHADER_STAGE_VERTEX_BIT |
+							VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
 						return binding;
 					}
 					constexpr auto binding = create_binding();

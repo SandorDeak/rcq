@@ -17,6 +17,9 @@ namespace rcq
 
 		void render(const render_settings& settings, std::bitset<RENDERABLE_TYPE_COUNT> record_mask);
 		void wait_for_finish();
+		void set_terrain(terrain* t);
+		void delete_terrain();
+
 
 	private:
 		enum RES_DATA
@@ -30,6 +33,7 @@ namespace rcq
 			RES_DATA_SKY_DRAWER_DATA,
 			RES_DATA_SUN_DRAWER_DATA,
 			RES_DATA_TERRAIN_DRAWER,
+			RES_DATA_TERRAIN_TILE_REQUEST,
 			RES_DATA_COUNT
 		};
 		enum RES_IMAGE
@@ -145,7 +149,7 @@ namespace rcq
 			}
 			void bind(VkCommandBuffer cb, VkPipelineBindPoint bind_point= VK_PIPELINE_BIND_POINT_GRAPHICS)
 			{
-				vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, gp);
+				vkCmdBindPipeline(cb, bind_point, gp);
 				vkCmdBindDescriptorSets(cb, bind_point, pl, 0, 1, &ds, 0, nullptr);
 			}
 		};
@@ -222,6 +226,13 @@ namespace rcq
 			glm::vec3 light_dir;
 		};
 
+		struct terrain_tile_request_data
+		{
+			glm::vec3 view_pos;
+			float near;
+			float far;
+		};
+
 		struct framebuffers
 		{
 			VkFramebuffer environment_map_gen;
@@ -244,7 +255,8 @@ namespace rcq
 				image_assembler_data*,
 				sky_drawer_data*,
 				sun_drawer_data*,
-				terrain_drawer_data*
+				terrain_drawer_data*,
+				terrain_tile_request_data*
 			> data;
 
 			VkBuffer buffer;
@@ -264,7 +276,8 @@ namespace rcq
 					sizeof(image_assembler_data),
 					sizeof(sky_drawer_data),
 					sizeof(sun_drawer_data),
-					sizeof(terrain_drawer_data) };
+					sizeof(terrain_drawer_data),
+					sizeof(terrain_tile_request_data) };
 			}
 
 			void calcoffset_and_size(size_t alignment)
@@ -327,15 +340,19 @@ namespace rcq
 		//render
 		const renderable_container& m_renderables;
 
-		VkCommandPool m_cp;
+		VkCommandPool m_graphics_cp;
+		VkCommandPool m_present_cp;
+		VkCommandPool m_compute_cp;
 		framebuffers m_fbs;
 		VkCommandBuffer m_render_cb;
+		VkCommandBuffer m_terrain_request_cb;
 		std::vector<VkCommandBuffer> m_present_cbs;
 		std::array<VkCommandBuffer, SECONDARY_CB_COUNT> m_secondary_cbs;
 		VkSemaphore m_image_available_s;
 		VkSemaphore m_render_finished_s;
 		std::vector<VkSemaphore> m_present_ready_ss;
 		VkFence m_render_finished_f;
+		VkFence m_terrain_tile_request_finished_f;
 
 		//allocator
 		allocator m_alloc;
