@@ -18,7 +18,7 @@ int main()
 		{
 			t.stop();
 			float dt = t.get();
-			std::cout << dt << std::endl; 
+			//std::cout << dt << std::endl; 
 			t.start();
 			glfwPollEvents();
 			sc->update(dt);

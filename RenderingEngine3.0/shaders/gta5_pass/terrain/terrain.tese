@@ -9,7 +9,7 @@ layout(quads, equal_spacing) in;
 layout(set=0, binding=0) uniform terrain_data
 {
 	mat4 proj_x_view;
-	vec3 light_dir;
+	vec3 view_pos;
 } data;
 
 layout(set=1, binding=0) uniform terrain_buffer
@@ -23,54 +23,82 @@ layout(set=1, binding=0) uniform terrain_buffer
 
 layout(set=1, binding=1) uniform sampler2D terrain_tex;
 
-layout(location=0) patch in float mip_level_in;
+layout(location=0) patch in float mip_level_in[5];
 
-layout(location=0) out vec3 color_out;
+layout(location=0) out vec4 tex_mask_out;
+layout(location=1) out vec2 tex_coords_out;
+layout(location=2) out vec3 pos_out;
+layout(location=3) out vec3 view_out;
+layout(location=4) out mat3 TBN_out;
 
 void main()
 {
 	vec4 mid1 = mix(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_TessCoord.x);
-	vec4 mid2 = mix(gl_in[3].gl_Position, gl_in[2].gl_Position, gl_TessCoord.x);
+	vec4 mid2 = mix(gl_in[2].gl_Position, gl_in[3].gl_Position, gl_TessCoord.x);
 	vec4 pos = mix(mid1, mid2, gl_TessCoord.y);
 	
 	vec2 tex_coords=pos.xz/terr.terrain_size_in_meters;
 	
-	/*float level=textureQueryLod(terrain_tex, tex_coords).x;
-	level=max(level, mip_level_in);	*/
-	vec3 tex_val=textureLod(terrain_tex, tex_coords, mip_level_in).xyz*terr.height_scale;
-	//pos.y=tex_val.y;
-	vec3 n=normalize(vec3(tex_val.x, 1.f, tex_val.z));
+	float mip_level=mip_level_in[4];
+	if (gl_TessCoord.x<0.05f)
+		mip_level=max(mip_level, mip_level_in[0]);
+	if (gl_TessCoord.x>0.95f)
+		mip_level=max(mip_level, mip_level_in[2]);
+	if (gl_TessCoord.y<0.05f)
+		mip_level=max(mip_level, mip_level_in[1]);
+	if (gl_TessCoord.y>0.95f)
+		mip_level=max(mip_level, mip_level_in[3]);	
 	
+	vec4 tex_val=textureLod(terrain_tex, tex_coords, mip_level);
+	/*ivec2 tex_size=textureSize(terrain_tex, int(mip_level));
+	vec4 tex_val=texelFetch(terrain_tex, ivec2(tex_coords*float(tex_size)), int(mip_level));*/
+	float height=tex_val.z*terr.height_scale;
+	vec2 grad=terr.height_scale*tex_val.xy/terr.terrain_size_in_meters;
+	pos.y=height;
+	
+	/*vec3 c=vec3(0.f);
+	if (mip_level==0.f)
+		c.x=1.f;
+	if (mip_level==1.f)
+		c.y=1.f;
+	if (mip_level==2.f)
+		c.z=1.f;
+	if (mip_level==3.f)
+		c.xy=vec2(1.f);*/
+		
 	//color_out=vec3(max(dot(n, -data.light_dir), 0.f));
-	color_out=vec3(pos.y);
 	
+	uint mask=floatBitsToUint(tex_val.w);	
+	tex_mask_out=vec4(
+		float(mask & 255),
+		float((mask>>8) & 255),
+		float((mask>>16) & 255),
+		float((mask>>24) & 255)
+	)/255.f;
+	
+	/*tex_mask_out=vec4(
+		float((mask>>24) & 255),
+		float((mask>>16) & 255),
+		float((mask>>8) & 255),
+		float(mask & 255)
+	)/255.f;*/
+	
+	//tex_mask_out=vec4(0.f, 0.f, 0.f, 1.f);
+	
+	
+	tex_coords_out=pos.xz;
+	
+	vec3 tangent=normalize(vec3(1.f, grad.x, 0.f));
+	vec3 normal=normalize(vec3(-grad.x, 1.f, -grad.y));
+	vec3 bitangent=cross(tangent, normal);
+	
+	TBN_out=mat3(tangent, bitangent, normal);
+	
+	pos_out=pos.xyz;
+	view_out=normalize(pos.xyz-data.view_pos);
+		
 	gl_Position=data.proj_x_view*pos;
 }
-
-
-////////////////////////////
-
-/*layout(set=0, binding=0) terrain_drawer_data
-{
-	mat4 proj_x_view;	
-	vec3 view_pos;
-	float far;
-	float tessellation_scale;
-} data;
-
-patch in vec3 control_points_in[8];
-
-layout(location=0) out color_out;
-
-
-void main()
-{
-	float u=gl_TessCoord.x;
-	float v=gl_TessCoord.y;
-	
-	vec3 mid1=gl_in[0].gl_Position.xyz*pow(u, 3.f)+control_points_in[0]*3.f*u*u*(1.f-u)+control_points_in[3]*3.f*u*(1.f-u)*(1.f-u)+gl_in[1].gl_Position.xyz*pow(1.f-u, 3.f);
-	vec3 mid1=gl_in[0].gl_Position.xyz*pow(u, 3.f)+control_points_in[0]*3.f*u*u*(1.f-u)+control_points_in[3]*3.f*u*(1.f-u)*(1.f-u)+gl_in[1].gl_Position.xyz*pow(1.f-u, 3.f);
-}*/
 
 
 

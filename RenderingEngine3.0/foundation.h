@@ -682,6 +682,8 @@ namespace rcq
 		//for terrain
 		glm::uvec2 tiles_count;
 		VkDescriptorSet request_ds;
+		std::vector<VkDescriptorSet> mat_dss;
+
 
 		//for lights
 		texture shadow_map;

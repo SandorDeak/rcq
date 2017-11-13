@@ -150,7 +150,7 @@ void gta5_pass::create_graphics_pipelines()
 	r2.fill_create_info(create_infos[GP_DIR_SHADOW_MAP_GEN]);
 	create_infos[GP_DIR_SHADOW_MAP_GEN].renderPass = m_passes[RENDER_PASS_DIR_SHADOW_MAP_GEN];
 
-	render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline::mat_opaque::runtime_info r3(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline_regular_mesh_drawer::runtime_info r3(m_base.device, m_base.swap_chain_image_extent);
 	r3.fill_create_info(create_infos[GP_GBUFFER_GEN]);
 	create_infos[GP_GBUFFER_GEN].renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
@@ -186,9 +186,9 @@ void gta5_pass::create_graphics_pipelines()
 	r11.fill_create_info(create_infos[GP_SUN_DRAWER]);
 	create_infos[GP_SUN_DRAWER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
 	
-	render_pass_preimage_assembler::subpass_terrain_drawer::pipeline::runtime_info r12(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline_terrain_drawer::runtime_info r12(m_base.device, m_base.swap_chain_image_extent);
 	r12.fill_create_info(create_infos[GP_TERRAIN_DRAWER]);
-	create_infos[GP_TERRAIN_DRAWER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
+	create_infos[GP_TERRAIN_DRAWER].renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
 	//create layouts
 	m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].create_layout(m_base.device, 
@@ -232,7 +232,11 @@ void gta5_pass::create_graphics_pipelines()
 	}, m_alloc);
 	m_gps[GP_TERRAIN_DRAWER].create_layout(m_base.device,
 	{
-		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN)
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN),
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE),
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE),
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE),
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE)
 	}, m_alloc);
 	m_gps[GP_POSTPROCESSING].create_layout(m_base.device, {}, m_alloc);
 
@@ -292,7 +296,7 @@ void gta5_pass::create_dsls_and_allocate_dss()
 
 
 	m_gps[GP_GBUFFER_GEN].create_dsl(m_base.device,
-		render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline::mat_opaque::dsl::create_info, m_alloc);
+		render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline_regular_mesh_drawer::dsl::create_info, m_alloc);
 
 	m_gps[GP_SS_DIR_SHADOW_MAP_GEN].create_dsl(m_base.device,
 		render_pass_gbuffer_assembler::subpass_ss_dir_shadow_map_gen::pipeline::dsl::create_info, m_alloc);
@@ -320,7 +324,7 @@ void gta5_pass::create_dsls_and_allocate_dss()
 		render_pass_preimage_assembler::subpass_sun_drawer::pipeline::dsl::create_info, m_alloc);
 
 	m_gps[GP_TERRAIN_DRAWER].create_dsl(m_base.device,
-		render_pass_preimage_assembler::subpass_terrain_drawer::pipeline::dsl::create_info, m_alloc);
+		render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline_terrain_drawer::dsl::create_info, m_alloc);
 
 	m_cps[CP_TERRAIN_TILE_REQUEST].create_dsl(m_base.device,
 		compute_pipeline_terrain_tile_request::dsl::create_info, m_alloc);
@@ -2165,6 +2169,11 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			if(!m_renderables[RENDERABLE_TYPE_MAT_OPAQUE].empty())
 				vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_MAT_OPAQUE]);
 
+			if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty())
+			{
+				vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_TERRAIN_DRAWER]);
+			}
+
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
 			m_gps[GP_SS_DIR_SHADOW_MAP_GEN].bind(cb);
 			vkCmdDraw(cb, 4, 1, 0, 0);
@@ -2329,16 +2338,6 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 				vkCmdDraw(cb, 1, 1, 0, 0);
 			}
 			vkCmdDraw(cb, 4, 1, 0, 0);
-
-			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
-			m_gps[GP_TERRAIN_DRAWER].bind(cb);
-			if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty())
-			{
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_TERRAIN_DRAWER].pl,
-					1, 1, &m_renderables[RENDERABLE_TYPE_TERRAIN][0].mat_light_ds, 0, nullptr);
-				vkCmdDraw(cb, 4* m_renderables[RENDERABLE_TYPE_TERRAIN][0].tiles_count.x*
-					m_renderables[RENDERABLE_TYPE_TERRAIN][0].tiles_count.y, 1, 0, 0);
-			}
 
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
 			m_gps[GP_SKY_DRAWER].bind(cb);
@@ -2525,7 +2524,7 @@ void gta5_pass::process_settings(const render_settings & settings)
 	{
 		auto data = m_res_data.get<terrain_drawer_data>();
 		data->proj_x_view = settings.proj*settings.view;
-		data->light_dir = settings.light_dir;
+		data->view_pos = settings.pos;
 	}
 
 	//terrain tile request data
@@ -2596,23 +2595,57 @@ void gta5_pass::set_terrain(terrain* t)
 {
 	m_terrain_manager.init(t, m_graphics_cp);
 
-	auto cb = m_terrain_request_cb;
-	VkCommandBufferBeginInfo begin = {};
-	begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-	begin.flags = 0;
+	//record terrain request cb
+	{
+		auto cb = m_terrain_request_cb;
+		VkCommandBufferBeginInfo begin = {};
+		begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		begin.flags = 0;
 
-	if (vkBeginCommandBuffer(cb, &begin) != VK_SUCCESS)
-		throw std::runtime_error("failed to begin command buffer!");
+		if (vkBeginCommandBuffer(cb, &begin) != VK_SUCCESS)
+			throw std::runtime_error("failed to begin command buffer!");
 
-	m_cps[CP_TERRAIN_TILE_REQUEST].bind(cb, VK_PIPELINE_BIND_POINT_COMPUTE);
-	vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, m_cps[CP_TERRAIN_TILE_REQUEST].pl,
-		1, 1, &t->request_ds, 0, nullptr);
-	
-	glm::uvec2 group_count = t->tile_count;
-	vkCmdDispatch(cb, group_count.x, group_count.y, 1);
+		m_cps[CP_TERRAIN_TILE_REQUEST].bind(cb, VK_PIPELINE_BIND_POINT_COMPUTE);
+		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, m_cps[CP_TERRAIN_TILE_REQUEST].pl,
+			1, 1, &t->request_ds, 0, nullptr);
 
-	if (vkEndCommandBuffer(cb) != VK_SUCCESS)
-		throw std::runtime_error("failed to end command buffer!");
+		glm::uvec2 group_count = t->tile_count;
+		vkCmdDispatch(cb, group_count.x, group_count.y, 1);
+
+		if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+			throw std::runtime_error("failed to end command buffer!");
+	}
+
+	//record terrain drawer cb
+	{
+		VkCommandBufferInheritanceInfo inheritance = {};
+		inheritance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+		inheritance.framebuffer = m_fbs.gbuffer_assembler;
+		inheritance.occlusionQueryEnable = VK_FALSE;
+		inheritance.renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
+		inheritance.subpass = render_pass_gbuffer_assembler::SUBPASS_GBUFFER_GEN;
+
+		auto cb = m_secondary_cbs[SECONDARY_CB_TERRAIN_DRAWER];
+		VkCommandBufferBeginInfo begin = {};
+		begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		begin.pInheritanceInfo = &inheritance;
+		begin.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+		if (vkBeginCommandBuffer(cb, &begin) != VK_SUCCESS)
+			throw std::runtime_error("failed to begin command buffer!");
+		m_gps[GP_TERRAIN_DRAWER].bind(cb);
+		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_BEGIN_RANGE, m_gps[GP_TERRAIN_DRAWER].pl,
+			1, 1, &t->ds, 0, nullptr);
+		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_TERRAIN_DRAWER].pl,
+			2, m_renderables[RENDERABLE_TYPE_TERRAIN][0].mat_dss.size(), m_renderables[RENDERABLE_TYPE_TERRAIN][0].mat_dss.data(),
+			0, nullptr);
+		vkCmdDraw(cb, 4 * t->tile_count.x,
+			t->tile_count.y, 0, 0);
+
+		if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+			throw std::runtime_error("failed to end command buffer!");
+
+	}
 }
 
 void gta5_pass::delete_terrain()
@@ -2704,13 +2737,14 @@ void gta5_pass::terrain_manager::loop()
 
 void gta5_pass::terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 {
+	std::cout << "decrease request received: " << tile_id.x << ' ' << tile_id.y << '\n';
 	uint32_t new_mip_level = static_cast<uint32_t>(m_terrain->current_mip_levels_data[tile_id.x + tile_id.y*m_terrain->tile_count.x]) - 1u;
 
 	auto& file = m_terrain->files[new_mip_level];
 	glm::uvec2 tile_size_in_pages = m_terrain->tile_size_in_pages[new_mip_level];
 	glm::uvec2 page_size = m_terrain->tex.page_size;
 	glm::uvec2 file_size = m_terrain->tile_count*tile_size_in_pages*page_size;
-	glm::uvec2 tile_offset2D_in_file = tile_id*tile_size_in_pages*page_size;
+	glm::uvec2 tile_offset2D_in_file = tile_id*tile_size_in_pages*page_size; 
 
 	auto& pages = m_pages[new_mip_level][tile_id.x][tile_id.y];
 	pages.resize(tile_size_in_pages.x*tile_size_in_pages.y);
@@ -2734,10 +2768,11 @@ void gta5_pass::terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_i
 				file.read(staging_buffer_data, page_size.x * sizeof(glm::vec4));
 				staging_buffer_data += (page_size.x * sizeof(glm::vec4));
 			}
+			++page_index;
 		}
 	}
 
-	//bind pages to virtual texture and staging buffer
+	//bind pages to virtual texture
 	size_t page_count = tile_size_in_pages.x*tile_size_in_pages.y;
 	std::vector<VkSparseImageMemoryBind> image_binds(page_count);
 
@@ -2828,6 +2863,7 @@ void gta5_pass::terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_i
 
 void gta5_pass::terrain_manager::increase_min_mip_level(const glm::uvec2& tile_id)
 {
+	std::cout << "increase request received: " << tile_id.x << ' ' << tile_id.y << '\n';
 	uint32_t destroy_mip_level = static_cast<uint32_t>(m_terrain->current_mip_levels_data[tile_id.x + tile_id.y*m_terrain->tile_count.x]);
 	auto& pages = m_pages[destroy_mip_level][tile_id.x][tile_id.y];
 

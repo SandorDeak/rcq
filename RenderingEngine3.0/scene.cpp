@@ -107,17 +107,6 @@ void scene::build()
 	m_mats.push_back(mat);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
-	//terrain
-	mat.data.flags = rcq::TEX_TYPE_FLAG_AO | rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_NORMAL;
-	mat.data.metal = 0.f;
-	mat.data.roughness = 0.9f;
-	mat.id = MAT_TERRAIN;
-	mat.tex_resources[rcq::TEX_TYPE_AO] = "textures/terrain/AO2.png";
-	mat.tex_resources[rcq::TEX_TYPE_NORMAL]= "textures/terrain/nrm.png";
-	mat.tex_resources[rcq::TEX_TYPE_COLOR]= "textures/terrain/diff2.jpg";
-	m_mats.push_back(mat);
-	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
-
 	//white wall
 	mat.data.flags = 0;
 	mat.data.color = glm::vec3(0.95f);
@@ -146,13 +135,67 @@ void scene::build()
 	m_mats.push_back(mat);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
 
+	//sand
+	mat.data.flags = rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_NORMAL | rcq::TEX_TYPE_FLAG_ROUGHNESS;
+	mat.data.metal = 0.f;
+	mat.id = MAT_SAND;
+	mat.tex_resources[rcq::TEX_TYPE_COLOR] = "textures/sand1-ue/sand1-albedo.png";
+	mat.tex_resources[rcq::TEX_TYPE_NORMAL] = "textures/sand1-ue/sand1-normal-ue.png";
+	mat.tex_resources[rcq::TEX_TYPE_ROUGHNESS] = "textures/sand1-ue/sand1-roughness.png";
+	m_mats.push_back(mat);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
+
+	//rocksand
+	mat.data.flags = rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_NORMAL | rcq::TEX_TYPE_FLAG_ROUGHNESS |
+		rcq::TEX_TYPE_FLAG_AO | rcq::TEX_TYPE_FLAG_HEIGHT;
+	mat.data.metal = 0.f;
+	mat.data.height_scale = 0.3f;
+	mat.id = MAT_ROCKSAND;
+	mat.tex_resources[rcq::TEX_TYPE_COLOR] = "textures/roughrock1-Unreal-Engine/roughrock1albedo3.png";
+	mat.tex_resources[rcq::TEX_TYPE_NORMAL] = "textures/roughrock1-Unreal-Engine/roughrock1-normal4.png";
+	mat.tex_resources[rcq::TEX_TYPE_ROUGHNESS] = "textures/roughrock1-Unreal-Engine/roughrock1roughness3.png";
+	mat.tex_resources[rcq::TEX_TYPE_AO] = "textures/roughrock1-Unreal-Engine/roughrock1albedo3.png";
+	mat.tex_resources[rcq::TEX_TYPE_HEIGHT] = "textures/roughrock1-Unreal-Engine/roughrock1-height.png";
+	m_mats.push_back(mat);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
+
+	//grass
+	mat.data.flags = rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_NORMAL | rcq::TEX_TYPE_FLAG_ROUGHNESS |
+		rcq::TEX_TYPE_FLAG_AO | rcq::TEX_TYPE_FLAG_HEIGHT;
+	mat.data.metal = 0.f;
+	mat.data.height_scale = 0.13f;
+	mat.id = MAT_GRASS;
+	mat.tex_resources[rcq::TEX_TYPE_COLOR] = "textures/grass1-Unreal-Engine2/grass1-albedo3.png";
+	mat.tex_resources[rcq::TEX_TYPE_NORMAL] = "textures/grass1-Unreal-Engine2/grass1-normal2.png";
+	mat.tex_resources[rcq::TEX_TYPE_ROUGHNESS] = "textures/grass1-Unreal-Engine2/grass1-rough.png";
+	mat.tex_resources[rcq::TEX_TYPE_AO] = "textures/grass1-Unreal-Engine2/grass1-ao.png";
+	mat.tex_resources[rcq::TEX_TYPE_HEIGHT] = "textures/grass1-Unreal-Engine2/grass1-height.png";
+	m_mats.push_back(mat);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
+
+	//rock
+	mat.data.flags = rcq::TEX_TYPE_FLAG_COLOR | rcq::TEX_TYPE_FLAG_NORMAL | rcq::TEX_TYPE_FLAG_ROUGHNESS |
+		rcq::TEX_TYPE_FLAG_AO | rcq::TEX_TYPE_FLAG_HEIGHT;
+	mat.data.metal = 0.f;
+	mat.data.height_scale = 0.5f;
+	mat.id = MAT_ROCK;
+	mat.tex_resources[rcq::TEX_TYPE_COLOR] = "textures/slate-cliff-rock-ue4/slatecliffrock-albedo.png";
+	mat.tex_resources[rcq::TEX_TYPE_NORMAL] = "textures/slate-cliff-rock-ue4/slatecliffrock_Normal.png";
+	mat.tex_resources[rcq::TEX_TYPE_ROUGHNESS] = "textures/slate-cliff-rock-ue4/slatecliffrock_Roughness2.png";
+	mat.tex_resources[rcq::TEX_TYPE_AO] = "textures/slate-cliff-rock-ue4/slatecliffrock_Ambient_Occlusion.png";
+	mat.tex_resources[rcq::TEX_TYPE_HEIGHT] = "textures/slate-cliff-rock-ue4/slatecliffrock_Height.png";
+	m_mats.push_back(mat);
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);
+
+
+
 	//sky res
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST, "textures/sky/try_12",
 		glm::uvec3(32), glm::uvec2(512));
 
 	//terrain res
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TERRAIN>(TERRAIN_TRY, "textures/terrain/t", 4, glm::uvec2(4096, 4096),
-		glm::vec3(1024.f, 1024.f, 10.f), glm::uvec2(512, 512));
+		glm::vec3(512.f, 10.f, 512.f), glm::uvec2(512, 512));
 
 	//create transforms
 	transform tr;
@@ -330,14 +373,6 @@ void scene::build()
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
 		e.m_life_exp);
 
-	/*//terrain
-	e.m_material_light_id = MAT_TERRAIN;
-	e.m_mesh_id = MESH_TERRAIN;
-	e.m_transform_id = ENTITY_TERRAIN;
-	e.m_id = ENTITY_TERRAIN;
-	m_entities.push_back(e);
-	rcq::engine::instance()->cmd_build_renderable(e.m_id, e.m_transform_id, e.m_mesh_id, e.m_material_light_id, e.m_rend_type,
-		e.m_life_exp);*/
 
 	//sky
 	e.m_material_light_id = SKY_FIRST;
@@ -350,7 +385,7 @@ void scene::build()
 	e.m_material_light_id = TERRAIN_TRY;
 	e.m_id = ENTITY_TERRAIN;
 	e.m_rend_type = rcq::RENDERABLE_TYPE_TERRAIN;
-	rcq::engine::instance()->cmd_build_renderable(e.m_id, 0, 0, e.m_material_light_id, e.m_rend_type, rcq::LIFE_EXPECTANCY_LONG);
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, MAT_SAND, 4, e.m_material_light_id, e.m_rend_type, rcq::LIFE_EXPECTANCY_LONG);
 	m_entities.push_back(e);
 
 	//dispatch
@@ -391,6 +426,8 @@ void scene::update(float dt)
 
 	rcq::engine::instance()->cmd_render(m_render_settings);
 	rcq::engine::instance()->cmd_dispatch();
+
+	std::cout << "view pos xyz: " << m_render_settings.pos.x << ' ' <<m_render_settings.pos.y << ' ' << m_render_settings.pos.z << '\n';
 }
 
 void scene::update_settings(float dt)

@@ -18,23 +18,18 @@ layout(set=1, binding=0) uniform terrain_buffer
 	float height_scale;
 } terr;
 
-layout(set=1, binding=2) uniform samplerBuffer current_mip_levels;
 
-
-layout(location=0) out float mip_level_out;
+layout(location=0) out ivec2 tile_id_out;
 
 void main()
 {	
 	uint vertex_id=gl_VertexIndex & vertex_id_bitmask;
-	//int x=int(((tile_id_x_bitmask & gl_VertexIndex) >> 2) + (vertex_id & 1));
-	//int y=int(((tile_id_z_bitmask & gl_VertexIndex) >> (2+MAX_TILE_COUNT_LOG2)) + ((vertex_id & 2) >> 1));
 	
-	int x=int(((gl_VertexIndex>>2) & (MAX_TILE_COUNT-1))+ (vertex_id & 1));
-	int y=int(((gl_VertexIndex>>(MAX_TILE_COUNT_LOG2+2)) & (MAX_TILE_COUNT-1)) + (vertex_id>>1));
+	int x=int((gl_VertexIndex>>2) + (vertex_id >> 1));
+	int y=int(gl_InstanceIndex + (vertex_id & 1));
 	
-	
-	int tile_id=x+y*terr.tile_count.x;
-	//mip_level_out=imageLoad(current_mip_levels, tile_id).x;
-	mip_level_out=texelFetch(current_mip_levels, tile_id).x;
-	gl_Position=vec4(float(x), 0.f, float(y), 1.f);
+	tile_id_out=ivec2(int(gl_VertexIndex>>2), int(gl_InstanceIndex));
+	//tile_id_out=x+y*terr.tile_count.x;
+	//mip_level_out=texelFetch(current_mip_levels, tile_id).x;
+	gl_Position=vec4(terr.meter_per_tile_size_length.x*float(x), 0.f, terr.meter_per_tile_size_length.y*float(y), 1.f);
 }

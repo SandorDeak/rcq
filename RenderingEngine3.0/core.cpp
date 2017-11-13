@@ -156,7 +156,7 @@ void rcq::core::build_renderables_impl(const std::vector<build_renderable_info>&
 			r.shadow_map_fb = res.shadow_map_fb;
 		}
 
-		if constexpr (rend_type  == RENDERABLE_TYPE_MAT_OPAQUE)
+		if constexpr (rend_type == RENDERABLE_TYPE_MAT_OPAQUE)
 		{
 			r.m = resource_manager::instance()->get_res<RESOURCE_TYPE_MESH>(
 				std::get<BUILD_RENDERABLE_INFO_MESH_ID>(info));
@@ -168,9 +168,18 @@ void rcq::core::build_renderables_impl(const std::vector<build_renderable_info>&
 		{
 			r.tiles_count = res.tile_count;
 			r.request_ds = res.request_ds;
-			gta5_pass::instance()->set_terrain(&res);
+
+			r.mat_dss.resize(std::get<BUILD_RENDERABLE_INFO_MESH_ID>(info));
+			for (uint32_t i = 0; i < r.mat_dss.size(); ++i)
+				r.mat_dss[i] = resource_manager::instance()->get_res<RESOURCE_TYPE_MAT_OPAQUE>(
+					std::get<BUILD_RENDERABLE_INFO_TR_ID>(info) + i).ds;
 		}
 
-		m_renderables[rend_type].push_back(r);
+		m_renderables[rend_type].push_back(std::move(r));
+
+		if constexpr (rend_type == RENDERABLE_TYPE_TERRAIN)
+		{
+			gta5_pass::instance()->set_terrain(&res);
+		}
 	}
 }

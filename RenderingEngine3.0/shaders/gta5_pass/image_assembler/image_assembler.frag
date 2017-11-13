@@ -224,6 +224,5 @@ void main()
 	
 	vec3 color_with_areal=transm*color+sky_scattering*data.irradiance;
 	
-	
-	color_out=vec4(color_with_areal, 1.f);	
+	color_out=vec4(color_with_areal, 1.f);
 }

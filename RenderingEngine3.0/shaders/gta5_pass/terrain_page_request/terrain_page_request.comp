@@ -29,7 +29,7 @@ layout(set=1, binding=1, r32f) uniform imageBuffer requested_mip_levels;
 
 void main()
 {
-	int tile_index=int(gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*gl_WorkGroupSize.x*gl_NumWorkGroups.x);
+	int tile_index=int(gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*gl_NumWorkGroups.x);
 
 	vec2 tile_center=(vec2(gl_GlobalInvocationID.xy)+0.5f)*terr.tile_size_in_meter;
 	float d=distance(tile_center, data.view_pos.xz);
@@ -39,7 +39,7 @@ void main()
 	
 	float tolerance=0.5f;
 	
-	if (current_level<required_level-tolerance && current_level<terr.mip_level_count-1.f)
+	if (current_level<required_level-tolerance && current_level<terr.mip_level_count-1.5f)
 	{
 		uint request_index=atomicAdd(terr.request_count, 1);
 		if (request_index>=MAX_REQUEST_COUNT)
@@ -51,7 +51,7 @@ void main()
 		terr.requests[request_index]=request;
 		imageStore(requested_mip_levels, tile_index, vec4(current_level+1.f));
 	}
-	else if (current_level>required_level+tolerance && current_level>0.f)
+	else if (current_level>required_level+tolerance && current_level>0.5f)
 	{
 		uint request_index=atomicAdd(terr.request_count, 1);
 		if (request_index>=MAX_REQUEST_COUNT)

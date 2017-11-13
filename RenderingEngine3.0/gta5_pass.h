@@ -84,6 +84,7 @@ namespace rcq
 			SECONDARY_CB_SKYBOX_EM,
 			SECONDARY_CB_DIR_SHADOW_GEN,
 			SECONDARY_CB_MAT_OPAQUE,
+			SECONDARY_CB_TERRAIN_DRAWER,
 			SECONDARY_CB_COUNT
 		};
 
@@ -223,7 +224,7 @@ namespace rcq
 		struct terrain_drawer_data
 		{
 			glm::mat4 proj_x_view;
-			glm::vec3 light_dir;
+			glm::vec3 view_pos;
 		};
 
 		struct terrain_tile_request_data

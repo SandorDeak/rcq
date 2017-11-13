@@ -729,7 +729,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 
 	if (!pixels)
 	{
-		throw std::runtime_error("failed to load texture image!");
+		throw std::runtime_error("failed to load texture image: " + filename);
 	}
 
 	size_t image_size = width*height * 4;
@@ -1079,7 +1079,7 @@ void resource_manager::create_descriptor_set_layouts()
 		bindings[2].binding = 2;
 		bindings[2].descriptorCount = 1;
 		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-		bindings[2].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+		bindings[2].stageFlags = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -1988,7 +1988,7 @@ terrain resource_manager::build<RESOURCE_TYPE_TERRAIN>(const std::string& filena
 	{
 		std::string s(filename);
 		s = s + std::to_string(i) + ".terr";
-		t.files[i].open(s.c_str());
+		t.files[i].open(s.c_str(), std::ios::binary);
 		if (!t.files[i].is_open())
 			throw std::runtime_error("failed to open file: " + s);
 	}
@@ -2309,7 +2309,7 @@ terrain resource_manager::build<RESOURCE_TYPE_TERRAIN>(const std::string& filena
 
 		t.request_data->mip_level_count = static_cast<float>(mip_level_count);
 		t.request_data->request_count = 0;
-		t.request_data->tile_size_in_meter = t.data->meter_per_tile_size_length;
+		t.request_data->tile_size_in_meter = { 64.f, 64.f };// t.data->meter_per_tile_size_length;
 	}
 
 	//create requested mip levels view
@@ -2405,8 +2405,8 @@ terrain resource_manager::build<RESOURCE_TYPE_TERRAIN>(const std::string& filena
 		s.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
 		s.anisotropyEnable = VK_FALSE;
 		s.compareEnable = VK_FALSE;
-		s.magFilter = VK_FILTER_LINEAR;
-		s.minFilter = VK_FILTER_LINEAR;
+		s.magFilter = VK_FILTER_NEAREST;
+		s.minFilter = VK_FILTER_NEAREST;
 		s.maxLod = static_cast<float>(mip_level_count - 1u);
 		s.minLod = 0.f;
 		s.mipLodBias = 0.f;
@@ -2546,4 +2546,6 @@ void resource_manager::destroy(terrain&& t)
 	vkFreeMemory(m_base.device, t.requested_mip_levels_memory, m_alloc);
 
 	t.page_pool.free();
+
+	delete[] t.files;
 }
