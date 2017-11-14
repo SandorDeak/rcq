@@ -9,5 +9,5 @@ layout(location=0) out vec4 color_out;
 
 void main()
 {	
-	color_out=texture(preimage_tex, gl_FragCoord.xy);
+	color_out=pow(texture(preimage_tex, gl_FragCoord.xy), vec4(0.45f));
 }

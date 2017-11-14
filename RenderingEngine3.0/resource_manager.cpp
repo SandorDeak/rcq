@@ -502,7 +502,7 @@ material_opaque resource_manager::build<RESOURCE_TYPE_MAT_OPAQUE>(const material
 		{
 			tex_info[tex_info_index].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 			tex_info[tex_info_index].imageView = mat.texs[i].view;
-			tex_info[tex_info_index].sampler = m_samplers[mat.texs[i].sampler_type];
+			tex_info[tex_info_index].sampler =mat.texs[i].sampler;
 
 			write[write_index].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 			write[write_index].descriptorCount = 1;
@@ -633,6 +633,7 @@ void resource_manager::destroy(material_opaque&& _mat)
 			vkDestroyImageView(m_base.device, _mat.texs[i].view, m_alloc);
 			vkDestroyImage(m_base.device, _mat.texs[i].image, m_alloc);
 			vkFreeMemory(m_base.device, _mat.texs[i].memory, m_alloc);
+			vkDestroySampler(m_base.device, _mat.texs[i].sampler, m_alloc);
 		}
 	}
 	
@@ -743,6 +744,14 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	vkUnmapMemory(m_base.device, sb_mem);
 	stbi_image_free(pixels);
 
+	uint32_t mip_level_count = 0;
+	uint32_t mip_level_size = std::max(width, height);
+	while (mip_level_size != 0)
+	{
+		mip_level_size >>= 1;
+		++mip_level_count;
+	}
+
 	//create image
 	VkImageCreateInfo image_create_info = {};
 	image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -753,11 +762,11 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
 	image_create_info.imageType = VK_IMAGE_TYPE_2D;
 	image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	image_create_info.mipLevels = 1;
+	image_create_info.mipLevels = mip_level_count;
 	image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
 	image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-	image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	image_create_info.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
 	if (vkCreateImage(m_base.device, &image_create_info, m_alloc, &tex.image) != VK_SUCCESS)
 	{
@@ -780,7 +789,9 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	}
 	vkBindImageMemory(m_base.device, tex.image, tex.memory, 0);
 
-	//transition layout to transfer dst optimal
+	//transition level0 layout to transfer dst optimal
+	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+
 	VkImageMemoryBarrier barrier = {};
 	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 	barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
@@ -796,7 +807,6 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	barrier.subresourceRange.layerCount = 1;
 	barrier.subresourceRange.levelCount = 1;
 
-	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
 	vkCmdPipelineBarrier(
 		cb,
 		VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -806,7 +816,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 		1, &barrier
 	);
 
-	//copy from staging buffer
+	//copy from staging buffer to level0
 	VkBufferImageCopy region = {};
 	region.bufferImageHeight = 0;
 	region.bufferRowLength = 0;
@@ -822,19 +832,69 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 
 	vkCmdCopyBufferToImage(cb, sb, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
-	//transition layout to shader read only optimal
-	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.image = tex.image;
-	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.baseMipLevel = 0;
-	barrier.subresourceRange.layerCount = 1;
-	barrier.subresourceRange.levelCount = 1;
+	//fill mip levels
+	for (uint32_t i = 0; i < mip_level_count - 1; ++i)
+	{
+		std::vector<VkImageMemoryBarrier> barriers(2);
+		for (uint32_t j = 0; j < 2; ++j)
+		{
+			barriers[j].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			barriers[j].image = tex.image;
+			barriers[j].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barriers[j].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			barriers[j].oldLayout = j == 0 ? VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL : VK_IMAGE_LAYOUT_UNDEFINED;
+			barriers[j].newLayout = j == 0 ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			barriers[j].srcAccessMask = j == 0 ? VK_ACCESS_TRANSFER_WRITE_BIT : 0;
+			barriers[j].dstAccessMask = j == 0 ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
+			barriers[j].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			barriers[j].subresourceRange.baseArrayLayer = 0;
+			barriers[j].subresourceRange.layerCount = 1;
+			barriers[j].subresourceRange.baseMipLevel = i+j;
+			barriers[j].subresourceRange.levelCount = 1;
+		}
+		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+			0, nullptr, 0, nullptr, 2, barriers.data());
+
+		VkImageBlit blit = {};
+		blit.srcOffsets[0] = { 0, 0, 0 };
+		blit.srcOffsets[1] = { width, height, 1 };
+		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.srcSubresource.baseArrayLayer = 0;
+		blit.srcSubresource.layerCount = 1;
+		blit.srcSubresource.mipLevel = i;
+
+		width >>= 1;
+		height >>= 1;
+
+		blit.dstOffsets[0] = { 0, 0, 0 };
+		blit.dstOffsets[1] = { width, height, 1 };
+		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.dstSubresource.baseArrayLayer = 0;
+		blit.dstSubresource.layerCount = 1;
+		blit.dstSubresource.mipLevel = i + 1;
+
+		vkCmdBlitImage(cb, tex.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, tex.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			1, &blit, VK_FILTER_LINEAR);
+	}
+
+	//transition all level layout to shader read only optimal
+	std::array<VkImageMemoryBarrier, 2> barriers = {};
+	for (uint32_t i = 0; i < 2; ++i)
+	{
+		barriers[i].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barriers[i].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		barriers[i].srcAccessMask = i==0 ? VK_ACCESS_TRANSFER_READ_BIT : VK_ACCESS_TRANSFER_WRITE_BIT;
+		barriers[i].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barriers[i].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barriers[i].image = tex.image;
+		barriers[i].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		barriers[i].oldLayout = i == 0 ? VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL : VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barriers[i].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barriers[i].subresourceRange.baseArrayLayer = 0;
+		barriers[i].subresourceRange.baseMipLevel = i==0 ? 0 : mip_level_count-1;
+		barriers[i].subresourceRange.layerCount = 1;
+		barriers[i].subresourceRange.levelCount = i == 0 ? mip_level_count-1 : 1;
+	}
 
 	vkCmdPipelineBarrier(
 		cb,
@@ -842,7 +902,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 		0,
 		0, nullptr,
 		0, nullptr,
-		1, &barrier
+		2, barriers.data()
 	);
 
 	end_single_time_command_buffer(m_base.device, m_cp_build,
@@ -861,7 +921,7 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 	image_view_create_info.subresourceRange.baseArrayLayer = 0;
 	image_view_create_info.subresourceRange.baseMipLevel = 0;
 	image_view_create_info.subresourceRange.layerCount = 1;
-	image_view_create_info.subresourceRange.levelCount = 1;
+	image_view_create_info.subresourceRange.levelCount = mip_level_count;
 	image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
 
 	if (vkCreateImageView(m_base.device, &image_view_create_info, m_alloc,
@@ -870,7 +930,26 @@ texture rcq::resource_manager::load_texture(const std::string & filename)
 		throw std::runtime_error("failed to create texture image view!");
 	}
 
-	tex.sampler_type = SAMPLER_TYPE_SIMPLE;
+	//create sampler
+	{
+		VkSamplerCreateInfo s = {};
+		s.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		s.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		s.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		s.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+		s.anisotropyEnable = VK_TRUE;
+		s.compareEnable = VK_FALSE;
+		s.maxAnisotropy = 16.f;
+		s.magFilter = VK_FILTER_LINEAR;
+		s.minFilter = VK_FILTER_LINEAR;
+		s.minLod = 0.f;
+		s.maxLod = static_cast<float>(mip_level_count-1);
+		s.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		s.unnormalizedCoordinates=VK_FALSE;
+
+		if (vkCreateSampler(m_base.device, &s, m_alloc, &tex.sampler) != VK_SUCCESS)
+			throw std::runtime_error("failed to create sampler!");
+	}
 
 	return tex;
 }
@@ -1383,7 +1462,7 @@ light_omni resource_manager::build<RESOURCE_TYPE_LIGHT_OMNI>(const light_omni_da
 
 		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
 
-		l.shadow_map.sampler_type = SAMPLER_TYPE_CUBE;
+		//l.shadow_map.sampler_type = SAMPLER_TYPE_CUBE;
 
 		//omni_light_shadow_pass::instance()->create_framebuffer(l);
 
@@ -1594,7 +1673,7 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 	if (vkCreateImageView(m_base.device, &view_info, m_alloc, &skyb.tex.view) != VK_SUCCESS)
 		throw std::runtime_error("failed to create skybox image view!");
 
-	skyb.tex.sampler_type = SAMPLER_TYPE_CUBE;
+	//skyb.tex.sampler_type = SAMPLER_TYPE_CUBE;
 
 	//allocate ds
 	VkDescriptorSetAllocateInfo ds_alloc = {};
@@ -1614,7 +1693,7 @@ skybox resource_manager::build<RESOURCE_TYPE_SKYBOX>(const std::string & filenam
 	VkDescriptorImageInfo update_image = {};
 	update_image.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	update_image.imageView = skyb.tex.view;
-	update_image.sampler = m_samplers[skyb.tex.sampler_type];
+	update_image.sampler = skyb.tex.sampler;
 
 	VkWriteDescriptorSet write = {};
 	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1697,7 +1776,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 			if (vkCreateImageView(m_base.device, &view, m_alloc, &s.tex[i].view) != VK_SUCCESS)
 				throw std::runtime_error("failed to reate sky image view!");
 
-			s.tex[i].sampler_type = SAMPLER_TYPE_CUBE;
+			s.tex[i].sampler = m_samplers[SAMPLER_TYPE_CUBE];
 		}
 
 		//copy and transition layout
@@ -1819,7 +1898,7 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 			if (vkCreateImageView(m_base.device, &view, m_alloc, &s.tex[2].view) != VK_SUCCESS)
 				throw std::runtime_error("failed to reate sky image view!");
 
-			s.tex[2].sampler_type = SAMPLER_TYPE_CUBE;
+			s.tex[2].sampler = m_samplers[SAMPLER_TYPE_CUBE];
 		}
 
 		//copy and transition layout
@@ -1915,17 +1994,17 @@ sky resource_manager::build<RESOURCE_TYPE_SKY>(const std::string& filename, cons
 		VkDescriptorImageInfo Rayleigh_tex;
 		Rayleigh_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		Rayleigh_tex.imageView = s.tex[0].view;
-		Rayleigh_tex.sampler = m_samplers[s.tex[0].sampler_type];
+		Rayleigh_tex.sampler = s.tex[0].sampler;
 
 		VkDescriptorImageInfo Mie_tex;
 		Mie_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		Mie_tex.imageView = s.tex[1].view;
-		Mie_tex.sampler = m_samplers[s.tex[1].sampler_type];
+		Mie_tex.sampler = s.tex[1].sampler;
 
 		VkDescriptorImageInfo transmittance_tex;
 		transmittance_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		transmittance_tex.imageView = s.tex[2].view;
-		transmittance_tex.sampler = m_samplers[s.tex[2].sampler_type];
+		transmittance_tex.sampler = s.tex[2].sampler;
 
 		std::array<VkWriteDescriptorSet, 3> write = {};
 		write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

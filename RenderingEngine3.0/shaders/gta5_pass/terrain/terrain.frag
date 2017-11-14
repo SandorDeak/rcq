@@ -144,11 +144,11 @@ void main()
 		}
 		if((m0.tex_flags & COLOR_TEX_FLAG_BIT)==COLOR_TEX_FLAG_BIT)
 		{
-			color+=tex_mask_in.x*texture(color_tex0, tex_coord).xyz;
+			color+=tex_mask_in.x*pow(texture(color_tex0, tex_coord).xyz, vec3(2.2f));
 		}
 		else
 		{
-			color+=tex_mask_in.x*m0.color;
+			color+=tex_mask_in.x*pow(m0.color, vec3(2.2f));
 		}
 		if((m0.tex_flags & ROUGHNESS_TEX_FLAG_BIT)==ROUGHNESS_TEX_FLAG_BIT)
 		{
@@ -226,11 +226,11 @@ void main()
 		}
 		if((m1.tex_flags & COLOR_TEX_FLAG_BIT)==COLOR_TEX_FLAG_BIT)
 		{
-			color+=tex_mask_in.y*texture(color_tex1, tex_coord).xyz;
+			color+=tex_mask_in.y*pow(texture(color_tex1, tex_coord).xyz, vec3(2.2f));
 		}
 		else
 		{
-			color+=tex_mask_in.y*m1.color;
+			color+=tex_mask_in.y*pow(m1.color, vec3(2.2f));
 		}
 		if((m1.tex_flags & ROUGHNESS_TEX_FLAG_BIT)==ROUGHNESS_TEX_FLAG_BIT)
 		{
@@ -309,11 +309,11 @@ void main()
 		}
 		if((m2.tex_flags & COLOR_TEX_FLAG_BIT)==COLOR_TEX_FLAG_BIT)
 		{
-			color+=tex_mask_in.z*texture(color_tex2, tex_coord).xyz;
+			color+=tex_mask_in.z*pow(texture(color_tex2, tex_coord).xyz, vec3(2.2f));
 		}
 		else
 		{
-			color+=tex_mask_in.z*m2.color;
+			color+=tex_mask_in.z*pow(m2.color, vec3(2.2f));
 		}
 		if((m2.tex_flags & ROUGHNESS_TEX_FLAG_BIT)==ROUGHNESS_TEX_FLAG_BIT)
 		{
@@ -389,11 +389,11 @@ void main()
 		}
 		if((m3.tex_flags & COLOR_TEX_FLAG_BIT)==COLOR_TEX_FLAG_BIT)
 		{
-			color+=tex_mask_in.w*texture(color_tex3, tex_coord).xyz;
+			color+=tex_mask_in.w*pow(texture(color_tex3, tex_coord).xyz, vec3(2.2f));
 		}
 		else
 		{
-			color+=tex_mask_in.w*m3.color;
+			color+=tex_mask_in.w*pow(m3.color, vec3(2.2f));
 		}
 		if((m3.tex_flags & ROUGHNESS_TEX_FLAG_BIT)==ROUGHNESS_TEX_FLAG_BIT)
 		{

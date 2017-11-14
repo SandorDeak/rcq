@@ -525,7 +525,7 @@ namespace rcq
 		VkImage image;
 		VkImageView view;
 		VkDeviceMemory memory;
-		SAMPLER_TYPE sampler_type;
+		VkSampler sampler;
 	};
 
 	typedef std::array<texture, TEX_TYPE_COUNT> mat_opaque_texs;

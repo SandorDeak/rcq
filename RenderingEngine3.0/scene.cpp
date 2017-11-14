@@ -76,7 +76,7 @@ void scene::build()
 	mat.data.flags = 0;
 	mat.data.metal = 1.f;
 	mat.data.roughness = 0.1f;
-	mat.data.color = { 1.f, 0.71f, 0.29f };
+	mat.data.color = { 1.f, 0.86f, 0.57f };
 	mat.id = MAT_GOLD;
 	m_mats.push_back(mat);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_MAT_OPAQUE>(mat.id, mat.data, mat.tex_resources);

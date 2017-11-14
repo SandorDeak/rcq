@@ -93,11 +93,11 @@ void main()
 	}
 	if((mat.tex_flags & COLOR_TEX_FLAG_BIT)==COLOR_TEX_FLAG_BIT)
 	{
-		color=texture(color_tex, tex_coord).xyz;
+		color=pow(texture(color_tex, tex_coord).xyz, vec3(2.2f));
 	}
 	else
 	{
-		color=mat.color;
+		color=pow(mat.color, vec3(2.2f));
 	}
 	if((mat.tex_flags & ROUGHNESS_TEX_FLAG_BIT)==ROUGHNESS_TEX_FLAG_BIT)
 	{
