@@ -75,6 +75,7 @@ namespace rcq
 			std::map<unique_id, material_em>,
 			std::map<unique_id, sky>,
 			std::map<unique_id, terrain>,
+			std::map<unique_id, water>,
 			std::map<unique_id, light_omni>,
 			std::map<unique_id, skybox>,
 			std::map<unique_id, mesh>,
@@ -88,6 +89,7 @@ namespace rcq
 			std::map<unique_id, std::future<material_em>>,
 			std::map<unique_id, std::future<sky>>,
 			std::map<unique_id, std::future<terrain>>,
+			std::map<unique_id, std::future<water>>,
 			std::map<unique_id, std::future<light_omni>>,
 			std::map<unique_id, std::future<skybox>>,
 			std::map<unique_id, std::future<mesh>>,
@@ -170,6 +172,10 @@ namespace rcq
 			build(const std::string& filename, uint32_t mip_level_count, const glm::uvec2& level0_image_size, 
 				const glm::vec3& size_in_meters, const glm::uvec2& level0_tile_size);
 
+		template<size_t res_type>
+		typename std::enable_if_t<std::is_same_v<water, typename resource_typename<res_type>::type>, water>
+			build(const std::string& filename, const glm::vec2& grid_size_in_meters, float base_frequency, float A);
+
 
 		texture load_texture(const std::string& filename);
 
@@ -186,6 +192,7 @@ namespace rcq
 			std::vector<material_em>,
 			std::vector<sky>,
 			std::vector<terrain>,
+			std::vector<water>,
 			std::vector<light_omni>,
 			std::vector<skybox>,
 			std::vector<mesh>,
@@ -219,6 +226,7 @@ namespace rcq
 		void destroy(material_em&& _mat) {}
 		void destroy(sky&& _sky);
 		void destroy(terrain&& t);
+		void destroy(water&& w);
 
 		//allocator
 		allocator m_alloc;

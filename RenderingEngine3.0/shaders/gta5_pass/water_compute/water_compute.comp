@@ -1,0 +1,110 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+#define G_square 96.2361
+#define G 9.81
+#define PI 3.1415926535897f
+#define GRID_SIZE 1024
+#define GRID_SIZE_LOG2 10
+
+layout(local_size_x=GRID_SIZE, local_size_y=1, local_size_z=1) in;
+
+layout(push_constant) uniform push_constants
+{
+	ivec2 fft_axis;
+} push_c;
+
+layout(set=0, binding=0) uniform water_compute_data
+{
+	vec2 wind_dir;
+	float one_over_wind_speed_to_the_4;
+	float time;
+} data;
+
+layout(set=1, binding=0) uniform water_compute_params
+{
+	vec2 two_pi_per_L; //l=grid side lengths in meter
+	float sqrtA;
+	float base_frequence;	
+} params;
+
+
+
+layout(set=1, binding=1, rgba32f) uniform image2D noise_tex;
+
+layout(set=1, binding=2, rgba32f) uniform image2DArray water_tex; //0: height, 1: grad
+
+vec2 complex_mult(vec2 a, vec2 b)
+{
+	return vec2(a.x*b.x-a.y*b.y, a.x*b.y+a.y*b.x);
+}
+
+vec4 complex_scale_vec2_mult(vec2 a, vec4 b)
+{
+	return vec4(complex_mult(a, b.xy), complex_mult(a, b.zw));
+}
+
+ivec2 calc_index(ivec2 native_index)
+{
+	return push_c.fft_axis*native_index.x+(ivec2(1)-push_c.fft_axis)*native_index.y;
+}
+
+void main()
+{	
+	ivec2 native_tex_index=ivec2(gl_GlobalInvocationID.xy);
+	ivec2 tex_index=calc_index(native_tex_index);
+	
+	if (push_c.fft_axis.x==1)
+	{
+		vec2 noise_k=imageLoad(noise_tex, tex_index).xy;
+		vec2 noise_minusk=imageLoad(noise_tex, ivec2(GRID_SIZE)-tex_index).xy;
+		vec2 k=params.two_pi_per_L*(vec2(gl_GlobalInvocationID.xy)+0.5f-vec2(GRID_SIZE>>1));
+		float k_length=length(k);
+		
+		vec2 k_norm=k/k_length;
+		float one_over_k_length_square=1.f/(k_length*k_length);
+		float one_over_L_square=data.one_over_wind_speed_to_the_4*G_square;
+		float sqrt_P_k=params.sqrtA*(exp(-1.f*one_over_k_length_square*one_over_L_square))*(abs(dot(data.wind_dir, k_norm)));
+		vec2 h_0_k=sqrt_P_k*noise_k;
+		vec2 h_0_minusk=sqrt_P_k*noise_minusk;
+		
+		float omega_k=sqrt(floor(G*k_length/params.base_frequence));
+		float phi=omega_k*data.time;
+		vec2 time_term=vec2(cos(phi), sin(phi));
+		
+		vec2 h_k_t=complex_mult(h_0_k, time_term)+vec2(1.f, -1.f)*complex_mult(h_0_minusk, time_term);
+	
+		imageStore(water_tex, ivec3(tex_index, 0), vec4(h_k_t, 0.f, 0.f));
+		imageStore(water_tex, ivec3(tex_index, 1), vec4(-k.x*h_k_t.y, k.x*h_k_t.x, -k.y*h_k_t.y, k.x*h_k_t.x));
+		
+		
+	}
+	
+	int size=GRID_SIZE>>1;
+	int comp=1;
+	
+	for(uint i=0; i<GRID_SIZE_LOG2; ++i)
+	{
+		int k=native_tex_index.x/size;
+		int rem=native_tex_index.x%size;
+		float angle=2.f*PI*float(k)/float(comp*2);
+		vec2 mult=vec2(cos(angle), sin(angle));
+		k= k<comp ? k : k - comp;
+		
+		ivec4 sample_index=ivec4(
+			calc_index(ivec2(2*size*k+rem, native_tex_index.y)), 
+			calc_index(ivec2(2*size*k+rem+size, native_tex_index.y))
+		);
+		
+		barrier();
+		vec2 height=imageLoad(water_tex, ivec3(sample_index.xy, 0)).xy+complex_mult(mult, imageLoad(water_tex, ivec3(sample_index.zw, 0)).xy);
+		vec4 grad=imageLoad(water_tex, ivec3(sample_index.xy, 1))+complex_scale_vec2_mult(mult, imageLoad(water_tex, ivec3(sample_index.zw, 1)));
+		barrier();
+		
+		imageStore(water_tex, ivec3(tex_index, 0), vec4(height, 0.f, 0.f));
+		imageStore(water_tex, ivec3(tex_index, 1), grad);
+
+		size>>=1;
+		comp<<=1;
+	}
+}

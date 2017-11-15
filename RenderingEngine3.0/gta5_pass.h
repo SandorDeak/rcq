@@ -119,6 +119,7 @@ namespace rcq
 			GP_TERRAIN_DRAWER,
 			GP_SKY_DRAWER,
 			GP_SUN_DRAWER,
+			GP_WATER_DRAWER,
 
 			GP_POSTPROCESSING,
 			GP_COUNT
@@ -127,6 +128,7 @@ namespace rcq
 		enum CP
 		{
 			CP_TERRAIN_TILE_REQUEST,
+			CP_WATER_FFT,
 			CP_COUNT
 		};
 

@@ -1,13 +1,6 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const uint MAX_TILE_COUNT=128;//2048;
-const uint MAX_TILE_COUNT_LOG2=7;
-
-const uint vertex_id_bitmask=3;
-
-const uint tile_id_x_bitmask=(MAX_TILE_COUNT-1)<<2;
-const uint tile_id_z_bitmask=(MAX_TILE_COUNT-1)<<(2+MAX_TILE_COUNT_LOG2);
 
 layout(set=1, binding=0) uniform terrain_buffer
 {

@@ -1193,6 +1193,52 @@ void resource_manager::create_descriptor_set_layouts()
 			throw std::runtime_error("failed to create dsl!");
 	}
 
+	//create water
+	{
+		std::array<VkDescriptorSetLayoutBinding, 1> bindings = {};
+		bindings[0].binding = 0;
+		bindings[0].descriptorCount = 1;
+		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		bindings[0].stageFlags = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+
+		VkDescriptorSetLayoutCreateInfo dsl = {};
+		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		dsl.bindingCount = bindings.size();
+		dsl.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(m_base.device, &dsl, m_alloc,
+			&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_WATER]) != VK_SUCCESS)
+			throw std::runtime_error("failed to create dsl!");
+	}
+
+	//create water compute
+	{
+		std::array<VkDescriptorSetLayoutBinding, 3> bindings = {};
+		bindings[0].binding = 0;
+		bindings[0].descriptorCount = 1;
+		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		bindings[1].binding = 1;
+		bindings[1].descriptorCount = 1;
+		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		bindings[2].binding = 2;
+		bindings[2].descriptorCount = 1;
+		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		bindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		VkDescriptorSetLayoutCreateInfo dsl_info = {};
+		dsl_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+		dsl_info.bindingCount = bindings.size();
+		dsl_info.pBindings = bindings.data();
+
+		if (vkCreateDescriptorSetLayout(m_base.device, &dsl_info, m_alloc,
+			&m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_WATER_COMPUTE]) != VK_SUCCESS)
+			throw std::runtime_error("failed to create descriptor set layout!");
+	}
+
 	//create light omni dsl
 	VkDescriptorSetLayoutBinding light_bindings[2] = {};
 
@@ -1233,7 +1279,7 @@ void resource_manager::create_descriptor_set_layouts()
 }
 
 template<DESCRIPTOR_SET_LAYOUT_TYPE dsl_type>
-inline void resource_manager::extend_descriptor_pool_pool()
+void resource_manager::extend_descriptor_pool_pool()
 {
 	VkDescriptorPoolCreateInfo dp_info = {};
 	dp_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -1257,6 +1303,18 @@ inline void resource_manager::extend_descriptor_pool_pool()
 		dp_size[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 		dp_info.poolSizeCount = 1;
+	}
+
+	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_WATER)
+	{
+		dp_size[0].descriptorCount = DESCRIPTOR_POOL_SIZE;
+		dp_size[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		dp_size[1].descriptorCount = DESCRIPTOR_POOL_SIZE;
+		dp_size[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		dp_size[2].descriptorCount = DESCRIPTOR_POOL_SIZE*2;
+		dp_size[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+
+		dp_info.poolSizeCount = 3;
 	}
 
 	if constexpr (dsl_type == DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN)
@@ -2626,5 +2684,328 @@ void resource_manager::destroy(terrain&& t)
 
 	t.page_pool.free();
 
+	for (uint32_t i = 0; i < t.mip_level_count; ++i)
+		t.files[i].close();
 	delete[] t.files;
+}
+
+template<>
+water resource_manager::build<RESOURCE_TYPE_WATER>(const std::string& filename, const glm::vec2& grid_size_in_meters, 
+	float base_frequency, float A)
+{
+	water w;
+
+	const uint32_t GRID_SIZE = 1024;
+
+	VkBuffer sb;
+	VkDeviceMemory sb_mem;
+	uint32_t noise_size = GRID_SIZE*GRID_SIZE * sizeof(glm::vec4);
+
+	create_staging_buffer(m_base, noise_size, sb, sb_mem, m_alloc);
+	void* data;
+	vkMapMemory(m_base.device, sb_mem, 0, noise_size, 0, &data);
+
+	std::ifstream file(filename.c_str(), std::ios::binary);
+	if (!file.is_open())
+		throw std::runtime_error("failed to open file: " + filename);
+	file.read(static_cast<char*>(data), noise_size);
+	file.close();
+
+	//create noise image
+	{
+		VkImageCreateInfo im = {};
+		im.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		im.arrayLayers = 1;
+		im.extent = { GRID_SIZE, GRID_SIZE, 1 };
+		im.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		im.imageType = VK_IMAGE_TYPE_2D;
+		im.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		im.mipLevels = 1;
+		im.samples = VK_SAMPLE_COUNT_1_BIT;
+		im.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		im.tiling = VK_IMAGE_TILING_OPTIMAL;
+		im.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+
+		if (vkCreateImage(m_base.device, &im, m_alloc, &w.noise.image) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image!");
+
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(m_base.device, w.noise.image, &mr);
+
+		VkMemoryAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.allocationSize = mr.size;
+		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		
+		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &w.noise.memory) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate memory!");
+
+		vkBindImageMemory(m_base.device, w.noise.image, w.noise.memory, 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = w.noise.image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &w.noise.view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image view");
+	}
+
+	//create height and grad texture
+	{
+		VkImageCreateInfo im = {};
+		im.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		im.arrayLayers = 2;
+		im.extent = { GRID_SIZE, GRID_SIZE, 1 };
+		im.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		im.imageType = VK_IMAGE_TYPE_2D;
+		im.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		im.mipLevels = 1;
+		im.samples = VK_SAMPLE_COUNT_1_BIT;
+		im.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		im.tiling = VK_IMAGE_TILING_OPTIMAL;
+		im.usage =  VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+		if (vkCreateImage(m_base.device, &im, m_alloc, &w.tex.image) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image!");
+
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(m_base.device, w.tex.image, &mr);
+
+		VkMemoryAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.allocationSize = mr.size;
+		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &w.tex.memory) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate memory!");
+
+		vkBindImageMemory(m_base.device, w.tex.image, w.tex.memory, 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = w.tex.image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 2;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &w.tex.view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image view");
+	}
+
+	VkBuffer sb2;
+	VkDeviceMemory sb2_mem;
+	create_staging_buffer(m_base, sizeof(water::fft_params_data), sb2, sb2_mem, m_alloc);
+	void* raw_data;
+	vkMapMemory(m_base.device, sb2_mem, 0, sizeof(water::fft_params_data), 0, &raw_data);
+	
+	water::fft_params_data* params = reinterpret_cast<water::fft_params_data*>(raw_data);
+	params->base_frequency = base_frequency;
+	params->sqrtA = sqrtf(A);
+	params->two_pi_per_L = glm::vec2(2.f*PI) / grid_size_in_meters;
+
+
+	//create fft params buffer
+	{
+		VkBufferCreateInfo b = {};
+		b.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		b.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		b.size = sizeof(water::fft_params_data);
+		b.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+		if (vkCreateBuffer(m_base.device, &b, m_alloc, &w.fft_params) != VK_SUCCESS)
+			throw std::runtime_error("failed to create buffer!");
+
+		VkMemoryRequirements mr;
+		vkGetBufferMemoryRequirements(m_base.device, w.fft_params, &mr);
+
+		VkMemoryAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.allocationSize = mr.size;
+		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &w.fft_params_mem) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate memory!");
+
+		vkBindBufferMemory(m_base.device, w.fft_params, w.fft_params_mem, 0);
+	}
+
+	//transition layouts and copy from staging buffers
+	{
+		auto cb = begin_single_time_command(m_base.device, m_cp_build);
+		
+		VkBufferCopy bc;
+		bc.dstOffset = 0;
+		bc.size = sizeof(water::fft_params_data);
+		bc.srcOffset = 0;
+
+		vkCmdCopyBuffer(cb, sb2, w.fft_params, 1, &bc);
+
+		std::array<VkImageMemoryBarrier, 3> barriers= {};
+		for (uint32_t i = 0; i < 3; ++i)
+		{
+			auto& b = barriers[i];
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.image = i == 2 ? w.tex.image : w.noise.image;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = i == 2 ? 2 : 1;			
+		}
+
+		barriers[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		barriers[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barriers[0].srcAccessMask = 0;
+		barriers[0].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		
+		barriers[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barriers[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		barriers[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		barriers[2].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		barriers[2].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		barriers[2].srcAccessMask = 0;
+		barriers[2].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+
+		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+			0, 0, nullptr, 0, nullptr, 1, barriers.data());
+
+		VkBufferImageCopy bic = {};
+		bic.bufferImageHeight = 0;
+		bic.bufferRowLength = 0;
+		bic.bufferOffset = 0;
+		bic.imageOffset = { 0, 0, 0 };
+		bic.imageExtent = { GRID_SIZE, GRID_SIZE, 1 };
+		bic.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		bic.imageSubresource.baseArrayLayer = 0;
+		bic.imageSubresource.layerCount = 1;
+		bic.imageSubresource.mipLevel = 0;
+
+		vkCmdCopyBufferToImage(cb, sb, w.noise.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bic);
+
+		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
+	}
+
+	//delete staging buffers
+	vkDestroyBuffer(m_base.device, sb, m_alloc);
+	vkDestroyBuffer(m_base.device, sb2, m_alloc);
+	vkFreeMemory(m_base.device, sb_mem, m_alloc);
+	vkFreeMemory(m_base.device, sb2_mem, m_alloc);
+
+	//allocate dss
+	{
+		std::array<VkDescriptorSet, 2> dss;
+
+		std::array<VkDescriptorSetLayout, 2> dsls =
+		{
+			m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_WATER],
+			m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_WATER_COMPUTE]
+		};
+
+		VkDescriptorSetAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+		alloc.pSetLayouts = dsls.data();
+		alloc.descriptorSetCount = 2;
+
+
+		pool_id p_id = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_WATER].get_available_pool_id();
+		if (p_id == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_WATER].pools.size())
+		{
+			extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_WATER>();
+		}
+		alloc.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_WATER].pools[p_id];
+		if (vkAllocateDescriptorSets(m_base.device, &alloc, dss.data()) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate material descriptor set!");
+
+		--m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_WATER].availability[p_id];
+		w.pool_index = p_id;
+
+		w.ds = dss[0];
+		w.generator_ds = dss[1];
+	}
+
+	//update dss
+	{
+		VkDescriptorBufferInfo fft_params;
+		fft_params.buffer = w.fft_params;
+		fft_params.offset = 0;
+		fft_params.range = sizeof(water::fft_params_data);
+
+		VkDescriptorImageInfo noise;
+		noise.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		noise.imageView = w.noise.view;
+
+		VkDescriptorImageInfo tex_comp;
+		tex_comp.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		tex_comp.imageView = w.tex.view;
+
+		VkDescriptorImageInfo tex_draw;
+		tex_draw.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		tex_draw.imageView = w.tex.view;
+		tex_draw.sampler = m_samplers[SAMPLER_TYPE_SIMPLE];
+
+		std::array<VkWriteDescriptorSet, 4> writes = {};
+		writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[0].descriptorCount = 1;
+		writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		writes[0].dstArrayElement = 0;
+		writes[0].dstBinding = 0;
+		writes[0].dstSet = w.generator_ds;
+		writes[0].pBufferInfo = &fft_params;
+
+		writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[1].descriptorCount = 1;
+		writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		writes[1].dstArrayElement = 0;
+		writes[1].dstBinding = 1;
+		writes[1].dstSet = w.generator_ds;
+		writes[1].pImageInfo = &noise;
+
+		writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[2].descriptorCount = 1;
+		writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		writes[2].dstArrayElement = 0;
+		writes[2].dstBinding = 2;
+		writes[2].dstSet = w.generator_ds;
+		writes[2].pImageInfo = &tex_comp;
+		
+		writes[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		writes[3].descriptorCount = 1;
+		writes[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		writes[3].dstArrayElement = 0;
+		writes[3].dstBinding = 0;
+		writes[3].dstSet = w.ds;
+		writes[3].pImageInfo = &tex_draw;
+
+		vkUpdateDescriptorSets(m_base.device, writes.size(), writes.data(), 0, nullptr);
+	}
+
+	return w;
+
+}
+
+void resource_manager::destroy(water&& w)
+{
+	vkDestroyBuffer(m_base.device, w.fft_params, m_alloc);
+	vkFreeMemory(m_base.device, w.fft_params_mem, m_alloc);
+
+	vkDestroyImageView(m_base.device, w.noise.view, m_alloc);
+	vkDestroyImageView(m_base.device, w.tex.view, m_alloc);
+	vkDestroyImage(m_base.device, w.noise.image, m_alloc);
+	vkDestroyImage(m_base.device, w.tex.image, m_alloc);
+	vkFreeMemory(m_base.device, w.noise.memory, m_alloc);
+	vkFreeMemory(m_base.device, w.tex.memory, m_alloc);
 }

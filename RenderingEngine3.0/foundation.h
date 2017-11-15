@@ -30,6 +30,8 @@
 #include <utility>
 #include <fstream>
 
+#define PI 3.1415926535897f
+
 
 namespace rcq
 {
@@ -81,6 +83,7 @@ namespace rcq
 		RENDERABLE_TYPE_MAT_EM,
 		RENDERABLE_TYPE_SKY,
 		RENDERABLE_TYPE_TERRAIN,
+		RENDERABLE_TYPE_WATER,
 		RENDERABLE_TYPE_LIGHT_OMNI,
 		RENDERABLE_TYPE_SKYBOX,
 		RENDERABLE_TYPE_COUNT
@@ -98,6 +101,7 @@ namespace rcq
 		RESOURCE_TYPE_MAT_EM,
 		RESOURCE_TYPE_SKY,
 		RESOURCE_TYPE_TERRAIN,
+		RESOURCE_TYPE_WATER,
 		RESOURCE_TYPE_LIGHT_OMNI,
 		RESOURCE_TYPE_SKYBOX,
 		RESOURCE_TYPE_MESH,
@@ -123,6 +127,8 @@ namespace rcq
 		DESCRIPTOR_SET_LAYOUT_TYPE_SKYBOX,
 		DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN,
 		DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN_COMPUTE,
+		DESCRIPTOR_SET_LAYOUT_TYPE_WATER_COMPUTE,
+		DESCRIPTOR_SET_LAYOUT_TYPE_WATER,
 		DESCRIPTOR_SET_LAYOUT_TYPE_COUNT
 	};
 
@@ -178,6 +184,16 @@ namespace rcq
 		BUILD_TERRAIN_INFO_LEVEL0_IMAGE_SIZE,
 		BUILD_TERRAIN_INFO_SIZE_IN_METERS,
 		BUILD_TERRAIN_INFO_LEVEL0_TILE_SIZE
+	};
+
+	typedef std::tuple<unique_id, std::string, glm::vec2, float, float> build_water_info;
+	enum
+	{
+		BUILD_WATER_INFO_ID,
+		BUILD_WATER_INFO_FILENAME,
+		BUILD_WATER_INFO_GRID_SIZE_IN_METERS,
+		BUILD_WATER_INFO_BASE_FREQUENCY,
+		BUILD_WATER_INFO_A
 	};
 
 	typedef std::tuple<unique_id, std::string, bool> build_mesh_info;
@@ -606,6 +622,27 @@ namespace rcq
 
 	};
 
+	struct water
+	{
+		VkDescriptorSet ds;
+		VkDescriptorSet generator_ds;
+
+		texture noise;
+		texture tex;
+
+		VkBuffer fft_params;
+		VkDeviceMemory fft_params_mem;
+
+		pool_id pool_index;
+
+		struct fft_params_data
+		{
+			glm::vec2 two_pi_per_L; //l=grid side lengths in meter
+			float sqrtA;
+			float base_frequency;
+		};
+	};
+
 
 	struct mesh
 	{
@@ -710,6 +747,7 @@ namespace rcq
 		std::vector<build_mat_em_info>,
 		std::vector<build_sky_info>,
 		std::vector<build_terrain_info>,
+		std::vector<build_water_info>,
 		std::vector<build_light_omni_info>,
 		std::vector<build_skybox_info>,
 		std::vector<build_mesh_info>, 
@@ -729,6 +767,7 @@ namespace rcq
 	typedef std::packaged_task<material_em()> build_mat_em_task;
 	typedef std::packaged_task<sky()> build_sky_task;
 	typedef std::packaged_task<terrain()> build_terrain_task;
+	typedef std::packaged_task<water()> build_water_task;
 	typedef std::packaged_task<light_omni()> build_light_omni_task;
 	typedef std::packaged_task<skybox()> build_skybox_task;
 	typedef std::packaged_task<mesh()> build_mesh_task;
@@ -740,6 +779,7 @@ namespace rcq
 		std::vector<build_mat_em_task>,
 		std::vector<build_sky_task>,
 		std::vector<build_terrain_task>,
+		std::vector<build_water_task>,
 		std::vector<build_light_omni_task>,
 		std::vector<build_skybox_task>,
 		std::vector<build_mesh_task>,
@@ -760,6 +800,7 @@ namespace rcq
 	template<> struct resource_typename<RESOURCE_TYPE_LIGHT_OMNI> { typedef light_omni type; };
 	template<> struct resource_typename<RESOURCE_TYPE_SKYBOX> { typedef skybox type; };
 	template<> struct resource_typename<RESOURCE_TYPE_TERRAIN> { typedef terrain type; };
+	template<> struct resource_typename<RESOURCE_TYPE_WATER> { typedef water type; };
 
 
 	struct descriptor_pool_pool

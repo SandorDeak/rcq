@@ -190,6 +190,10 @@ void gta5_pass::create_graphics_pipelines()
 	r12.fill_create_info(create_infos[GP_TERRAIN_DRAWER]);
 	create_infos[GP_TERRAIN_DRAWER].renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
+	render_pass_preimage_assembler::subpass_sun_drawer::pipeline_water_drawer_test::runtime_info r13(m_base.device, m_base.swap_chain_image_extent);
+	r13.fill_create_info(create_infos[GP_WATER_DRAWER]);
+	create_infos[GP_WATER_DRAWER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
+
 	//create layouts
 	m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].create_layout(m_base.device, 
 	{
@@ -238,6 +242,10 @@ void gta5_pass::create_graphics_pipelines()
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE),
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_MAT_OPAQUE)
 	}, m_alloc);
+	m_gps[GP_WATER_DRAWER].create_layout(m_base.device,
+	{
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_WATER)
+	}, m_alloc);
 	m_gps[GP_POSTPROCESSING].create_layout(m_base.device, {}, m_alloc);
 
 	for (uint32_t i = 0; i < GP_COUNT; ++i)
@@ -261,10 +269,17 @@ void gta5_pass::create_compute_pipelines()
 	compute_pipeline_terrain_tile_request::runtime_info r0(m_base.device);
 	r0.fill_create_info(create_infos[CP_TERRAIN_TILE_REQUEST]);
 
+	compute_pipeline_water_fft::runtime_info r1(m_base.device);
+	r1.fill_create_info(create_infos[CP_WATER_FFT]);
+
 	//create_layouts
 	m_cps[CP_TERRAIN_TILE_REQUEST].create_layout(m_base.device, 
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN_COMPUTE)
+	}, m_alloc);
+	m_cps[CP_WATER_FFT].create_layout(m_base.device,
+	{
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_WATER_COMPUTE)
 	}, m_alloc);
 
 	for (uint32_t i = 0; i < CP_COUNT; ++i)
@@ -326,8 +341,14 @@ void gta5_pass::create_dsls_and_allocate_dss()
 	m_gps[GP_TERRAIN_DRAWER].create_dsl(m_base.device,
 		render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline_terrain_drawer::dsl::create_info, m_alloc);
 
+	m_gps[GP_WATER_DRAWER].create_dsl(m_base.device,
+		render_pass_preimage_assembler::subpass_sun_drawer::pipeline_water_drawer_test::dsl::create_info, m_alloc);
+
 	m_cps[CP_TERRAIN_TILE_REQUEST].create_dsl(m_base.device,
 		compute_pipeline_terrain_tile_request::dsl::create_info, m_alloc);
+
+	m_cps[CP_WATER_FFT].create_dsl(m_base.device,
+		compute_pipeline_water_fft::dsl::create_info, m_alloc);
 
 	//create descriptor pool
 	if (vkCreateDescriptorPool(m_base.device, &dp::create_info,
