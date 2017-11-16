@@ -16,6 +16,7 @@ scene::~scene()
 	//rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKYBOX>(m_skybox.id);
 	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_SKY>(SKY_FIRST);
 	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_TERRAIN>(TERRAIN_TRY);
+	rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_WATER>(WATER_TRY);
 
 	for (auto& m : m_meshes)
 		rcq::engine::instance()->cmd_destroy<rcq::RESOURCE_TYPE_MESH>(m.id);
@@ -196,6 +197,10 @@ void scene::build()
 	//terrain res
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TERRAIN>(TERRAIN_TRY, "textures/terrain/t", 4, glm::uvec2(4096, 4096),
 		glm::vec3(512.f, 10.f, 512.f), glm::uvec2(512, 512));
+
+	//water res
+	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_WATER>(WATER_TRY, "textures/water/w.wat",
+		glm::vec2(1024.f*0.04f), 2.f*PI*0.1f, 100.f);
 
 	//create transforms
 	transform tr;
@@ -388,6 +393,14 @@ void scene::build()
 	rcq::engine::instance()->cmd_build_renderable(e.m_id, MAT_SAND, 4, e.m_material_light_id, e.m_rend_type, rcq::LIFE_EXPECTANCY_LONG);
 	m_entities.push_back(e);
 
+	//water
+	e.m_material_light_id = WATER_TRY;
+	e.m_id = ENTITY_WATER;
+	e.m_rend_type = rcq::RENDERABLE_TYPE_WATER;
+	rcq::engine::instance()->cmd_build_renderable(e.m_id, 0, 0, e.m_material_light_id, e.m_rend_type, rcq::LIFE_EXPECTANCY_LONG);
+	m_entities.push_back(e);
+
+
 	//dispatch
 	rcq::engine::instance()->cmd_dispatch();
 
@@ -408,6 +421,8 @@ void scene::build()
 	m_render_settings.pos = m_camera.pos;
 	m_render_settings.proj = m_camera.proj;
 	m_render_settings.view = m_camera.view;
+	m_render_settings.wind = { 10.f, 10.f };
+	m_render_settings.time = 0.f;
 
 
 }
@@ -486,6 +501,7 @@ void scene::update_settings(float dt)
 
 	m_render_settings.pos = m_camera.pos;
 	m_render_settings.view = m_camera.view;
+	m_render_settings.time += 0.1f*dt;
 
 	//light 
 	float theta = 0.f;

@@ -10,7 +10,7 @@
 *.jpg
 *.sky
 *.terr
-
+*.wat
 
 # User-specific files
 *.suo

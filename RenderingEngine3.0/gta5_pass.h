@@ -19,6 +19,8 @@ namespace rcq
 		void wait_for_finish();
 		void set_terrain(terrain* t);
 		void delete_terrain();
+		void set_water(water* w);
+		void delete_water();
 
 
 	private:
@@ -34,6 +36,8 @@ namespace rcq
 			RES_DATA_SUN_DRAWER_DATA,
 			RES_DATA_TERRAIN_DRAWER,
 			RES_DATA_TERRAIN_TILE_REQUEST,
+			RES_DATA_WATER_COMPUTE_DATA,
+			RES_DATA_WATER_DRAWER_DATA,
 			RES_DATA_COUNT
 		};
 		enum RES_IMAGE
@@ -138,12 +142,13 @@ namespace rcq
 			VkPipelineLayout pl;
 			VkDescriptorSet ds;
 			VkDescriptorSetLayout dsl;
-			void create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls, const VkAllocationCallbacks* alloc)
+			void create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls, 
+				const VkAllocationCallbacks* alloc, const std::vector<VkPushConstantRange>& push_constants = {})
 			{
 				std::vector<VkDescriptorSet> all_dsl(1 + dsls.size());
 				all_dsl[0] = dsl;
 				std::copy(dsls.begin(), dsls.end(), all_dsl.begin() + 1);
-				pl = rcq::create_layout(device, all_dsl, alloc);
+				pl = rcq::create_layout(device, all_dsl, push_constants, alloc);
 			}
 			void create_dsl(VkDevice device, const VkDescriptorSetLayoutCreateInfo& create_info, const VkAllocationCallbacks* alloc)
 			{
@@ -227,6 +232,7 @@ namespace rcq
 		{
 			glm::mat4 proj_x_view;
 			glm::vec3 view_pos;
+			uint32_t padding0;
 		};
 
 		struct terrain_tile_request_data
@@ -234,6 +240,27 @@ namespace rcq
 			glm::vec3 view_pos;
 			float near;
 			float far;
+			uint32_t padding0[3];
+		};
+
+		struct water_drawer_data
+		{
+			glm::mat4 proj_x_view;
+			glm::vec3 view_pos;
+			uint32_t padding0;
+			glm::vec3 light_dir;
+			uint32_t padding1;
+			glm::vec2 tile_offset;
+			glm::vec2 tile_size_in_meter;
+			glm::vec2 half_resolution;
+			uint32_t padding2[2];
+		};
+
+		struct water_compute_data
+		{
+			glm::vec2 wind_dir;
+			float one_over_wind_speed_to_the_4;
+			float time;
 		};
 
 		struct framebuffers
@@ -259,7 +286,9 @@ namespace rcq
 				sky_drawer_data*,
 				sun_drawer_data*,
 				terrain_drawer_data*,
-				terrain_tile_request_data*
+				terrain_tile_request_data*,
+				water_compute_data*,
+				water_drawer_data*
 			> data;
 
 			VkBuffer buffer;
@@ -280,7 +309,10 @@ namespace rcq
 					sizeof(sky_drawer_data),
 					sizeof(sun_drawer_data),
 					sizeof(terrain_drawer_data),
-					sizeof(terrain_tile_request_data) };
+					sizeof(terrain_tile_request_data),
+					sizeof(water_compute_data),
+					sizeof(water_drawer_data)
+				};
 			}
 
 			void calcoffset_and_size(size_t alignment)
@@ -349,13 +381,18 @@ namespace rcq
 		framebuffers m_fbs;
 		VkCommandBuffer m_render_cb;
 		VkCommandBuffer m_terrain_request_cb;
+		VkCommandBuffer m_water_fft_cb;
 		std::vector<VkCommandBuffer> m_present_cbs;
 		std::array<VkCommandBuffer, SECONDARY_CB_COUNT> m_secondary_cbs;
 		VkSemaphore m_image_available_s;
 		VkSemaphore m_render_finished_s;
 		std::vector<VkSemaphore> m_present_ready_ss;
 		VkFence m_render_finished_f;
-		VkFence m_terrain_tile_request_finished_f;
+		VkFence m_compute_finished_f;
+		VkEvent m_water_tex_ready_e;
+
+		water* m_water;
+		glm::uvec2 m_water_tiles_count;
 
 		//allocator
 		allocator m_alloc;

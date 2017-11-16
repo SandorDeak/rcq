@@ -2694,8 +2694,7 @@ water resource_manager::build<RESOURCE_TYPE_WATER>(const std::string& filename, 
 	float base_frequency, float A)
 {
 	water w;
-
-	const uint32_t GRID_SIZE = 1024;
+	w.grid_size_in_meters = grid_size_in_meters;
 
 	VkBuffer sb;
 	VkDeviceMemory sb_mem;
@@ -2858,11 +2857,12 @@ water resource_manager::build<RESOURCE_TYPE_WATER>(const std::string& filename, 
 			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-			b.image = i == 2 ? w.tex.image : w.noise.image;
+			b.image = i >= 2 ? w.tex.image : w.noise.image;
 			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			b.subresourceRange.baseArrayLayer = 0;
 			b.subresourceRange.baseMipLevel = 0;
-			b.subresourceRange.layerCount = i == 2 ? 2 : 1;			
+			b.subresourceRange.layerCount = i >= 2 ? 2 : 1;	
+			b.subresourceRange.levelCount = 1;
 		}
 
 		barriers[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -2876,9 +2876,10 @@ water resource_manager::build<RESOURCE_TYPE_WATER>(const std::string& filename, 
 		barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 		barriers[2].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		barriers[2].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		barriers[2].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		barriers[2].srcAccessMask = 0;
-		barriers[2].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		barriers[2].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
 
 		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
 			0, 0, nullptr, 0, nullptr, 1, barriers.data());
@@ -2895,6 +2896,12 @@ water resource_manager::build<RESOURCE_TYPE_WATER>(const std::string& filename, 
 		bic.imageSubresource.mipLevel = 0;
 
 		vkCmdCopyBufferToImage(cb, sb, w.noise.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &bic);
+
+		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			0, 0, nullptr, 0, nullptr, 1, barriers.data()+1);
+
+		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+			VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, barriers.data()+2);
 
 		end_single_time_command_buffer(m_base.device, m_cp_build, m_base.graphics_queue, cb);
 	}

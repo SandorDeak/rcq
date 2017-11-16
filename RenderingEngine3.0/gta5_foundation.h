@@ -1154,9 +1154,9 @@ namespace rcq
 					r.cullMode = VK_CULL_MODE_BACK_BIT;
 					r.depthBiasEnable = VK_FALSE;
 					r.depthClampEnable = VK_FALSE;
-					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+					r.frontFace = VK_FRONT_FACE_CLOCKWISE;
 					r.lineWidth = 1.f;
-					r.polygonMode = VK_POLYGON_MODE_LINE;
+					r.polygonMode = VK_POLYGON_MODE_FILL;
 					r.rasterizerDiscardEnable = VK_FALSE;
 					return r;
 				}
@@ -1167,7 +1167,7 @@ namespace rcq
 					VkPipelineDepthStencilStateCreateInfo d = {};
 					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 					d.depthBoundsTestEnable = VK_FALSE;
-					d.depthCompareOp = VK_COMPARE_OP_EQUAL;
+					d.depthCompareOp = VK_COMPARE_OP_LESS;
 					d.depthTestEnable = VK_TRUE;
 					d.depthWriteEnable = VK_FALSE;
 					d.stencilTestEnable = VK_FALSE;
@@ -1304,6 +1304,18 @@ namespace rcq
 						return dsl;
 					}
 					constexpr auto create_info = create_create_info();
+
+					constexpr auto create_push_constants()
+					{
+						std::array<VkPushConstantRange, 1> p = {};
+						p[0].offset = 0;
+						p[0].size = sizeof(glm::ivec2);
+						p[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+						return p;
+					}
+					constexpr auto push_constants = create_push_constants();
+
 				}//namespace dsl
 			}//namespace pipeline water drawer test
 		}// namespace subpass_sun_drawer

@@ -32,7 +32,7 @@ void main()
 	
 	gl_Position=data.proj_x_view*pos;
 	
-	vec3 n=normalize(vec3(grad.x, 1.f, grad.y));
+	vec3 n=normalize(vec3(-grad.x, 1.f, -grad.y));
 	
-	color_out=vec3(max(0.f, dot(n, -data.light_dir)));
+	color_out=vec3(gl_TessCoord.xy, 0.f);//vec3(max(0.f, dot(n, -data.light_dir)));
 }

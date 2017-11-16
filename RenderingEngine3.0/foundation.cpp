@@ -2,6 +2,7 @@
 #include <fstream>
 
 const uint32_t rcq::OMNI_SHADOW_MAP_SIZE=128;
+const uint32_t rcq::GRID_SIZE = 1024;
 
 
 std::vector<char> rcq::read_file(const std::string_view& filename)
@@ -48,12 +49,18 @@ void rcq::create_shaders(VkDevice device, const std::vector<std::string_view> & 
 	}
 }
 
-VkPipelineLayout rcq::create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls, const VkAllocationCallbacks* alloc)
+VkPipelineLayout rcq::create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls, 
+	const std::vector<VkPushConstantRange>& push_constants, const VkAllocationCallbacks* alloc)
 {
 	VkPipelineLayoutCreateInfo l = {};
 	l.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	l.pSetLayouts = dsls.data();
 	l.setLayoutCount = dsls.size();
+	if (!push_constants.empty())
+	{
+		l.pPushConstantRanges = push_constants.data();
+		l.pushConstantRangeCount = push_constants.size();
+	}
 
 	VkPipelineLayout layout;
 	if (vkCreatePipelineLayout(device, &l, alloc, &layout) != VK_SUCCESS)

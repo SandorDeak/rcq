@@ -181,5 +181,10 @@ void rcq::core::build_renderables_impl(const std::vector<build_renderable_info>&
 		{
 			gta5_pass::instance()->set_terrain(&res);
 		}
+
+		if constexpr (rend_type == RENDERABLE_TYPE_WATER)
+		{
+			gta5_pass::instance()->set_water(&res);
+		}
 	}
 }

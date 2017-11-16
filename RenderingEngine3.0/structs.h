@@ -46,6 +46,12 @@ enum TERRAIN : rcq::unique_id
 	TERRAIN_COUNT
 };
 
+enum WATER : rcq::unique_id
+{
+	WATER_TRY,
+	WATER_COUNT
+};
+
 enum ENTITIY : rcq::unique_id
 {
 	ENTITY_FLOOR,
@@ -59,6 +65,7 @@ enum ENTITIY : rcq::unique_id
 	ENTITY_GOLD_BUDDHA,
 	ENTITY_RUSTED_IRON_SPHERE,
 	ENTITY_SCUFFED_ALUMINIUM_SPHERE,
+	ENTITY_WATER,
 	ENTITY_COUNT
 };
 

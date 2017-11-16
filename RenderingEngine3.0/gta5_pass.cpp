@@ -31,8 +31,9 @@ gta5_pass::~gta5_pass()
 {
 	wait_for_finish();
 
+	vkDestroyEvent(m_base.device, m_water_tex_ready_e, m_alloc);
 	vkDestroyFence(m_base.device, m_render_finished_f, m_alloc);
-	vkDestroyFence(m_base.device, m_terrain_tile_request_finished_f, m_alloc);
+	vkDestroyFence(m_base.device, m_compute_finished_f, m_alloc);
 	vkDestroySemaphore(m_base.device, m_render_finished_s, m_alloc);
 	vkDestroySemaphore(m_base.device, m_image_available_s, m_alloc);
 	for (auto s : m_present_ready_ss)
@@ -280,7 +281,7 @@ void gta5_pass::create_compute_pipelines()
 	m_cps[CP_WATER_FFT].create_layout(m_base.device,
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_WATER_COMPUTE)
-	}, m_alloc);
+	}, m_alloc, { {VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(glm::ivec2)} });
 
 	for (uint32_t i = 0; i < CP_COUNT; ++i)
 		create_infos[i].layout = m_cps[i].pl;
@@ -1556,6 +1557,44 @@ void gta5_pass::update_descriptor_sets()
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
 
+	//water drawer
+	{
+
+		VkDescriptorBufferInfo data = {};
+		data.buffer = m_res_data.buffer;
+		data.offset = m_res_data.offsets[RES_DATA_WATER_DRAWER_DATA];
+		data.range = sizeof(water_drawer_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_WATER_DRAWER].ds;
+		w[0].pBufferInfo = &data;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//water compute
+	{
+
+		VkDescriptorBufferInfo data = {};
+		data.buffer = m_res_data.buffer;
+		data.offset = m_res_data.offsets[RES_DATA_WATER_COMPUTE_DATA];
+		data.range = sizeof(water_compute_data);
+
+		w.resize(1);
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_cps[CP_WATER_FFT].ds;
+		w[0].pBufferInfo = &data;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
 	//postprocessing
 	{
 		VkDescriptorImageInfo preimage = {};
@@ -1642,8 +1681,14 @@ void gta5_pass::create_sync_objects()
 	f.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	f.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 	if (vkCreateFence(m_base.device, &f, m_alloc, &m_render_finished_f) != VK_SUCCESS ||
-		vkCreateFence(m_base.device, &f, m_alloc, &m_terrain_tile_request_finished_f)!=VK_SUCCESS)
+		vkCreateFence(m_base.device, &f, m_alloc, &m_compute_finished_f) != VK_SUCCESS)
 		throw std::runtime_error("failed to create fence!");
+
+	VkEventCreateInfo e = {};
+	e.sType = VK_STRUCTURE_TYPE_EVENT_CREATE_INFO;
+	
+	if (vkCreateEvent(m_base.device, &e, m_alloc, &m_water_tex_ready_e) != VK_SUCCESS)
+		throw std::runtime_error("failed to create event!");
 
 }
 
@@ -1816,7 +1861,7 @@ void gta5_pass::allocate_command_buffers()
 			throw std::runtime_error("failed to allocate command buffer!");
 	}
 		
-	//terrain compute cb
+	//compute cbs
 	{
 		VkCommandBufferAllocateInfo alloc = {};
 		alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -1825,6 +1870,9 @@ void gta5_pass::allocate_command_buffers()
 		alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 
 		if (vkAllocateCommandBuffers(m_base.device, &alloc, &m_terrain_request_cb) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate command buffer!");
+
+		if (vkAllocateCommandBuffers(m_base.device, &alloc, &m_water_fft_cb) != VK_SUCCESS)
 			throw std::runtime_error("failed to allocate command buffer!");
 	}
 
@@ -2031,23 +2079,25 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 		}
 	}
 
-	//manage terrain tile requests
-	if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty())
-	{
-		m_terrain_manager.poll_results();
-		vkWaitForFences(m_base.device, 1, &m_terrain_tile_request_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
-		vkResetFences(m_base.device, 1, &m_terrain_tile_request_finished_f);
-		m_terrain_manager.poll_requests();
-
-		VkSubmitInfo submit = {};
-		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit.commandBufferCount = 1;
-		submit.pCommandBuffers = &m_terrain_request_cb;
-		vkQueueSubmit(m_base.compute_queue, 1, &submit, m_terrain_tile_request_finished_f);
-	}
-
 	vkWaitForFences(m_base.device, 1, &m_render_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
 	vkResetFences(m_base.device, 1, &m_render_finished_f);
+	vkResetEvent(m_base.device, m_water_tex_ready_e);
+
+	//manage terrain request
+	if (!m_renderables[RENDERABLE_TYPE_TERRAIN].empty() && !m_renderables[RENDERABLE_TYPE_WATER].empty())
+	{
+		m_terrain_manager.poll_results();
+		vkWaitForFences(m_base.device, 1, &m_compute_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+		vkResetFences(m_base.device, 1, &m_compute_finished_f);
+		m_terrain_manager.poll_requests();
+
+		std::array<VkCommandBuffer, 2 > cbs = { m_terrain_request_cb, m_water_fft_cb };
+		VkSubmitInfo submit = {};
+		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit.commandBufferCount = cbs.size();
+		submit.pCommandBuffers = cbs.data();
+		vkQueueSubmit(m_base.compute_queue, 1, &submit, m_compute_finished_f);
+	}
 
 	//record primary cb
 	{
@@ -2378,6 +2428,19 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 				vkCmdDraw(cb, 18, 1, 0, 0);
 			}
 
+			m_gps[GP_WATER_DRAWER].bind(cb);
+
+			vkCmdWaitEvents(cb, 1, &m_water_tex_ready_e, VK_PIPELINE_STAGE_HOST_BIT,
+				VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
+
+			if (!m_renderables[RENDERABLE_TYPE_WATER].empty())
+			{
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_WATER_DRAWER].pl,
+					1, 1, &m_water->ds, 0, nullptr);
+				vkCmdDraw(cb, m_water_tiles_count.x*4, m_water_tiles_count.y, 0, 0);
+				//vkCmdDraw(cb, 100, 100, 0, 0);
+			}
+
 			vkCmdEndRenderPass(cb);
 		}
 
@@ -2440,6 +2503,9 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			throw std::runtime_error("failed to submit command buffers!");
 
 	}
+
+	vkWaitForFences(m_base.device, 1, &m_compute_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+	vkSetEvent(m_base.device, m_water_tex_ready_e);
 
 	//present swap chain image
 	{
@@ -2554,6 +2620,29 @@ void gta5_pass::process_settings(const render_settings & settings)
 		data->far = settings.far;
 		data->near = settings.near;
 		data->view_pos = settings.pos;
+	}
+
+	//water drawer data
+	{
+		auto data = m_res_data.get<water_drawer_data>();
+		data->proj_x_view = settings.proj*settings.view;
+		data->half_resolution.x = static_cast<float>(m_base.swap_chain_image_extent.width) / 2.f;
+		data->half_resolution.y = static_cast<float>(m_base.swap_chain_image_extent.height) / 2.f;
+		data->light_dir = settings.light_dir;
+		data->view_pos = settings.pos;
+		data->tile_size_in_meter = m_water->grid_size_in_meters;
+		data->tile_offset = (glm::floor(glm::vec2(settings.pos.x - settings.far, settings.pos.z - settings.far)
+			/ m_water->grid_size_in_meters)+glm::vec2(0.5f))*
+			m_water->grid_size_in_meters;
+		m_water_tiles_count = static_cast<glm::uvec2>(glm::ceil(glm::vec2(2.f*settings.far) / m_water->grid_size_in_meters));
+	}
+
+	//water compute data
+	{
+		auto data = m_res_data.get<water_compute_data>();
+		data->one_over_wind_speed_to_the_4 = 1.f / powf(glm::length(settings.wind), 4.f);
+		data->wind_dir = glm::normalize(settings.wind);
+		data->time = settings.time;
 	}
 
 }
@@ -2672,6 +2761,101 @@ void gta5_pass::set_terrain(terrain* t)
 void gta5_pass::delete_terrain()
 {
 	m_terrain_manager.destroy();
+}
+
+void gta5_pass::set_water(water* w)
+{
+	m_water = w;
+
+	//record water fft cb
+	auto cb = m_water_fft_cb;
+
+	VkCommandBufferBeginInfo b = {};
+	b.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	
+	if (vkBeginCommandBuffer(cb, &b) != VK_SUCCESS)
+		throw std::runtime_error("failed to begin command buffer!");
+
+	//acquire barrier
+	{
+		VkImageMemoryBarrier b = {};
+		b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		b.image = m_water->tex.image;
+		b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		b.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		b.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 2;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+
+		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT,
+			VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &b);
+	}
+
+	m_cps[CP_WATER_FFT].bind(cb, VK_PIPELINE_BIND_POINT_COMPUTE);
+	vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, m_cps[CP_WATER_FFT].pl,
+		1, 1, &m_water->generator_ds, 0, nullptr);
+	
+	glm::ivec2 fft_axis(1, 0);
+	vkCmdPushConstants(cb, m_cps[CP_WATER_FFT].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(glm::ivec2), &fft_axis);
+	vkCmdDispatch(cb, 1, GRID_SIZE, 1);
+
+	//memory barrier
+	{
+		VkImageMemoryBarrier b = {};
+		b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		b.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT | VK_ACCESS_SHADER_READ_BIT;
+		b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+		b.image = m_water->tex.image;
+		b.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.layerCount = 2;
+		b.subresourceRange.levelCount = 1;
+
+		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+			0, 0, nullptr, 0, nullptr, 1, &b);
+	}	
+
+	fft_axis = { 0, 1 };
+	vkCmdPushConstants(cb, m_cps[CP_WATER_FFT].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(glm::ivec2), &fft_axis);
+	vkCmdDispatch(cb, 1, GRID_SIZE, 1);
+
+	//release barrier
+	{
+		VkImageMemoryBarrier b = {};
+		b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		b.image = m_water->tex.image;
+		b.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		b.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		b.subresourceRange.baseArrayLayer = 0;
+		b.subresourceRange.layerCount = 2;
+		b.subresourceRange.baseMipLevel = 0;
+		b.subresourceRange.levelCount = 1;
+
+		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT,
+			0, 0, nullptr, 0, nullptr, 1, &b);
+	}
+
+	if (vkEndCommandBuffer(cb) != VK_SUCCESS)
+		throw std::runtime_error("failed to end command buffer!");
+}
+
+void gta5_pass::delete_water()
+{
+
 }
 
 

@@ -6,9 +6,10 @@ layout(vertices=4) out;
 layout(set=0, binding=0) uniform water_drawer_data
 {
 	mat4 proj_x_view;
+	vec3 view_pos;
+	vec3 light_dir;
 	vec2 tile_offset;
 	vec2 tile_size_in_meter;
-	vec3 view_pos;
 	vec2 half_resolution;
 } data;
 
@@ -38,13 +39,19 @@ void main()
 		
 	}*/
 	
-	float dist=screen_space_dist(gl_in[gl_InvocationID].gl_Position, gl_in[(gl_InvocationID+1) & 3].gl_Position);
-	gl_TessLevelOuter[gl_InvocationID]=dist/16.f;
 	
-	/*barrier();
+	
+	float dist=screen_space_dist(gl_in[gl_InvocationID].gl_Position, gl_in[(gl_InvocationID+1) & 3].gl_Position);
+	gl_TessLevelOuter[gl_InvocationID]=1024.f;//dist/16.f;
+	outer_tess[gl_InvocationID]=1024.f;//dist/16.f;
+	gl_out[gl_InvocationID].gl_Position=gl_in[gl_InvocationID].gl_Position;
+	
+	barrier();
 	
 	if (gl_InvocationID==0 || gl_InvocationID==1)
 	{
 		gl_TessLevelInner[gl_InvocationID]=max(outer_tess[gl_InvocationID], outer_tess[gl_InvocationID+2]);
-	}*/
+	}
+
+	
 }

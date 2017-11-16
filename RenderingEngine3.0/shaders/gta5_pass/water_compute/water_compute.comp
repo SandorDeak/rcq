@@ -46,7 +46,11 @@ vec4 complex_scale_vec2_mult(vec2 a, vec4 b)
 
 ivec2 calc_index(ivec2 native_index)
 {
-	return push_c.fft_axis*native_index.x+(ivec2(1)-push_c.fft_axis)*native_index.y;
+	//return push_c.fft_axis*native_index.x+(ivec2(1)-push_c.fft_axis)*native_index.y;
+	if (push_c.fft_axis.x==1)
+		return native_index;
+	else
+		return native_index.yx;
 }
 
 void main()
@@ -64,11 +68,11 @@ void main()
 		vec2 k_norm=k/k_length;
 		float one_over_k_length_square=1.f/(k_length*k_length);
 		float one_over_L_square=data.one_over_wind_speed_to_the_4*G_square;
-		float sqrt_P_k=params.sqrtA*(exp(-1.f*one_over_k_length_square*one_over_L_square))*(abs(dot(data.wind_dir, k_norm)));
+		float sqrt_P_k=params.sqrtA*(exp(-0.5f*one_over_k_length_square*one_over_L_square))*one_over_k_length_square*(abs(dot(data.wind_dir, k_norm)));
 		vec2 h_0_k=sqrt_P_k*noise_k;
 		vec2 h_0_minusk=sqrt_P_k*noise_minusk;
 		
-		float omega_k=sqrt(floor(G*k_length/params.base_frequence));
+		float omega_k=floor(sqrt(G*k_length)/params.base_frequence)*params.base_frequence;
 		float phi=omega_k*data.time;
 		vec2 time_term=vec2(cos(phi), sin(phi));
 		

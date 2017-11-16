@@ -324,10 +324,13 @@ namespace rcq
 
 	//engine related
 
+	extern const uint32_t GRID_SIZE;
+
+
 	std::vector<char> read_file(const std::string_view& filename);
 
 	VkShaderModule create_shader_module(VkDevice device, const std::vector<char>& code);
-	VkPipelineLayout create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls, const VkAllocationCallbacks* alloc);
+	VkPipelineLayout create_layout(VkDevice device, const std::vector<VkDescriptorSetLayout>& dsls, const std::vector<VkPushConstantRange>& push_constants, const VkAllocationCallbacks* alloc);
 	void create_shaders(VkDevice device, const std::vector<std::string_view>& files, const std::vector<VkShaderStageFlagBits>& stages,
 		VkPipelineShaderStageCreateInfo* shaders);
 
@@ -633,6 +636,8 @@ namespace rcq
 		VkBuffer fft_params;
 		VkDeviceMemory fft_params_mem;
 
+		glm::vec2 grid_size_in_meters;
+
 		pool_id pool_index;
 
 		struct fft_params_data
@@ -675,6 +680,9 @@ namespace rcq
 		glm::vec3 light_dir;
 		glm::vec3 irradiance;
 		glm::vec3 ambient_irradiance;
+
+		glm::vec2 wind;
+		float time;
 	};
 
 	struct light_omni
