@@ -22,7 +22,7 @@ layout(location=0) patch in float outer_tess[4];
 void main()
 {
 	vec4 mid1 = mix(gl_in[0].gl_Position, gl_in[1].gl_Position, gl_TessCoord.x);
-	vec4 mid2 = mix(gl_in[2].gl_Position, gl_in[3].gl_Position, gl_TessCoord.x);
+	vec4 mid2 = mix(gl_in[3].gl_Position, gl_in[2].gl_Position, gl_TessCoord.x);
 	vec4 pos = mix(mid1, mid2, gl_TessCoord.y);
 	
 	float height=texture(water_tex, vec3(gl_TessCoord.xy, 0.f)).x;
@@ -34,5 +34,6 @@ void main()
 	
 	vec3 n=normalize(vec3(-grad.x, 1.f, -grad.y));
 	
-	color_out=vec3(gl_TessCoord.xy, 0.f);//vec3(max(0.f, dot(n, -data.light_dir)));
+	
+	color_out=vec3(max(0.f, dot(n, -data.light_dir)));
 }

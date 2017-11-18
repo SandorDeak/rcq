@@ -41,16 +41,16 @@ void main()
 	
 	
 	
-	float dist=screen_space_dist(gl_in[gl_InvocationID].gl_Position, gl_in[(gl_InvocationID+1) & 3].gl_Position);
-	gl_TessLevelOuter[gl_InvocationID]=1024.f;//dist/16.f;
-	outer_tess[gl_InvocationID]=1024.f;//dist/16.f;
+	float dist=screen_space_dist(gl_in[gl_InvocationID].gl_Position, gl_in[(gl_InvocationID+3) & 3].gl_Position);
+	gl_TessLevelOuter[gl_InvocationID]=max(1.f, dist/16.f);
+	outer_tess[gl_InvocationID]=max(1.f, dist/16.f);
 	gl_out[gl_InvocationID].gl_Position=gl_in[gl_InvocationID].gl_Position;
 	
 	barrier();
 	
 	if (gl_InvocationID==0 || gl_InvocationID==1)
 	{
-		gl_TessLevelInner[gl_InvocationID]=max(outer_tess[gl_InvocationID], outer_tess[gl_InvocationID+2]);
+		gl_TessLevelInner[(gl_InvocationID+1) & 1]=max(outer_tess[gl_InvocationID], outer_tess[gl_InvocationID+2]);
 	}
 
 	

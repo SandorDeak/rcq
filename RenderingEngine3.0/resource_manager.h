@@ -47,7 +47,7 @@ namespace rcq
 
 		static resource_manager* m_instance;
 
-		const base_info m_base;
+		const base_info& m_base;
 
 		VkCommandPool m_cp_build;
 		VkCommandPool m_cp_update;

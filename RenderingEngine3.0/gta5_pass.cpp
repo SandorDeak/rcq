@@ -281,7 +281,7 @@ void gta5_pass::create_compute_pipelines()
 	m_cps[CP_WATER_FFT].create_layout(m_base.device,
 	{
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_WATER_COMPUTE)
-	}, m_alloc, { {VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(glm::ivec2)} });
+	}, m_alloc, { {VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t)} });
 
 	for (uint32_t i = 0; i < CP_COUNT; ++i)
 		create_infos[i].layout = m_cps[i].pl;
@@ -2096,6 +2096,8 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submit.commandBufferCount = cbs.size();
 		submit.pCommandBuffers = cbs.data();
+
+		std::lock_guard<std::mutex> lock(m_base.compute_queue_mutex);
 		vkQueueSubmit(m_base.compute_queue, 1, &submit, m_compute_finished_f);
 	}
 
@@ -2430,8 +2432,8 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			m_gps[GP_WATER_DRAWER].bind(cb);
 
-			vkCmdWaitEvents(cb, 1, &m_water_tex_ready_e, VK_PIPELINE_STAGE_HOST_BIT,
-				VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
+			/*vkCmdWaitEvents(cb, 1, &m_water_tex_ready_e, VK_PIPELINE_STAGE_HOST_BIT,
+				VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT, 0, nullptr, 0, nullptr, 0, nullptr);*/
 
 			if (!m_renderables[RENDERABLE_TYPE_WATER].empty())
 			{
@@ -2499,13 +2501,14 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 		submit[1].pSignalSemaphores = &m_present_ready_ss[image_index];
 		submit[1].signalSemaphoreCount = 1;
 		
+		vkWaitForFences(m_base.device, 1, &m_compute_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+		//vkSetEvent(m_base.device, m_water_tex_ready_e);
+		
+		std::lock_guard<std::mutex> lock(m_base.graphics_queue_mutex);
 		if (vkQueueSubmit(m_base.graphics_queue, 2, submit.data(), m_render_finished_f) != VK_SUCCESS)
 			throw std::runtime_error("failed to submit command buffers!");
 
 	}
-
-	vkWaitForFences(m_base.device, 1, &m_compute_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
-	vkSetEvent(m_base.device, m_water_tex_ready_e);
 
 	//present swap chain image
 	{
@@ -2801,9 +2804,9 @@ void gta5_pass::set_water(water* w)
 	vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_COMPUTE, m_cps[CP_WATER_FFT].pl,
 		1, 1, &m_water->generator_ds, 0, nullptr);
 	
-	glm::ivec2 fft_axis(1, 0);
-	vkCmdPushConstants(cb, m_cps[CP_WATER_FFT].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(glm::ivec2), &fft_axis);
-	vkCmdDispatch(cb, 1, GRID_SIZE, 1);
+	uint32_t fft_axis = 0;
+	vkCmdPushConstants(cb, m_cps[CP_WATER_FFT].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &fft_axis);
+	vkCmdDispatch(cb, 1, 1024, 1);
 
 	//memory barrier
 	{
@@ -2824,9 +2827,9 @@ void gta5_pass::set_water(water* w)
 			0, 0, nullptr, 0, nullptr, 1, &b);
 	}	
 
-	fft_axis = { 0, 1 };
-	vkCmdPushConstants(cb, m_cps[CP_WATER_FFT].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(glm::ivec2), &fft_axis);
-	vkCmdDispatch(cb, 1, GRID_SIZE, 1);
+	fft_axis = 1;
+	vkCmdPushConstants(cb, m_cps[CP_WATER_FFT].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &fft_axis);
+	vkCmdDispatch(cb, 1, 1024, 1);
 
 	//release barrier
 	{
@@ -3014,7 +3017,10 @@ void gta5_pass::terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_i
 	bind_info.signalSemaphoreCount = 1;
 	bind_info.pSignalSemaphores = &m_binding_finished_s;
 
-	vkQueueBindSparse(m_base.graphics_queue, 1, &bind_info, VK_NULL_HANDLE);
+	{
+		std::lock_guard<std::mutex> lock(m_base.graphics_queue_mutex);
+		vkQueueBindSparse(m_base.graphics_queue, 1, &bind_info, VK_NULL_HANDLE);
+	}
 
 	//copy from staging buffers
 	std::vector<VkBufferImageCopy> regions(page_count);
@@ -3059,8 +3065,11 @@ void gta5_pass::terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_i
 	submit.waitSemaphoreCount = 1;
 	submit.pWaitDstStageMask = &wait_stage;
 	submit.pWaitSemaphores = &m_binding_finished_s;
-	if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, m_copy_finished_f) != VK_SUCCESS)
-		throw std::runtime_error("failed to submit command buffer!");
+	{
+		std::lock_guard<std::mutex> lock(m_base.graphics_queue_mutex);
+		if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, m_copy_finished_f) != VK_SUCCESS)
+			throw std::runtime_error("failed to submit command buffer!");
+	}
 	vkWaitForFences(m_base.device, 1, &m_copy_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
 	vkResetFences(m_base.device, 1, &m_copy_finished_f);
 }

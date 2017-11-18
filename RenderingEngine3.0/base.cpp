@@ -20,6 +20,7 @@ base::base(const base_create_info& info) : m_info(info), m_alloc("base")
 	create_logical_device();
 	create_swap_chain();
 	create_swap_cain_image_views();
+	fill_base_info();
 }
 
 
@@ -502,20 +503,17 @@ void base::create_swap_cain_image_views()
 	}
 }
 
-base_info base::get_info()
+void base::fill_base_info()
 {
-	base_info info = {};
-	info.device = m_device;
-	info.graphics_queue = m_graphics_queue;
-	info.physical_device = m_physical_device;
-	info.present_queue = m_present_queue;
-	info.compute_queue = m_compute_queue;
-	info.queue_families = m_queue_family_indices;
-	info.swap_chain = m_swap_chain;
-	info.swap_chain_image_extent = m_swap_chain_extent;
-	info.swap_chain_image_format = m_swap_chin_image_format;
-	info.swap_chain_image_views = m_swap_chain_image_views;
-	info.window = m_window;
-
-	return info;
+	m_base.device = m_device;
+	m_base.graphics_queue = m_graphics_queue;
+	m_base.physical_device = m_physical_device;
+	m_base.present_queue = m_present_queue;
+	m_base.compute_queue = m_compute_queue;
+	m_base.queue_families = m_queue_family_indices;
+	m_base.swap_chain = m_swap_chain;
+	m_base.swap_chain_image_extent = m_swap_chain_extent;
+	m_base.swap_chain_image_format = m_swap_chin_image_format;
+	m_base.swap_chain_image_views = m_swap_chain_image_views;
+	m_base.window = m_window;
 }

@@ -16,7 +16,7 @@ namespace rcq
 		static void destroy();
 		static engine* instance() { return m_instance; }
 
-		GLFWwindow* get_window() { return m_base.window; }
+		GLFWwindow* get_window() { return m_window; }
 		glm::vec2 get_window_size() { return m_window_size; }
 
 		template<RESOURCE_TYPE type, typename... Ts>
@@ -78,6 +78,7 @@ namespace rcq
 		std::unique_ptr<build_package> m_build_p;
 		std::unique_ptr<destroy_package> m_destroy_p;
 
-		base_info m_base;
+		//base_info m_base;
+		GLFWwindow* m_window;
 	};
 }

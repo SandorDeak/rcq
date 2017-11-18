@@ -25,7 +25,7 @@ namespace rcq
 
 		static device_memory* m_instance;
 
-		const base_info m_base;
+		const base_info& m_base;
 
 		static const size_t BLOCK_SIZE[USAGE_COUNT];
 		size_t m_cell_size[USAGE_COUNT];

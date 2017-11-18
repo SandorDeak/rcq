@@ -11,7 +11,7 @@ layout(local_size_x=GRID_SIZE, local_size_y=1, local_size_z=1) in;
 
 layout(push_constant) uniform push_constants
 {
-	ivec2 fft_axis;
+	uint fft_axis;
 } push_c;
 
 layout(set=0, binding=0) uniform water_compute_data
@@ -47,47 +47,77 @@ vec4 complex_scale_vec2_mult(vec2 a, vec4 b)
 ivec2 calc_index(ivec2 native_index)
 {
 	//return push_c.fft_axis*native_index.x+(ivec2(1)-push_c.fft_axis)*native_index.y;
-	if (push_c.fft_axis.x==1)
+	if (push_c.fft_axis==0)
 		return native_index;
 	else
 		return native_index.yx;
 }
 
+shared vec2 height[GRID_SIZE];
+shared vec4 grad[GRID_SIZE];
+
 void main()
 {	
-	ivec2 native_tex_index=ivec2(gl_GlobalInvocationID.xy);
+	ivec2 native_tex_index=ivec2(gl_LocalInvocationID.x, gl_WorkGroupID.y);
 	ivec2 tex_index=calc_index(native_tex_index);
 	
-	if (push_c.fft_axis.x==1)
+	if (push_c.fft_axis==0)
 	{
-		vec2 noise_k=imageLoad(noise_tex, tex_index).xy;
-		vec2 noise_minusk=imageLoad(noise_tex, ivec2(GRID_SIZE)-tex_index).xy;
-		vec2 k=params.two_pi_per_L*(vec2(gl_GlobalInvocationID.xy)+0.5f-vec2(GRID_SIZE>>1));
-		float k_length=length(k);
+		vec2 noise_k=imageLoad(noise_tex, native_tex_index).xy;
+		vec2 noise_minusk=imageLoad(noise_tex, (ivec2(GRID_SIZE)-native_tex_index) & ivec2(GRID_SIZE-1)).xy;
+		vec2 k_vec=params.two_pi_per_L*(vec2(gl_LocalInvocationID.x, gl_WorkGroupID.y)-vec2(GRID_SIZE>>1));
+		float k_length=length(k_vec);
 		
-		vec2 k_norm=k/k_length;
-		float one_over_k_length_square=1.f/(k_length*k_length);
-		float one_over_L_square=data.one_over_wind_speed_to_the_4*G_square;
-		float sqrt_P_k=params.sqrtA*(exp(-0.5f*one_over_k_length_square*one_over_L_square))*one_over_k_length_square*(abs(dot(data.wind_dir, k_norm)));
-		vec2 h_0_k=sqrt_P_k*noise_k;
-		vec2 h_0_minusk=sqrt_P_k*noise_minusk;
+		vec2 h_k_t=vec2(0.f);
 		
-		float omega_k=floor(sqrt(G*k_length)/params.base_frequence)*params.base_frequence;
-		float phi=omega_k*data.time;
-		vec2 time_term=vec2(cos(phi), sin(phi));
+		if (gl_LocalInvocationID.x!=(GRID_SIZE>>1) || gl_WorkGroupID.y!=(GRID_SIZE>>1))
+		{
+			vec2 k_norm=k_vec/k_length;
+			float one_over_k_length_square=1.f/(k_length*k_length);
+			float one_over_L_square=data.one_over_wind_speed_to_the_4*G_square;
+			float sqrt_P_k=params.sqrtA*(exp(-0.5f*one_over_k_length_square*one_over_L_square))*one_over_k_length_square*(abs(dot(data.wind_dir, k_norm)));
+			vec2 h_0_k=sqrt_P_k*noise_k;
+			vec2 h_0_minusk=sqrt_P_k*noise_minusk;
 		
-		vec2 h_k_t=complex_mult(h_0_k, time_term)+vec2(1.f, -1.f)*complex_mult(h_0_minusk, time_term);
+			float omega_k=floor(sqrt(G*k_length)/params.base_frequence)*params.base_frequence;
+			float phi=omega_k*data.time;
+			vec2 time_term=vec2(cos(phi), sin(phi));
+		
+			h_k_t=complex_mult(h_0_k, time_term)+vec2(1.f, -1.f)*complex_mult(h_0_minusk, time_term);
+		}
 	
-		imageStore(water_tex, ivec3(tex_index, 0), vec4(h_k_t, 0.f, 0.f));
-		imageStore(water_tex, ivec3(tex_index, 1), vec4(-k.x*h_k_t.y, k.x*h_k_t.x, -k.y*h_k_t.y, k.x*h_k_t.x));
+		//imageStore(water_tex, ivec3(tex_index, 0), vec4(h_k_t, 0.f, 0.f));
+		//imageStore(water_tex, ivec3(native_tex_index, 1), vec4(-k_vec.x*h_k_t.y, k_vec.x*h_k_t.x, -k_vec.y*h_k_t.y, k_vec.x*h_k_t.x));
+		height[gl_LocalInvocationID.x]=h_k_t;
+		
+		vec2 der=vec2(0.f);
+		if (native_tex_index.x<(GRID_SIZE>>1))
+			der.x=float(native_tex_index.x);
+		else if (native_tex_index.x>(GRID_SIZE>>1))
+			der.x=float(native_tex_index.x)-float(GRID_SIZE);
+		
+		if (native_tex_index.y<(GRID_SIZE>>1))
+			der.y=float(native_tex_index.y);
+		else if (native_tex_index.y>(GRID_SIZE>>1))
+			der.y=float(native_tex_index.y)-float(GRID_SIZE);		
+		der*=params.two_pi_per_L;
+		
+		grad[gl_LocalInvocationID.x]=complex_scale_vec2_mult(h_k_t, vec4(0.f, der.x, 0.f, der.y));
 		
 		
 	}
+	else
+	{
+		height[gl_LocalInvocationID.x]=imageLoad(water_tex, ivec3(native_tex_index.yx, 0)).xy;
+		grad[gl_LocalInvocationID.x]=imageLoad(water_tex, ivec3(native_tex_index.yx, 1));
+	}	
+	barrier();
 	
 	int size=GRID_SIZE>>1;
 	int comp=1;
 	
 	for(uint i=0; i<GRID_SIZE_LOG2; ++i)
+	
 	{
 		int k=native_tex_index.x/size;
 		int rem=native_tex_index.x%size;
@@ -95,20 +125,34 @@ void main()
 		vec2 mult=vec2(cos(angle), sin(angle));
 		k= k<comp ? k : k - comp;
 		
-		ivec4 sample_index=ivec4(
-			calc_index(ivec2(2*size*k+rem, native_tex_index.y)), 
-			calc_index(ivec2(2*size*k+rem+size, native_tex_index.y))
-		);
+		//vec2 height=imageLoad(water_tex, ivec3(sample_index.xy, 0)).xy+complex_mult(mult, imageLoad(water_tex, ivec3(sample_index.zw, 0)).xy);
+		vec2 h=height[2*size*k+rem]+complex_mult(mult, height[2*size*k+rem+size]);
 		
-		barrier();
-		vec2 height=imageLoad(water_tex, ivec3(sample_index.xy, 0)).xy+complex_mult(mult, imageLoad(water_tex, ivec3(sample_index.zw, 0)).xy);
-		vec4 grad=imageLoad(water_tex, ivec3(sample_index.xy, 1))+complex_scale_vec2_mult(mult, imageLoad(water_tex, ivec3(sample_index.zw, 1)));
-		barrier();
+		//vec4 grad=imageLoad(water_tex, ivec3(sample_index.xy, 1))+complex_scale_vec2_mult(mult, imageLoad(water_tex, ivec3(sample_index.zw, 1)));
+		vec4 gr=grad[2*size*k+rem]+complex_scale_vec2_mult(mult, grad[2*size*k+rem+size]);
 		
-		imageStore(water_tex, ivec3(tex_index, 0), vec4(height, 0.f, 0.f));
-		imageStore(water_tex, ivec3(tex_index, 1), grad);
+		barrier();	
+		//imageStore(water_tex, ivec3(tex_index, 0), vec4(height, 0.f, 0.f));
+		height[gl_LocalInvocationID.x]=h;
+		grad[gl_LocalInvocationID.x]=gr;
+		//imageStore(water_tex, ivec3(tex_index, 1), grad);
+		barrier();
 
 		size>>=1;
 		comp<<=1;
+	}
+	
+	if (push_c.fft_axis==0)
+	{
+		imageStore(water_tex, ivec3(native_tex_index, 0), vec4(height[gl_LocalInvocationID.x], 0.f, 0.f));
+		imageStore(water_tex, ivec3(native_tex_index, 1), grad[gl_LocalInvocationID.x]);
+	}
+	else
+	{
+		float correction=float(2*((native_tex_index.x+native_tex_index.y) & 1) -1);
+		imageStore(water_tex, ivec3(native_tex_index.yx, 0), vec4(height[gl_LocalInvocationID.x]*correction, 0.f, 0.f));
+		imageStore(water_tex, ivec3(native_tex_index.yx, 1), grad[gl_LocalInvocationID.x]*correction);
+		//imageStore(water_tex, ivec3(native_tex_index.yx, 0), vec4(sin(0.001f*native_tex_index.x)));
+		//imageStore(water_tex, ivec3(native_tex_index.yx, 1), vec4(0.f));
 	}
 }

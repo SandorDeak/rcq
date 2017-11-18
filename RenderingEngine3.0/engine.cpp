@@ -14,39 +14,42 @@ engine* engine::m_instance = nullptr;
 
 engine::engine()
 {
-	base_create_info base_info = {};
-	base_info.device_extensions=
+	base_create_info base_create = {};
+	base_create.device_extensions=
 	{
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	};
-	base_info.enable_validation_layers = true;
-	base_info.height = 768;
-	base_info.width = 1360;
-	base_info.instance_extensions=
+	base_create.enable_validation_layers = true;
+	base_create.height = 768;
+	base_create.width = 1360;
+	base_create.instance_extensions=
 	{
 		VK_EXT_DEBUG_REPORT_EXTENSION_NAME
 	};
-	base_info.validation_layers=
+	base_create.validation_layers=
 	{
 		"VK_LAYER_LUNARG_standard_validation"
 	};
-	base_info.window_name = "RCQ Engine";
-	base_info.device_features.samplerAnisotropy = VK_TRUE;
-	base_info.device_features.geometryShader = VK_TRUE;
-	base_info.device_features.tessellationShader = VK_TRUE;
-	base_info.device_features.depthBounds = VK_TRUE;
-	base_info.device_features.sparseBinding = VK_TRUE;
+	base_create.window_name = "RCQ Engine";
+	base_create.device_features.samplerAnisotropy = VK_TRUE;
+	base_create.device_features.geometryShader = VK_TRUE;
+	base_create.device_features.tessellationShader = VK_TRUE;
+	base_create.device_features.depthBounds = VK_TRUE;
+	base_create.device_features.sparseBinding = VK_TRUE;
 	//base_info.device_features.sparseResidencyImage2D = VK_TRUE;
 
-	base::init(base_info);
-	m_base = base::instance()->get_info();
-	m_window_size.x = static_cast<float>(m_base.swap_chain_image_extent.width);
-	m_window_size.y = static_cast<float>(m_base.swap_chain_image_extent.height);
+	base::init(base_create);
+	const base_info& b = base::instance()->get_info();
 
-	device_memory::init(m_base);
-	resource_manager::init(m_base);
+	
+	m_window_size.x = static_cast<float>(b.swap_chain_image_extent.width);
+	m_window_size.y = static_cast<float>(b.swap_chain_image_extent.height);
+	m_window = b.window;
+
+	device_memory::init(b);
+	resource_manager::init(b);
 	core::init();
-	gta5_pass::init(m_base, core::instance()->get_renderable_container());
+	gta5_pass::init(b, core::instance()->get_renderable_container());
 	/*basic_pass::init(m_base, core::instance()->get_renderable_container());
 	omni_light_shadow_pass::init(m_base, core::instance()->get_renderable_container());*/
 }

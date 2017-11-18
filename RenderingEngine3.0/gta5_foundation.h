@@ -1154,7 +1154,7 @@ namespace rcq
 					r.cullMode = VK_CULL_MODE_BACK_BIT;
 					r.depthBiasEnable = VK_FALSE;
 					r.depthClampEnable = VK_FALSE;
-					r.frontFace = VK_FRONT_FACE_CLOCKWISE;
+					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 					r.lineWidth = 1.f;
 					r.polygonMode = VK_POLYGON_MODE_FILL;
 					r.rasterizerDiscardEnable = VK_FALSE;

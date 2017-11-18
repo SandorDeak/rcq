@@ -30,6 +30,8 @@ private:
 	rcq::unique_id m_terrain;
 	skybox m_skybox;
 
+	float m_wave_period;
+
 	rcq::render_settings m_render_settings;
 
 	GLFWwindow* m_window;

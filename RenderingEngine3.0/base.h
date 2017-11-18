@@ -17,7 +17,7 @@ namespace rcq
 		static void destroy();
 		static base* instance() { return m_instance; }
 
-		base_info get_info();
+		const base_info& get_info() { return m_base; };
 	private:
 		base(const base_create_info& info);
 
@@ -37,6 +37,8 @@ namespace rcq
 		swap_chain_support_details query_swap_chain_support_details(VkPhysicalDevice device);
 		void create_logical_device();
 		void create_swap_chain();
+		void fill_base_info();
+
 		VkSurfaceFormatKHR choose_swap_surface_format(const std::vector<VkSurfaceFormatKHR>& formats);
 		VkPresentModeKHR choose_swap_present_mode(const std::vector<VkPresentModeKHR>& present_modes);
 		VkExtent2D choose_swap_extent(const VkSurfaceCapabilitiesKHR& capabilities);
@@ -80,6 +82,9 @@ namespace rcq
 		std::vector<VkImageView> m_swap_chain_image_views;
 		VkFormat m_swap_chin_image_format;
 		VkExtent2D m_swap_chain_extent;
+
+		base_info m_base;
+
 
 		//allocator
 		allocator m_alloc;

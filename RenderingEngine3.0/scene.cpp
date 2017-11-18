@@ -199,8 +199,9 @@ void scene::build()
 		glm::vec3(512.f, 10.f, 512.f), glm::uvec2(512, 512));
 
 	//water res
+	m_wave_period = 10000.f;
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_WATER>(WATER_TRY, "textures/water/w.wat",
-		glm::vec2(1024.f*0.04f), 2.f*PI*0.1f, 100.f);
+		glm::vec2(1024.f*0.04f), 2.f*PI/m_wave_period, 1e-4f);
 
 	//create transforms
 	transform tr;
@@ -421,7 +422,7 @@ void scene::build()
 	m_render_settings.pos = m_camera.pos;
 	m_render_settings.proj = m_camera.proj;
 	m_render_settings.view = m_camera.view;
-	m_render_settings.wind = { 10.f, 10.f };
+	m_render_settings.wind = { 31.f, 0.f};
 	m_render_settings.time = 0.f;
 
 
@@ -431,6 +432,7 @@ void scene::update(float dt)
 {
 	static float elapsed_time = 0.f;
 	elapsed_time += dt;
+
 
 	/*for (int i = 0; i < buddha_count; ++i)
 	{
@@ -501,7 +503,9 @@ void scene::update_settings(float dt)
 
 	m_render_settings.pos = m_camera.pos;
 	m_render_settings.view = m_camera.view;
-	m_render_settings.time += 0.1f*dt;
+	m_render_settings.time += dt;
+	while (m_render_settings.time > m_wave_period)
+		m_render_settings.time -= m_wave_period;
 
 	//light 
 	float theta = 0.f;

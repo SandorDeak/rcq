@@ -537,6 +537,9 @@ namespace rcq
 		VkQueue compute_queue;
 		GLFWwindow* window;
 		VkFormatProperties format_properties;
+
+		mutable std::mutex graphics_queue_mutex;
+		mutable std::mutex compute_queue_mutex;
 	};
 
 	struct texture
@@ -642,7 +645,7 @@ namespace rcq
 
 		struct fft_params_data
 		{
-			glm::vec2 two_pi_per_L; //l=grid side lengths in meter
+			glm::vec2 two_pi_per_L; //l=grid side length in meters
 			float sqrtA;
 			float base_frequency;
 		};

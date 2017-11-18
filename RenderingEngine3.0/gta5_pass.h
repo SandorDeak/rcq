@@ -344,7 +344,7 @@ namespace rcq
 		gta5_pass(const base_info& info, const renderable_container& rends);
 
 		static gta5_pass* m_instance;
-		const base_info m_base;
+		const base_info& m_base;
 
 		void create_render_passes();
 		void create_dsls_and_allocate_dss();
