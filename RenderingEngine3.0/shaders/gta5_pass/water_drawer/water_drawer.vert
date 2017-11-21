@@ -4,8 +4,12 @@
 layout(set=0, binding=0) uniform water_drawer_data
 {
 	mat4 proj_x_view;
+	mat4 mirrored_proj_x_view;
 	vec3 view_pos;
+	float height_bias;
 	vec3 light_dir;
+	vec3 irradiance;
+	vec3 ambient_irradiance;
 	vec2 tile_offset;
 	vec2 tile_size_in_meter;
 	vec2 half_resolution;

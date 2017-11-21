@@ -713,6 +713,91 @@ void gta5_pass::send_memory_requirements()
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	}
 
+	//prev_image
+	{
+		VkImageCreateInfo image = {};
+		image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		image.arrayLayers = 1;
+		image.extent.width = m_base.swap_chain_image_extent.width;
+		image.extent.height = m_base.swap_chain_image_extent.height;
+		image.extent.depth = 1;
+		image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		image.imageType = VK_IMAGE_TYPE_2D;
+		image.initialLayout = VK_IMAGE_LAYOUT_PREINITIALIZED;
+		image.mipLevels = 1;
+		image.samples = VK_SAMPLE_COUNT_1_BIT;
+		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		image.tiling = VK_IMAGE_TILING_OPTIMAL;
+		image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_PREV_IMAGE].image) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image");
+
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_PREV_IMAGE].image, &mr);
+
+		alloc_infos[MEMORY_PREV_IMAGE].allocationSize = mr.size;
+		alloc_infos[MEMORY_PREV_IMAGE].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	}
+
+	//refraction image
+	{
+		VkImageCreateInfo image = {};
+		image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		image.arrayLayers = 1;
+		image.extent.width = m_base.swap_chain_image_extent.width;
+		image.extent.height = m_base.swap_chain_image_extent.height;
+		image.extent.depth = 1;
+		image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		image.imageType = VK_IMAGE_TYPE_2D;
+		image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image.mipLevels = 1;
+		image.samples = VK_SAMPLE_COUNT_1_BIT;
+		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		image.tiling = VK_IMAGE_TILING_OPTIMAL;
+		image.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_REFRACTION_IMAGE].image) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image");
+
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_REFRACTION_IMAGE].image, &mr);
+
+		alloc_infos[MEMORY_REFRACTION_IMAGE].allocationSize = mr.size;
+		alloc_infos[MEMORY_REFRACTION_IMAGE].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	}
+
+	//ssr ray casting coords
+	{
+		VkImageCreateInfo image = {};
+		image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		image.arrayLayers = 1;
+		image.arrayLayers = 1;
+		image.extent.width = m_base.swap_chain_image_extent.width;
+		image.extent.height = m_base.swap_chain_image_extent.height;
+		image.extent.depth = 1;
+		image.format = VK_FORMAT_R32_SINT;
+		image.imageType = VK_IMAGE_TYPE_2D;
+		image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image.mipLevels = 1;
+		image.samples = VK_SAMPLE_COUNT_1_BIT;
+		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		image.tiling = VK_IMAGE_TILING_OPTIMAL;
+		image.usage = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+
+		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image");
+
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image, &mr);
+
+		alloc_infos[MEMORY_SSR_RAY_CASTING_COORDS].allocationSize = mr.size;
+		alloc_infos[MEMORY_SSR_RAY_CASTING_COORDS].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	}
+
 	//ss dir shadow map
 	{
 		VkImageCreateInfo image = {};
@@ -943,6 +1028,67 @@ void gta5_pass::get_memory_and_build_resources()
 			!= VK_SUCCESS)
 			throw std::runtime_error("failed to create image view!");
 	}
+
+	//prev image
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_PREV_IMAGE].image,
+			mem[MEMORY_PREV_IMAGE], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_PREV_IMAGE].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_PREV_IMAGE].view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create view!");
+	}
+
+	//refraction image
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_REFRACTION_IMAGE].image,
+			mem[MEMORY_REFRACTION_IMAGE], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_REFRACTION_IMAGE].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_REFRACTION_IMAGE].view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create view!");
+	}
+
+	//ssr ray casting coords
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image,
+			mem[MEMORY_SSR_RAY_CASTING_COORDS], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32_SINT;
+		view.image = m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create view!");
+	}
+
 	//gbuffer depth
 	{
 		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_DEPTH].image,

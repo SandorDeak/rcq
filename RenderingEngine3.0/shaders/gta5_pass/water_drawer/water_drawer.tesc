@@ -6,8 +6,12 @@ layout(vertices=4) out;
 layout(set=0, binding=0) uniform water_drawer_data
 {
 	mat4 proj_x_view;
+	mat4 mirrored_proj_x_view;
 	vec3 view_pos;
+	float height_bias;
 	vec3 light_dir;
+	vec3 irradiance;
+	vec3 ambient_irradiance;
 	vec2 tile_offset;
 	vec2 tile_size_in_meter;
 	vec2 half_resolution;
@@ -28,19 +32,6 @@ layout(location=0) patch out float outer_tess[4];
 
 void main()
 {
-	/*if (gl_InvocationID==0)
-	{
-		vec3 tile_center=vec3(0.f);
-		for(uint i=0; i<4; ++i)
-			tile_center+=gl_in[i].gl_Position.xyz;
-		tile_center*=0.25.f;
-		float dist=distance(tile_center, data.view_pos);
-		float scale=1.f;
-		
-	}*/
-	
-	
-	
 	float dist=screen_space_dist(gl_in[gl_InvocationID].gl_Position, gl_in[(gl_InvocationID+3) & 3].gl_Position);
 	gl_TessLevelOuter[gl_InvocationID]=max(1.f, dist/16.f);
 	outer_tess[gl_InvocationID]=max(1.f, dist/16.f);
@@ -52,6 +43,4 @@ void main()
 	{
 		gl_TessLevelInner[(gl_InvocationID+1) & 1]=max(outer_tess[gl_InvocationID], outer_tess[gl_InvocationID+2]);
 	}
-
-	
 }

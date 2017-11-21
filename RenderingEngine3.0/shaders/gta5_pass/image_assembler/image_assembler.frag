@@ -22,6 +22,8 @@ layout(set=0, binding=4) uniform sampler2DArray em_tex;
 
 layout(set=0, binding=5) uniform image_assembler_data
 {
+	mat4 previous_proj_x_view;
+	vec3 previous_view_pos;
 	vec3 dir;
 	float height_bias;
 	vec3 irradiance;
@@ -30,6 +32,9 @@ layout(set=0, binding=5) uniform image_assembler_data
 	uint padding2;
 	vec3 cam_pos;
 } data;
+
+layout(set=0, binding=6) uniform sampler2D prev_image_tex;
+layout(input_attachment_index=2, set=0, binding=7) uniform isubpassInput ssr_ray_casting_coord_in;
 
 layout(set=1, binding=0) uniform sampler3D Rayleigh_tex;
 layout(set=1, binding=1) uniform sampler3D Mie_tex;
@@ -168,6 +173,7 @@ void main()
 	vec3 l=-data.dir;
 	vec3 v=normalize(data.cam_pos-pos);
 	vec3 h=normalize(l+v);
+	vec3 r=reflect(-v, n);
 	
 	float l_dot_n=max(dot(l, n), 0.0f);
 	float h_dot_n=max(dot(h,n), 0.0f);
@@ -190,15 +196,41 @@ void main()
 	vec3 sun_color=ad_hoc_Rayleigh_phase(1.f)*texture(Rayleigh_tex, tex_coords0).xyz+Mie_phase_Henyey_Greenstein(1.f, 0.75f)*texture(Mie_tex, tex_coords0).xyz;
 	vec3 irradiance =(tr+sun_color)*data.irradiance;
 	
-	//calculate reflected specular sky color
-	vec3 r=reflect(-v, n);
-	vec3 params_refl=vec3(data.height_bias+pos.y, r.y, l.y);
-	vec3 tex_coords_refl=params_to_tex_coords(params_refl);
-	float cos_refl_light=dot(r, l);
-	vec3 refl_sky_color=ad_hoc_Rayleigh_phase(cos_refl_light)*texture(Rayleigh_tex, tex_coords_refl).xyz+Mie_phase_Henyey_Greenstein(cos_refl_light, 0.75f)*texture(Mie_tex, tex_coords_refl).xyz;
-	refl_sky_color=refl_sky_color*data.irradiance;
+	//calculate reflected specular color
+	int raw_refl_ray_end_coord=subpassLoad(ssr_ray_casting_coord_in).x;
+	ivec2 refl_ray_end_coord=ivec2(raw_refl_ray_end_coord & 0xffff, (raw_refl_ray_end_coord>>16));
 	
-	//calculate specular term for reflected sky
+	vec3 refl_color;
+	bool has_valid_ssr=false;
+	if (refl_ray_end_coord!=ivec2(gl_FragCoord.xy)) //screen space data is valid
+	{
+		vec2 sample_coords=vec2(refl_ray_end_coord);
+		vec3 refl_pos=texture(pos_roughness_in, sample_coords).xyz;
+		vec3 refl_normal=texture(normal_ao_in, sample_coords).xyz;
+		
+		vec4 prev_proj_pos=data.previous_proj_x_view*vec4(refl_pos, 1.f);
+		prev_proj_pos/=prev_proj_pos.w;
+		
+		if (abs(prev_proj_pos.x)<=1.f && abs(prev_proj_pos.y)<=1.f)
+		{
+			vec3 refl_color=texture(prev_image_tex, 0.5f*prev_proj_pos.xy+0.5f).xyz;
+			vec3 dist_vector=normalize(pos-refl_pos);
+			refl_color*=(dot(refl_normal, dist_vector)/dot(refl_normal, normalize(data.previous_view_pos-refl_pos)));
+			has_valid_ssr=true;
+		}
+		
+	}
+	
+	if(!has_valid_ssr) //sreen space data is invalid, sample from sky
+	{
+		vec3 params_refl=vec3(data.height_bias+pos.y, r.y, l.y);
+		vec3 tex_coords_refl=params_to_tex_coords(params_refl);
+		float cos_refl_light=dot(r, l);
+		refl_color=ad_hoc_Rayleigh_phase(cos_refl_light)*texture(Rayleigh_tex, tex_coords_refl).xyz+Mie_phase_Henyey_Greenstein(cos_refl_light, 0.75f)*texture(Mie_tex, tex_coords_refl).xyz;
+		refl_color*=data.irradiance;
+	}
+	
+	//calculate specular term for reflected color
 	float n_dot_r=max(0.f, dot(n, r));
 	vec3 fresnel_refl_sky=fresnel_schlick(n_dot_r, F0);
 	float ndf_refl_sky=1.f/(PI*roughness*roughness+0.005f);//NDF(1.f, roughness);
@@ -209,7 +241,7 @@ void main()
 	
 	//calculate reflected color
 	vec3 color=(specular+lambert)*ssds*irradiance*l_dot_n
-		+(specular_refl_sky+lambert_refl_sky)*refl_sky_color*n_dot_r/10.f
+		+(specular_refl_sky+lambert_refl_sky)*refl_color*n_dot_r/10.f
 		+(basecolor/PI)*ao*data.ambient_irradiance;
 	
 	//adding areal perspective effect

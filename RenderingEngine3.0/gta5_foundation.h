@@ -3148,6 +3148,7 @@ namespace rcq
 		enum ATT
 		{
 			ATT_SWAP_CHAIN_IMAGE,
+			ATT_PREV_IMAGE,
 			ATT_COUNT
 		};
 		enum DEP
@@ -3158,13 +3159,16 @@ namespace rcq
 
 		namespace subpass_bypass
 		{
-			VkAttachmentReference swap_chain_image = { ATT_SWAP_CHAIN_IMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr std::array<VkAttachmentReference, ATT_COUNT> atts = { 
+				 ATT_SWAP_CHAIN_IMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				 ATT_PREV_IMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			};
 
 			constexpr VkSubpassDescription create_subpass()
 			{
 				VkSubpassDescription s = {};
-				s.colorAttachmentCount = 1;
-				s.pColorAttachments = &swap_chain_image;
+				s.colorAttachmentCount = atts.size();
+				s.pColorAttachments = atts.data();
 				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 				return s;
 			}
@@ -3218,23 +3222,26 @@ namespace rcq
 				}
 				constexpr auto multisample = create_multisample();
 
-				constexpr auto create_blend_att()
+				constexpr auto create_blend_atts()
 				{
-					VkPipelineColorBlendAttachmentState b = {};
+					std::array<VkPipelineColorBlendAttachmentState, 2> b = {};
 
-					b.blendEnable = VK_FALSE;
-					b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+					b[0].blendEnable = VK_FALSE;
+					b[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+						VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+					b[1].blendEnable = VK_FALSE;
+					b[1].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
 						VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 					return b;
 				}
-				constexpr auto blend_att = create_blend_att();
+				constexpr auto blend_atts = create_blend_atts();
 
 				constexpr auto create_blend()
 				{
 					VkPipelineColorBlendStateCreateInfo b = {};
 					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-					b.attachmentCount = 1;
-					b.pAttachments = &blend_att;
+					b.attachmentCount = blend_atts.size();
+					b.pAttachments = blend_atts.data();
 					b.logicOpEnable = VK_FALSE;
 					return b;
 				}
