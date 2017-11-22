@@ -20,10 +20,13 @@ namespace rcq
 		GP_SS_DIR_SHADOW_MAP_BLUR,
 		GP_SSAO_GEN,
 		GP_SSAO_BLUR,
+		GP_SSR_RAY_CASTING,
 		GP_IMAGE_ASSEMBLER,
 		GP_TERRAIN_DRAWER,
 		GP_SKY_DRAWER,
 		GP_SUN_DRAWER,
+
+		GP_REFRACTION_IMAGE_GEN,
 		GP_WATER_DRAWER,
 
 		GP_POSTPROCESSING,
@@ -910,6 +913,7 @@ namespace rcq
 		{
 			SUBPASS_SS_DIR_SHADOW_MAP_BLUR,
 			SUBPASS_SSAO_MAP_BLUR,
+			SUBPASS_SSR_RAY_CASTING,
 			SUBPASS_IMAGE_ASSEMBLER,
 			SUBPASS_SKY_DRAWER,
 			SUBPASS_SUN_DRAWER,
@@ -920,15 +924,196 @@ namespace rcq
 		{
 			DEP_SSDS_BLUR_IMAGE_ASSEMBLER,
 			DEP_SSAO_BLUR_IMAGE_ASSEMBLER,
+			DEP_SSR_RAY_CASTING_IMAGE_ASSEMBLER,
 			DEP_IMAGE_ASSEMBLER_SKY_DRAWER,
 			DEP_SKY_DRAWER_SUN_DRAWER,
 			DEP_COUNT
 		};
 
+		namespace subpass_ssr_ray_casting
+		{
+			constexpr VkAttachmentReference ref_depth = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
+
+			constexpr auto create_subpass()
+			{
+				VkSubpassDescription s = {};
+				s.pDepthStencilAttachment = &ref_depth;
+				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				return s;
+			}
+
+			namespace pipeline
+			{
+				constexpr auto create_vertex_input()
+				{
+					VkPipelineVertexInputStateCreateInfo input = {};
+					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+					return input;
+				}
+				constexpr auto vertex_input = create_vertex_input();
+
+				constexpr auto create_input_assembly()
+				{
+
+					VkPipelineInputAssemblyStateCreateInfo assembly = {};
+					assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+					assembly.primitiveRestartEnable = VK_FALSE;
+					assembly.topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+					return assembly;
+				}
+				constexpr auto input_assembly = create_input_assembly();
+
+				constexpr auto create_rasterizer()
+				{
+					VkPipelineRasterizationStateCreateInfo r = {};
+					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+					r.cullMode = VK_CULL_MODE_NONE;
+					r.depthBiasEnable = VK_FALSE;
+					r.depthClampEnable = VK_FALSE;
+					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+					r.lineWidth = 1.f;
+					r.polygonMode = VK_POLYGON_MODE_LINE;
+					r.rasterizerDiscardEnable = VK_FALSE;
+					return r;
+				}
+				constexpr auto rasterizer = create_rasterizer();
+
+				constexpr auto create_depth()
+				{
+					VkPipelineDepthStencilStateCreateInfo d = {};
+					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+					d.depthBoundsTestEnable = VK_FALSE;
+					d.depthCompareOp = VK_COMPARE_OP_GREATER;
+					d.depthTestEnable = VK_TRUE;
+					d.depthWriteEnable = VK_FALSE;
+					d.stencilTestEnable = VK_FALSE;
+					return d;
+				}
+				constexpr auto depth = create_depth();
+
+				constexpr auto create_multisample()
+				{
+					VkPipelineMultisampleStateCreateInfo m = {};
+					m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+					m.alphaToCoverageEnable = VK_FALSE;
+					m.alphaToOneEnable = VK_FALSE;
+					m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+					m.sampleShadingEnable = VK_FALSE;
+					return m;
+				}
+				constexpr auto multisample = create_multisample();
+
+				struct runtime_info
+				{
+					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
+					{
+
+						create_shaders(device,
+						{
+							"shaders/gta5_pass/ssr_ray_casting/vert.spv",
+							"shaders/gta5_pass/ssr_ray_casting/geom.spv",
+							"shaders/gta5_pass/ssr_ray_casting/frag.spv"
+						},
+						{
+							VK_SHADER_STAGE_VERTEX_BIT,
+							VK_SHADER_STAGE_GEOMETRY_BIT,
+							VK_SHADER_STAGE_FRAGMENT_BIT
+						},
+							shaders.data()
+						);
+
+						viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+						viewport.pScissors = &scissor;
+						viewport.scissorCount = 1;
+						viewport.pViewports = &vp;
+						viewport.viewportCount = 1;
+						scissor.extent = e;
+						scissor.offset = { 0,0 };
+						vp.height = static_cast<float>(e.height);
+						vp.width = static_cast<float>(e.width);
+						vp.maxDepth = 1.f;
+						vp.minDepth = 0.f;
+						vp.x = 0.f;
+						vp.y = 0.f;
+					}
+
+					~runtime_info()
+					{
+						for (auto s : shaders)
+							vkDestroyShaderModule(device, s.module, nullptr);
+					}
+
+					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
+					{
+						c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+						c.basePipelineHandle = VK_NULL_HANDLE;
+						c.basePipelineIndex = -1;
+						c.pInputAssemblyState = &input_assembly;
+						c.pMultisampleState = &multisample;
+						c.pRasterizationState = &rasterizer;
+						c.pDepthStencilState = &depth;
+						c.pStages = shaders.data();
+						c.stageCount = shaders.size();
+						c.pVertexInputState = &vertex_input;
+						c.pViewportState = &viewport;
+						c.subpass = SUBPASS_SSR_RAY_CASTING;
+					}
+
+					VkDevice device;
+					std::array<VkPipelineShaderStageCreateInfo, 3> shaders = {};
+					VkViewport vp;
+					VkRect2D scissor;
+					VkPipelineViewportStateCreateInfo viewport = {};
+				};
+
+				namespace dsl
+				{
+					constexpr auto create_bindings()
+					{
+						std::array<VkDescriptorSetLayoutBinding, 4> bindings = {};
+						bindings[0].binding = 0;
+						bindings[0].descriptorCount = 1;
+						bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+						bindings[0].stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+						bindings[1].binding = 1;
+						bindings[1].descriptorCount = 1;
+						bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[1].stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+						bindings[2].binding = 2;
+						bindings[2].descriptorCount = 1;
+						bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[2].stageFlags = VK_SHADER_STAGE_GEOMETRY_BIT;
+
+						bindings[3].binding = 3;
+						bindings[3].descriptorCount = 1;
+						bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+						bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+						return bindings;
+					}
+					constexpr auto bindings = create_bindings();
+
+					constexpr auto create_create_info()
+					{
+						VkDescriptorSetLayoutCreateInfo dsl = {};
+						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+						dsl.bindingCount = bindings.size();
+						dsl.pBindings = bindings.data();
+						return dsl;
+					}
+					constexpr auto create_info = create_create_info();
+				}//namespace dsl
+
+			} //namespace pipeline
+
+		}// namespace ssr_ray_casting
+
 		namespace subpass_sun_drawer
 		{
-			VkAttachmentReference preimage = { ATT_PREIMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			VkAttachmentReference ref_depth = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
+			constexpr VkAttachmentReference preimage = { ATT_PREIMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr VkAttachmentReference ref_depth = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
 
 			constexpr VkSubpassDescription create_subpass()
 			{
@@ -1116,208 +1301,6 @@ namespace rcq
 					constexpr auto create_info = create_create_info();
 				}//namespace dsl
 			}//namespace pipeline
-
-			namespace pipeline_water_drawer_test
-			{
-				constexpr auto create_vertex_input()
-				{
-					VkPipelineVertexInputStateCreateInfo input = {};
-					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-					return input;
-				}
-				constexpr auto vertex_input = create_vertex_input();
-
-				constexpr auto create_input_assembly()
-				{
-
-					VkPipelineInputAssemblyStateCreateInfo assembly = {};
-					assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-					assembly.primitiveRestartEnable = VK_FALSE;
-					assembly.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
-					return assembly;
-				}
-				constexpr auto input_assembly = create_input_assembly();
-
-				constexpr auto create_tessellation()
-				{
-					VkPipelineTessellationStateCreateInfo t = {};
-					t.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
-					t.patchControlPoints = 4;
-					return t;
-				}
-				constexpr auto tessellation = create_tessellation();
-
-				constexpr auto create_rasterizer()
-				{
-					VkPipelineRasterizationStateCreateInfo r = {};
-					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-					r.cullMode = VK_CULL_MODE_BACK_BIT;
-					r.depthBiasEnable = VK_FALSE;
-					r.depthClampEnable = VK_FALSE;
-					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-					r.lineWidth = 1.f;
-					r.polygonMode = VK_POLYGON_MODE_FILL;
-					r.rasterizerDiscardEnable = VK_FALSE;
-					return r;
-				}
-				constexpr auto rasterizer = create_rasterizer();
-
-				constexpr auto create_depth()
-				{
-					VkPipelineDepthStencilStateCreateInfo d = {};
-					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-					d.depthBoundsTestEnable = VK_FALSE;
-					d.depthCompareOp = VK_COMPARE_OP_LESS;
-					d.depthTestEnable = VK_TRUE;
-					d.depthWriteEnable = VK_FALSE;
-					d.stencilTestEnable = VK_FALSE;
-					return d;
-				}
-				constexpr auto depth = create_depth();
-
-				constexpr auto create_multisample()
-				{
-					VkPipelineMultisampleStateCreateInfo m = {};
-					m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-					m.alphaToCoverageEnable = VK_FALSE;
-					m.alphaToOneEnable = VK_FALSE;
-					m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-					m.sampleShadingEnable = VK_FALSE;
-					return m;
-				}
-				constexpr auto multisample = create_multisample();
-
-				constexpr auto create_blend_att()
-				{
-					VkPipelineColorBlendAttachmentState b = {};
-
-					b.blendEnable = VK_FALSE;
-					/*b.alphaBlendOp = VK_BLEND_OP_ADD;
-					b.colorBlendOp = VK_BLEND_OP_ADD;
-					b.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-					b.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-					b.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-					b.dstColorBlendFactor = VK_BLEND_FACTOR_ONE;*/
-					b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-						VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-					return b;
-				}
-				constexpr auto blend_att = create_blend_att();
-
-				constexpr auto create_blend()
-				{
-					VkPipelineColorBlendStateCreateInfo b = {};
-					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-					b.attachmentCount = 1;
-					b.pAttachments = &blend_att;
-					b.logicOpEnable = VK_FALSE;
-					return b;
-				}
-				constexpr auto blend = create_blend();
-
-				struct runtime_info
-				{
-					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
-					{
-
-						create_shaders(device,
-						{
-							"shaders/gta5_pass/water_drawer/vert.spv",
-							"shaders/gta5_pass/water_drawer/tesc.spv",
-							"shaders/gta5_pass/water_drawer/tese.spv",
-							"shaders/gta5_pass/water_drawer/frag.spv",
-						},
-						{
-							VK_SHADER_STAGE_VERTEX_BIT,
-							VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
-							VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
-							VK_SHADER_STAGE_FRAGMENT_BIT
-						},
-							shaders.data()
-						);
-
-						viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-						viewport.pScissors = &scissor;
-						viewport.scissorCount = 1;
-						viewport.pViewports = &vp;
-						viewport.viewportCount = 1;
-						scissor.extent = e;
-						scissor.offset = { 0,0 };
-						vp.height = static_cast<float>(e.height);
-						vp.width = static_cast<float>(e.width);
-						vp.maxDepth = 1.f;
-						vp.minDepth = 0.f;
-						vp.x = 0.f;
-						vp.y = 0.f;
-					}
-
-					~runtime_info()
-					{
-						for (auto s : shaders)
-							vkDestroyShaderModule(device, s.module, nullptr);
-					}
-
-					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
-					{
-						c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-						c.basePipelineHandle = VK_NULL_HANDLE;
-						c.basePipelineIndex = -1;
-						c.pInputAssemblyState = &input_assembly;
-						c.pMultisampleState = &multisample;
-						c.pTessellationState = &tessellation;
-						c.pRasterizationState = &rasterizer;
-						c.pDepthStencilState = &depth;
-						c.pColorBlendState = &blend;
-						c.pStages = shaders.data();
-						c.stageCount = shaders.size();
-						c.pVertexInputState = &vertex_input;
-						c.pViewportState = &viewport;
-						c.subpass = SUBPASS_SUN_DRAWER;
-					}
-
-					VkDevice device;
-					std::array<VkPipelineShaderStageCreateInfo, 4> shaders = {};
-					VkViewport vp;
-					VkRect2D scissor;
-					VkPipelineViewportStateCreateInfo viewport = {};
-				};
-				namespace dsl
-				{
-					constexpr auto create_binding()
-					{
-						VkDescriptorSetLayoutBinding binding = {};
-						binding.binding = 0;
-						binding.descriptorCount = 1;
-						binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-						binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-							 VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-						return binding;
-					}
-					constexpr auto binding = create_binding();
-
-					constexpr auto create_create_info()
-					{
-						VkDescriptorSetLayoutCreateInfo dsl = {};
-						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-						dsl.bindingCount = 1;
-						dsl.pBindings = &binding;
-						return dsl;
-					}
-					constexpr auto create_info = create_create_info();
-
-					constexpr auto create_push_constants()
-					{
-						std::array<VkPushConstantRange, 1> p = {};
-						p[0].offset = 0;
-						p[0].size = sizeof(glm::ivec2);
-						p[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-						return p;
-					}
-					constexpr auto push_constants = create_push_constants();
-
-				}//namespace dsl
-			}//namespace pipeline water drawer test
 		}// namespace subpass_sun_drawer
 
 		namespace subpass_sky_drawer
@@ -2046,7 +2029,7 @@ namespace rcq
 				{
 					constexpr auto create_bindings()
 					{
-						std::array<VkDescriptorSetLayoutBinding, 6> bindings = {};
+						std::array<VkDescriptorSetLayoutBinding, 8> bindings = {};
 
 						for (uint32_t i = 0; i < 2; ++i)
 						{
@@ -2069,6 +2052,16 @@ namespace rcq
 						bindings[5].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 						bindings[5].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
+						bindings[6].binding = 6;
+						bindings[6].descriptorCount = 1;
+						bindings[6].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[6].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+						bindings[7].binding = 7;
+						bindings[7].descriptorCount = 1;
+						bindings[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+						bindings[7].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
 						return bindings;
 					}
 					constexpr auto bindings = create_bindings();
@@ -2087,24 +2080,6 @@ namespace rcq
 			}//namespace pipeline
 		}//namespace subpass_image_assembler
 
-		/*namespace subpass_terrain_drawer
-		{
-			VkAttachmentReference preimage = { ATT_PREIMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-			VkAttachmentReference ref_depth = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
-
-			constexpr VkSubpassDescription create_subpass()
-			{
-				VkSubpassDescription s = {};
-				s.colorAttachmentCount = 1;
-				s.pColorAttachments = &preimage;
-				s.pDepthStencilAttachment = &ref_depth;
-				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-				return s;
-			}
-
-			
-
-		}//namespace subpass terrain drawer*/
 		constexpr auto create_atts()
 		{
 			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
@@ -2140,7 +2115,7 @@ namespace rcq
 			atts[ATT_DEPTHSTENCIL].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 			atts[ATT_DEPTHSTENCIL].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 			atts[ATT_DEPTHSTENCIL].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-			atts[ATT_DEPTHSTENCIL].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			atts[ATT_DEPTHSTENCIL].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			atts[ATT_DEPTHSTENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_DEPTHSTENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 			atts[ATT_DEPTHSTENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
@@ -2167,6 +2142,13 @@ namespace rcq
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 			d[DEP_SSDS_BLUR_IMAGE_ASSEMBLER].dstAccessMask = VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
 
+			d[DEP_SSR_RAY_CASTING_IMAGE_ASSEMBLER].srcSubpass = SUBPASS_SSR_RAY_CASTING;
+			d[DEP_SSR_RAY_CASTING_IMAGE_ASSEMBLER].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_SSR_RAY_CASTING_IMAGE_ASSEMBLER].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			d[DEP_SSR_RAY_CASTING_IMAGE_ASSEMBLER].dstSubpass = SUBPASS_IMAGE_ASSEMBLER;
+			d[DEP_SSR_RAY_CASTING_IMAGE_ASSEMBLER].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			d[DEP_SSR_RAY_CASTING_IMAGE_ASSEMBLER].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
 			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].srcSubpass = SUBPASS_IMAGE_ASSEMBLER;
 			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 			d[DEP_IMAGE_ASSEMBLER_SKY_DRAWER].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
@@ -2188,6 +2170,7 @@ namespace rcq
 		constexpr std::array<VkSubpassDescription, SUBPASS_COUNT> subpasses = {
 			subpass_ss_dir_shadow_map_blur::create_subpass(),
 			subpass_ssao_map_blur::create_subpass(),
+			subpass_ssr_ray_casting::create_subpass(),
 			subpass_image_assembler::create_subpass(),
 			subpass_sky_drawer::create_subpass(),
 			subpass_sun_drawer::create_subpass()
@@ -3143,6 +3126,526 @@ namespace rcq
 		constexpr VkRenderPassCreateInfo create_info=create_create_info();
 	}//namespace render_pass_frame_image_gen
 
+	namespace render_pass_refraction_image_gen
+	{
+		enum ATT
+		{
+			ATT_REFRACTION_IMAGE,
+			ATT_DEPTHSTENCIL,
+			ATT_COUNT
+		};
+
+		namespace subpass_unique
+		{
+			constexpr VkAttachmentReference ref_depth = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL };
+			constexpr VkAttachmentReference ref_refrimage = { ATT_REFRACTION_IMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+
+			constexpr VkSubpassDescription create_subpass()
+			{
+				VkSubpassDescription s = {};
+				s.colorAttachmentCount = 1;
+				s.pColorAttachments = &ref_refrimage;
+				s.pDepthStencilAttachment = &ref_depth;
+				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				return s;
+			}
+
+			namespace pipeline
+			{
+
+				constexpr auto create_vertex_input()
+				{
+					VkPipelineVertexInputStateCreateInfo input = {};
+					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+					return input;
+				}
+				constexpr auto vertex_input = create_vertex_input();
+
+				constexpr auto create_input_assembly()
+				{
+
+					VkPipelineInputAssemblyStateCreateInfo assembly = {};
+					assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+					assembly.primitiveRestartEnable = VK_FALSE;
+					assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+					return assembly;
+				}
+				constexpr auto input_assembly = create_input_assembly();
+
+				constexpr auto create_rasterizer()
+				{
+					VkPipelineRasterizationStateCreateInfo r = {};
+					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+					r.cullMode = VK_CULL_MODE_NONE;
+					r.depthBiasEnable = VK_FALSE;
+					r.depthClampEnable = VK_FALSE;
+					r.frontFace = VK_FRONT_FACE_CLOCKWISE;
+					r.lineWidth = 1.f;
+					r.polygonMode = VK_POLYGON_MODE_FILL;
+					r.rasterizerDiscardEnable = VK_FALSE;
+					return r;
+				}
+				constexpr auto rasterizer = create_rasterizer();
+
+				constexpr auto create_depth()
+				{
+					VkPipelineDepthStencilStateCreateInfo d = {};
+					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+					d.depthBoundsTestEnable = VK_FALSE;
+					d.depthCompareOp = VK_COMPARE_OP_LESS;
+					d.depthTestEnable = VK_TRUE;
+					d.depthWriteEnable = VK_FALSE;
+					d.stencilTestEnable = VK_FALSE;				
+					return d;
+				}
+				constexpr auto depth = create_depth();
+
+				constexpr auto create_multisample()
+				{
+					VkPipelineMultisampleStateCreateInfo m = {};
+					m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+					m.alphaToCoverageEnable = VK_FALSE;
+					m.alphaToOneEnable = VK_FALSE;
+					m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+					m.sampleShadingEnable = VK_FALSE;
+					return m;
+				}
+				constexpr auto multisample = create_multisample();
+
+				constexpr auto create_blend_att()
+				{
+					VkPipelineColorBlendAttachmentState b = {};
+
+					b.blendEnable = VK_FALSE;
+					b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+						VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+					return b;
+				}
+				constexpr auto blend_att = create_blend_att();
+
+				constexpr auto create_blend()
+				{
+					VkPipelineColorBlendStateCreateInfo b = {};
+					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+					b.attachmentCount = 1;
+					b.pAttachments = &blend_att;
+					b.logicOpEnable = VK_FALSE;
+					return b;
+				}
+				constexpr auto blend = create_blend();
+
+				struct runtime_info
+				{
+					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
+					{
+
+						create_shaders(device,
+						{
+							"shaders/gta5_pass/refraction_map_gen/vert.spv",
+							"shaders/gta5_pass/refraction_map_gen/frag.spv"
+						},
+						{
+							VK_SHADER_STAGE_VERTEX_BIT,
+							VK_SHADER_STAGE_FRAGMENT_BIT
+						},
+							shaders.data()
+						);
+
+						viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+						viewport.pScissors = &scissor;
+						viewport.scissorCount = 1;
+						viewport.pViewports = &vp;
+						viewport.viewportCount = 1;
+						scissor.extent = e;
+						scissor.offset = { 0,0 };
+						vp.height = static_cast<float>(e.height);
+						vp.width = static_cast<float>(e.width);
+						vp.maxDepth = 1.f;
+						vp.minDepth = 0.f;
+						vp.x = 0.f;
+						vp.y = 0.f;
+					}
+
+					~runtime_info()
+					{
+						for (auto s : shaders)
+							vkDestroyShaderModule(device, s.module, nullptr);
+					}
+
+					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
+					{
+						c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+						c.basePipelineHandle = VK_NULL_HANDLE;
+						c.basePipelineIndex = -1;
+						c.pInputAssemblyState = &input_assembly;
+						c.pMultisampleState = &multisample;
+						c.pRasterizationState = &rasterizer;
+						c.pDepthStencilState = &depth;
+						c.pColorBlendState = &blend;
+						c.pStages = shaders.data();
+						c.stageCount = 2;
+						c.pVertexInputState = &vertex_input;
+						c.pViewportState = &viewport;
+						c.subpass = 0;
+					}
+
+					VkDevice device;
+					std::array<VkPipelineShaderStageCreateInfo, 2> shaders = {};
+					VkViewport vp;
+					VkRect2D scissor;
+					VkPipelineViewportStateCreateInfo viewport = {};
+				};
+				namespace dsl
+				{
+					constexpr auto create_bindings()
+					{
+						std::array<VkDescriptorSetLayoutBinding, 2> bindings = {};
+						bindings[0].binding = 0;
+						bindings[0].descriptorCount = 1;
+						bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+						bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+						bindings[1].binding = 1;
+						bindings[1].descriptorCount = 1;
+						bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+						return bindings;
+					}
+					constexpr auto bindings = create_bindings();
+
+					constexpr auto create_create_info()
+					{
+						VkDescriptorSetLayoutCreateInfo dsl = {};
+						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+						dsl.bindingCount = bindings.size();
+						dsl.pBindings = bindings.data();
+						return dsl;
+					}
+					constexpr auto create_info = create_create_info();
+				}//namespace dsl
+			}//namespace pipeline
+		}// namespace subpass_bypass
+
+		constexpr auto get_attachments()
+		{
+			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
+
+			atts[ATT_REFRACTION_IMAGE].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_REFRACTION_IMAGE].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			atts[ATT_REFRACTION_IMAGE].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_REFRACTION_IMAGE].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_REFRACTION_IMAGE].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			atts[ATT_REFRACTION_IMAGE].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			atts[ATT_REFRACTION_IMAGE].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_REFRACTION_IMAGE].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+			atts[ATT_DEPTHSTENCIL].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+			atts[ATT_DEPTHSTENCIL].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			atts[ATT_DEPTHSTENCIL].format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+			atts[ATT_DEPTHSTENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_DEPTHSTENCIL].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			atts[ATT_DEPTHSTENCIL].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			atts[ATT_DEPTHSTENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_DEPTHSTENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+			return atts;
+		}
+
+		constexpr std::array<VkAttachmentDescription, ATT_COUNT> atts = get_attachments();
+		constexpr VkSubpassDescription sp_unique = subpass_unique::create_subpass();
+
+		constexpr VkRenderPassCreateInfo create_create_info()
+		{
+			VkRenderPassCreateInfo pass = {};
+			pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+			pass.attachmentCount = ATT_COUNT;
+			pass.pAttachments = atts.data();
+			pass.subpassCount = 1;
+			pass.pSubpasses = &sp_unique;
+			return pass;
+		}
+		constexpr VkRenderPassCreateInfo create_info = create_create_info();
+
+	} //namespace refraction image gen
+
+
+
+
+	namespace render_pass_water
+	{
+		enum ATT
+		{
+			ATT_FRAME_IMAGE,
+			ATT_DEPTHSTENCIL,
+			ATT_COUNT
+		};
+
+		namespace subpass_water_drawer
+		{
+			constexpr VkAttachmentReference ref_frame_im = { ATT_FRAME_IMAGE, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
+			constexpr VkAttachmentReference ref_depth = { ATT_DEPTHSTENCIL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL };
+
+			constexpr VkSubpassDescription create_subpass()
+			{
+				VkSubpassDescription s = {};
+				s.colorAttachmentCount = 1;
+				s.pColorAttachments = &ref_frame_im;
+				s.pDepthStencilAttachment = &ref_depth;
+				s.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+				return s;
+			}
+
+			namespace pipeline
+			{
+				constexpr auto create_vertex_input()
+				{
+					VkPipelineVertexInputStateCreateInfo input = {};
+					input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+					return input;
+				}
+				constexpr auto vertex_input = create_vertex_input();
+
+				constexpr auto create_input_assembly()
+				{
+
+					VkPipelineInputAssemblyStateCreateInfo assembly = {};
+					assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+					assembly.primitiveRestartEnable = VK_FALSE;
+					assembly.topology = VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+					return assembly;
+				}
+				constexpr auto input_assembly = create_input_assembly();
+
+				constexpr auto create_tessellation()
+				{
+					VkPipelineTessellationStateCreateInfo t = {};
+					t.sType = VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO;
+					t.patchControlPoints = 4;
+					return t;
+				}
+				constexpr auto tessellation = create_tessellation();
+
+				constexpr auto create_rasterizer()
+				{
+					VkPipelineRasterizationStateCreateInfo r = {};
+					r.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+					r.cullMode = VK_CULL_MODE_BACK_BIT;
+					r.depthBiasEnable = VK_FALSE;
+					r.depthClampEnable = VK_FALSE;
+					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+					r.lineWidth = 1.f;
+					r.polygonMode = VK_POLYGON_MODE_FILL;
+					r.rasterizerDiscardEnable = VK_FALSE;
+					return r;
+				}
+				constexpr auto rasterizer = create_rasterizer();
+
+				constexpr auto create_depth()
+				{
+					VkPipelineDepthStencilStateCreateInfo d = {};
+					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+					d.depthBoundsTestEnable = VK_FALSE;
+					d.depthCompareOp = VK_COMPARE_OP_LESS;
+					d.depthTestEnable = VK_TRUE;
+					d.depthWriteEnable = VK_TRUE;
+					d.stencilTestEnable = VK_FALSE;
+					return d;
+				}
+				constexpr auto depth = create_depth();
+
+				constexpr auto create_multisample()
+				{
+					VkPipelineMultisampleStateCreateInfo m = {};
+					m.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+					m.alphaToCoverageEnable = VK_FALSE;
+					m.alphaToOneEnable = VK_FALSE;
+					m.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+					m.sampleShadingEnable = VK_FALSE;
+					return m;
+				}
+				constexpr auto multisample = create_multisample();
+
+				constexpr auto create_blend_att()
+				{
+					VkPipelineColorBlendAttachmentState b = {};
+
+					b.blendEnable = VK_FALSE;
+					b.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+						VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+					return b;
+				}
+				constexpr auto blend_att = create_blend_att();
+
+				constexpr auto create_blend()
+				{
+					VkPipelineColorBlendStateCreateInfo b = {};
+					b.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+					b.attachmentCount = 1;
+					b.pAttachments = &blend_att;
+					b.logicOpEnable = VK_FALSE;
+					return b;
+				}
+				constexpr auto blend = create_blend();
+
+				struct runtime_info
+				{
+					runtime_info(VkDevice d, const VkExtent2D& e) : device(d)
+					{
+
+						create_shaders(device,
+						{
+							"shaders/gta5_pass/water_drawer/vert.spv",
+							"shaders/gta5_pass/water_drawer/tesc.spv",
+							"shaders/gta5_pass/water_drawer/tese.spv",
+							"shaders/gta5_pass/water_drawer/frag.spv",
+						},
+						{
+							VK_SHADER_STAGE_VERTEX_BIT,
+							VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+							VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT,
+							VK_SHADER_STAGE_FRAGMENT_BIT
+						},
+							shaders.data()
+						);
+
+						viewport.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+						viewport.pScissors = &scissor;
+						viewport.scissorCount = 1;
+						viewport.pViewports = &vp;
+						viewport.viewportCount = 1;
+						scissor.extent = e;
+						scissor.offset = { 0,0 };
+						vp.height = static_cast<float>(e.height);
+						vp.width = static_cast<float>(e.width);
+						vp.maxDepth = 1.f;
+						vp.minDepth = 0.f;
+						vp.x = 0.f;
+						vp.y = 0.f;
+					}
+
+					~runtime_info()
+					{
+						for (auto s : shaders)
+							vkDestroyShaderModule(device, s.module, nullptr);
+					}
+
+					void fill_create_info(VkGraphicsPipelineCreateInfo& c)
+					{
+						c.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+						c.basePipelineHandle = VK_NULL_HANDLE;
+						c.basePipelineIndex = -1;
+						c.pInputAssemblyState = &input_assembly;
+						c.pMultisampleState = &multisample;
+						c.pTessellationState = &tessellation;
+						c.pRasterizationState = &rasterizer;
+						c.pDepthStencilState = &depth;
+						c.pColorBlendState = &blend;
+						c.pStages = shaders.data();
+						c.stageCount = shaders.size();
+						c.pVertexInputState = &vertex_input;
+						c.pViewportState = &viewport;
+						c.subpass = 0;
+					}
+
+					VkDevice device;
+					std::array<VkPipelineShaderStageCreateInfo, 4> shaders = {};
+					VkViewport vp;
+					VkRect2D scissor;
+					VkPipelineViewportStateCreateInfo viewport = {};
+				};
+				namespace dsl
+				{
+					constexpr auto create_bindings()
+					{
+						std::array<VkDescriptorSetLayoutBinding, 2> bindings = {};
+						bindings[0].binding = 0;
+						bindings[0].descriptorCount = 1;
+						bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+						bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+							VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+						bindings[1].binding = 1;
+						bindings[1].descriptorCount = 1;
+						bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+						/*bindings[2].binding = 2;
+						bindings[2].descriptorCount = 1;
+						bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;*/
+
+						return bindings;
+					}
+					constexpr auto bindings= create_bindings();
+
+					constexpr auto create_create_info()
+					{
+						VkDescriptorSetLayoutCreateInfo dsl = {};
+						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+						dsl.bindingCount = bindings.size();
+						dsl.pBindings = bindings.data();
+						return dsl;
+					}
+					constexpr auto create_info = create_create_info();
+
+					constexpr auto create_push_constants()
+					{
+						std::array<VkPushConstantRange, 1> p = {};
+						p[0].offset = 0;
+						p[0].size = sizeof(glm::ivec2);
+						p[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+						return p;
+					}
+					constexpr auto push_constants = create_push_constants();
+
+				}//namespace dsl
+			} //namespace pipeline
+		} //namespace subpass water_drawer
+
+		constexpr auto subpass = subpass_water_drawer::create_subpass();
+
+		constexpr auto create_atts()
+		{
+			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
+
+			atts[ATT_FRAME_IMAGE].initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			atts[ATT_FRAME_IMAGE].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			atts[ATT_FRAME_IMAGE].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_FRAME_IMAGE].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_FRAME_IMAGE].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			atts[ATT_FRAME_IMAGE].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			atts[ATT_FRAME_IMAGE].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_FRAME_IMAGE].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+			atts[ATT_DEPTHSTENCIL].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			atts[ATT_DEPTHSTENCIL].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+			atts[ATT_DEPTHSTENCIL].format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+			atts[ATT_DEPTHSTENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_DEPTHSTENCIL].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			atts[ATT_DEPTHSTENCIL].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			atts[ATT_DEPTHSTENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_DEPTHSTENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
+			return atts;
+		}
+		constexpr auto atts = create_atts();
+
+		constexpr VkRenderPassCreateInfo create_create_info()
+		{
+			VkRenderPassCreateInfo pass = {};
+			pass.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+			pass.attachmentCount = ATT_COUNT;
+			pass.pAttachments = atts.data();
+			pass.subpassCount = 1;
+			pass.pSubpasses = &subpass;
+			return pass;
+		}
+		constexpr VkRenderPassCreateInfo create_info = create_create_info();
+
+	} //namespace render_pass_water
+
 	namespace render_pass_postprocessing
 	{
 		enum ATT
@@ -3349,6 +3852,15 @@ namespace rcq
 			atts[ATT_SWAP_CHAIN_IMAGE].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
 			atts[ATT_SWAP_CHAIN_IMAGE].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
 
+			atts[ATT_PREV_IMAGE].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			atts[ATT_PREV_IMAGE].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			atts[ATT_PREV_IMAGE].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+			atts[ATT_PREV_IMAGE].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_PREV_IMAGE].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_PREV_IMAGE].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+			atts[ATT_PREV_IMAGE].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+			atts[ATT_PREV_IMAGE].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+
 			return atts;
 		}
 
@@ -3389,13 +3901,16 @@ namespace rcq
 	{
 		constexpr auto create_sizes()
 		{
-			std::array<VkDescriptorPoolSize, 3> sizes = {};
-			sizes[0].descriptorCount = 12;// ub_count;
+			std::array<VkDescriptorPoolSize, 4> sizes = {};
+			sizes[0].descriptorCount = 14;
 			sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			sizes[1].descriptorCount = 11;// cis_count;
+			sizes[1].descriptorCount = 16;
 			sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-			sizes[2].descriptorCount = 4;// ia_count;
+			sizes[2].descriptorCount = 4;
 			sizes[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+			sizes[3].descriptorCount = 2;
+			sizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+
 			return sizes;
 		}
 		constexpr auto sizes = create_sizes();

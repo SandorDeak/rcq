@@ -133,6 +133,14 @@ void gta5_pass::create_render_passes()
 	if (vkCreateRenderPass(m_base.device, &render_pass_postprocessing::create_info,
 		m_alloc, &m_passes[RENDER_PASS_POSTPROCESSING]) != VK_SUCCESS)
 		throw std::runtime_error("failed to create postprocessing render pass!");
+
+	if (vkCreateRenderPass(m_base.device, &render_pass_refraction_image_gen::create_info,
+		m_alloc, &m_passes[RENDER_PASS_REFRACTION_IMAGE_GEN]) != VK_SUCCESS)
+		throw std::runtime_error("failed to create render pass!");
+
+	if (vkCreateRenderPass(m_base.device, &render_pass_water::create_info,
+		m_alloc, &m_passes[RENDER_PASS_WATER]) != VK_SUCCESS)
+		throw std::runtime_error("failed to create render pass!");
 }
 
 void gta5_pass::create_graphics_pipelines()
@@ -191,9 +199,17 @@ void gta5_pass::create_graphics_pipelines()
 	r12.fill_create_info(create_infos[GP_TERRAIN_DRAWER]);
 	create_infos[GP_TERRAIN_DRAWER].renderPass = m_passes[RENDER_PASS_GBUFFER_ASSEMBLER];
 
-	render_pass_preimage_assembler::subpass_sun_drawer::pipeline_water_drawer_test::runtime_info r13(m_base.device, m_base.swap_chain_image_extent);
+	render_pass_water::subpass_water_drawer::pipeline::runtime_info r13(m_base.device, m_base.swap_chain_image_extent);
 	r13.fill_create_info(create_infos[GP_WATER_DRAWER]);
-	create_infos[GP_WATER_DRAWER].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
+	create_infos[GP_WATER_DRAWER].renderPass = m_passes[RENDER_PASS_WATER];
+
+	render_pass_refraction_image_gen::subpass_unique::pipeline::runtime_info r14(m_base.device, m_base.swap_chain_image_extent);
+	r14.fill_create_info(create_infos[GP_REFRACTION_IMAGE_GEN]);
+	create_infos[GP_REFRACTION_IMAGE_GEN].renderPass = m_passes[RENDER_PASS_REFRACTION_IMAGE_GEN];
+
+	render_pass_preimage_assembler::subpass_ssr_ray_casting::pipeline::runtime_info r15(m_base.device, m_base.swap_chain_image_extent);
+	r15.fill_create_info(create_infos[GP_SSR_RAY_CASTING]);
+	create_infos[GP_SSR_RAY_CASTING].renderPass = m_passes[RENDER_PASS_PREIMAGE_ASSEMBLER];
 
 	//create layouts
 	m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].create_layout(m_base.device, 
@@ -245,8 +261,11 @@ void gta5_pass::create_graphics_pipelines()
 	}, m_alloc);
 	m_gps[GP_WATER_DRAWER].create_layout(m_base.device,
 	{
-		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_WATER)
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_WATER),
+		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_SKY)
 	}, m_alloc);
+	m_gps[GP_REFRACTION_IMAGE_GEN].create_layout(m_base.device, {}, m_alloc);
+	m_gps[GP_SSR_RAY_CASTING].create_layout(m_base.device, {}, m_alloc);
 	m_gps[GP_POSTPROCESSING].create_layout(m_base.device, {}, m_alloc);
 
 	for (uint32_t i = 0; i < GP_COUNT; ++i)
@@ -343,7 +362,13 @@ void gta5_pass::create_dsls_and_allocate_dss()
 		render_pass_gbuffer_assembler::subpass_gbuffer_gen::pipeline_terrain_drawer::dsl::create_info, m_alloc);
 
 	m_gps[GP_WATER_DRAWER].create_dsl(m_base.device,
-		render_pass_preimage_assembler::subpass_sun_drawer::pipeline_water_drawer_test::dsl::create_info, m_alloc);
+		render_pass_water::subpass_water_drawer::pipeline::dsl::create_info, m_alloc);
+
+	m_gps[GP_REFRACTION_IMAGE_GEN].create_dsl(m_base.device,
+		render_pass_refraction_image_gen::subpass_unique::pipeline::dsl::create_info, m_alloc);
+
+	m_gps[GP_SSR_RAY_CASTING].create_dsl(m_base.device,
+		render_pass_preimage_assembler::subpass_ssr_ray_casting::pipeline::dsl::create_info, m_alloc);
 
 	m_cps[CP_TERRAIN_TILE_REQUEST].create_dsl(m_base.device,
 		compute_pipeline_terrain_tile_request::dsl::create_info, m_alloc);
@@ -641,7 +666,7 @@ void gta5_pass::send_memory_requirements()
 		image.samples = VK_SAMPLE_COUNT_1_BIT;
 		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
 
 		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_PREIMAGE].image)
 			!= VK_SUCCESS)
@@ -1546,6 +1571,97 @@ void gta5_pass::update_descriptor_sets()
 
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
+
+	//ssr ray casting
+	{
+		VkDescriptorBufferInfo data;
+		data.buffer = m_res_data.buffer;
+		data.offset = m_res_data.offsets[RES_DATA_SSR_RAY_CASTING];
+		data.range = sizeof(ssr_ray_casting_data);
+
+		VkDescriptorImageInfo normal_tex;
+		normal_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		normal_tex.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+		normal_tex.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+
+		VkDescriptorImageInfo pos_tex;
+		pos_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		pos_tex.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
+		pos_tex.sampler= m_samplers[SAMPLER_UNNORMALIZED_COORD];
+
+		VkDescriptorImageInfo ray_end_fragment_ids;
+		ray_end_fragment_ids.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		ray_end_fragment_ids.imageView = m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].view;
+
+		w.resize(4);
+
+		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_SSR_RAY_CASTING].ds;
+		w[0].pBufferInfo = &data;
+
+		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 1;
+		w[1].dstSet = m_gps[GP_SSR_RAY_CASTING].ds;
+		w[1].pImageInfo = &normal_tex;
+
+		w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[2].descriptorCount = 1;
+		w[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[2].dstArrayElement = 0;
+		w[2].dstBinding = 2;
+		w[2].dstSet = m_gps[GP_SSR_RAY_CASTING].ds;
+		w[2].pImageInfo = &pos_tex;
+
+		w[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[3].descriptorCount = 1;
+		w[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		w[3].dstArrayElement = 0;
+		w[3].dstBinding = 3;
+		w[3].dstSet = m_gps[GP_SSR_RAY_CASTING].ds;
+		w[3].pImageInfo = &ray_end_fragment_ids;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
+
+	//refraction map gen
+	{
+		VkDescriptorBufferInfo data;
+		data.buffer = m_res_data.buffer;
+		data.offset = m_res_data.offsets[RES_DATA_REFRACTION_MAP_GEN];
+		data.range = sizeof(refraction_map_gen_data);
+
+		VkDescriptorImageInfo preimage;
+		preimage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		preimage.imageView = m_res_image[RES_IMAGE_PREIMAGE].view;
+		preimage.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+
+		w.resize(2);
+
+		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_gps[GP_REFRACTION_IMAGE_GEN].ds;
+		w[0].pBufferInfo = &data;
+
+		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 1;
+		w[1].dstSet = m_gps[GP_REFRACTION_IMAGE_GEN].ds;
+		w[1].pImageInfo = &preimage;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
 	
 	//image assembler
 	{
@@ -1578,7 +1694,16 @@ void gta5_pass::update_descriptor_sets()
 		ub.offset = m_res_data.offsets[RES_DATA_IMAGE_ASSEMBLER_DATA];
 		ub.range = sizeof(image_assembler_data);
 
-		w.resize(6);
+		VkDescriptorImageInfo prev_image;
+		prev_image.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		prev_image.imageView = m_res_image[RES_IMAGE_PREV_IMAGE].view;
+		prev_image.sampler = m_samplers[SAMPLER_GENERAL];
+
+		VkDescriptorImageInfo ssr_ray_casting_coords;
+		ssr_ray_casting_coords.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		ssr_ray_casting_coords.imageView = m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].view;
+
+		w.resize(8);
 
 		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[0].descriptorCount = 1;
@@ -1627,6 +1752,22 @@ void gta5_pass::update_descriptor_sets()
 		w[5].dstBinding = 5;
 		w[5].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
 		w[5].pBufferInfo = &ub;
+
+		w[6].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[6].descriptorCount = 1;
+		w[6].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[6].dstArrayElement = 0;
+		w[6].dstBinding = 6;
+		w[6].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
+		w[6].pImageInfo = &prev_image;
+
+		w[7].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[7].descriptorCount = 1;
+		w[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		w[7].dstArrayElement = 0;
+		w[7].dstBinding = 7;
+		w[7].dstSet = m_gps[GP_IMAGE_ASSEMBLER].ds;
+		w[7].pImageInfo = &ssr_ray_casting_coords;
 
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
@@ -1711,13 +1852,27 @@ void gta5_pass::update_descriptor_sets()
 		data.offset = m_res_data.offsets[RES_DATA_WATER_DRAWER_DATA];
 		data.range = sizeof(water_drawer_data);
 
-		w.resize(1);
+		VkDescriptorImageInfo refr_tex;
+		refr_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		refr_tex.imageView = m_res_image[RES_IMAGE_REFRACTION_IMAGE].view;
+		refr_tex.sampler = m_samplers[SAMPLER_GENERAL];
+
+		w.resize(2);
+		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[0].descriptorCount = 1;
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		w[0].dstArrayElement = 0;
 		w[0].dstBinding = 0;
 		w[0].dstSet = m_gps[GP_WATER_DRAWER].ds;
 		w[0].pBufferInfo = &data;
+
+		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 1;
+		w[1].dstSet = m_gps[GP_WATER_DRAWER].ds;
+		w[1].pImageInfo = &refr_tex;
 
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
@@ -1731,6 +1886,8 @@ void gta5_pass::update_descriptor_sets()
 		data.range = sizeof(water_compute_data);
 
 		w.resize(1);
+
+		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[0].descriptorCount = 1;
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		w[0].dstArrayElement = 0;
@@ -1951,6 +2108,48 @@ void gta5_pass::create_framebuffers()
 			throw std::runtime_error("failed to create framebuffer!");
 	}
 
+	//refraction map gen
+	{
+		using namespace render_pass_refraction_image_gen;
+
+		std::array<VkImageView, ATT_COUNT> atts;
+		atts[ATT_DEPTHSTENCIL] = m_res_image[RES_IMAGE_GB_DEPTH].view;
+		atts[ATT_REFRACTION_IMAGE] = m_res_image[RES_IMAGE_REFRACTION_IMAGE].view;
+
+		VkFramebufferCreateInfo fb = {};
+		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fb.attachmentCount = ATT_COUNT;
+		fb.pAttachments = atts.data();
+		fb.height = m_base.swap_chain_image_extent.height;
+		fb.width = m_base.swap_chain_image_extent.width;
+		fb.layers = 1;
+		fb.renderPass = m_passes[RENDER_PASS_REFRACTION_IMAGE_GEN];
+
+		if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.refraction_image_gen) != VK_SUCCESS)
+			throw std::runtime_error("failed to create framebuffer!");
+	}
+
+	//water
+	{
+		using namespace render_pass_water;
+
+		std::array<VkImageView, ATT_COUNT> atts;
+		atts[ATT_FRAME_IMAGE] = m_res_image[RES_IMAGE_PREIMAGE].view;
+		atts[ATT_DEPTHSTENCIL] = m_res_image[RES_IMAGE_GB_DEPTH].view;
+
+		VkFramebufferCreateInfo fb = {};
+		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+		fb.attachmentCount = ATT_COUNT;
+		fb.pAttachments = atts.data();
+		fb.height = m_base.swap_chain_image_extent.height;
+		fb.width = m_base.swap_chain_image_extent.width;
+		fb.layers = 1;
+		fb.renderPass = m_passes[RENDER_PASS_WATER];
+
+		if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.water) != VK_SUCCESS)
+			throw std::runtime_error("failed to create framebuffer!");
+	}
+
 	//postprocessing
 	{
 		m_fbs.postprocessing.resize(m_base.swap_chain_image_views.size());
@@ -1971,6 +2170,7 @@ void gta5_pass::create_framebuffers()
 		for (uint32_t i=0; i<m_fbs.postprocessing.size(); ++i)
 		{
 			atts[ATT_SWAP_CHAIN_IMAGE] = m_base.swap_chain_image_views[i];
+			atts[ATT_PREV_IMAGE] = m_res_image[RES_IMAGE_PREV_IMAGE].view;
 
 			if (vkCreateFramebuffer(m_base.device, &fb, m_alloc, &m_fbs.postprocessing[i]) != VK_SUCCESS)
 				throw std::runtime_error("failed to create framebuffer!");
@@ -2549,12 +2749,15 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			vkCmdDraw(cb, 4, 1, 0, 0);
 
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
+			m_gps[GP_SSR_RAY_CASTING].bind(cb);
+			vkCmdDraw(cb, m_base.swap_chain_image_extent.width, m_base.swap_chain_image_extent.height, 0, 0);
+
+			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
 			m_gps[GP_IMAGE_ASSEMBLER].bind(cb);
 			if (!m_renderables[RENDERABLE_TYPE_SKY].empty())
 			{
 				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_IMAGE_ASSEMBLER].pl,
 					1, 1, &m_renderables[RENDERABLE_TYPE_SKY][0].mat_light_ds, 0, nullptr);
-				vkCmdDraw(cb, 1, 1, 0, 0);
 			}
 			vkCmdDraw(cb, 4, 1, 0, 0);
 
@@ -2576,10 +2779,10 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 				vkCmdDraw(cb, 18, 1, 0, 0);
 			}
 
-			m_gps[GP_WATER_DRAWER].bind(cb);
+			/*m_gps[GP_WATER_DRAWER].bind(cb);
 
-			/*vkCmdWaitEvents(cb, 1, &m_water_tex_ready_e, VK_PIPELINE_STAGE_HOST_BIT,
-				VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT, 0, nullptr, 0, nullptr, 0, nullptr);*/
+			vkCmdWaitEvents(cb, 1, &m_water_tex_ready_e, VK_PIPELINE_STAGE_HOST_BIT,
+				VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
 
 			if (!m_renderables[RENDERABLE_TYPE_WATER].empty())
 			{
@@ -2587,6 +2790,95 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 					1, 1, &m_water->ds, 0, nullptr);
 				vkCmdDraw(cb, m_water_tiles_count.x*4, m_water_tiles_count.y, 0, 0);
 				//vkCmdDraw(cb, 100, 100, 0, 0);
+			}*/
+
+			vkCmdEndRenderPass(cb);
+		}
+
+		//barrier for preimage
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_PREIMAGE].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
+
+		//refraction map gen
+		{
+			using namespace render_pass_refraction_image_gen;
+
+			VkRenderPassBeginInfo begin = {};
+			begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			begin.clearValueCount = ATT_COUNT;
+			std::array<VkClearValue, ATT_COUNT> clears;
+			clears[ATT_REFRACTION_IMAGE].color = { 0.f, 0.f, 0.f, 0.f };
+			begin.pClearValues = clears.data();
+			begin.framebuffer = m_fbs.refraction_image_gen;
+			begin.renderArea.extent = m_base.swap_chain_image_extent;
+			begin.renderArea.offset = { 0,0 };
+			begin.renderPass = m_passes[RENDER_PASS_REFRACTION_IMAGE_GEN];
+
+			vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_INLINE);
+			m_gps[GP_REFRACTION_IMAGE_GEN].bind(cb);
+			vkCmdDraw(cb, 4, 1, 0, 0);
+			vkCmdEndRenderPass(cb);
+		}
+
+		//barrier for refraction image
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_REFRACTION_IMAGE].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
+
+		//water
+		{
+			VkRenderPassBeginInfo begin = {};
+			begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			begin.framebuffer = m_fbs.water;
+			begin.renderArea.extent = m_base.swap_chain_image_extent;
+			begin.renderArea.offset = { 0,0 };
+			begin.renderPass = m_passes[RENDER_PASS_WATER];
+
+			vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_INLINE);
+			
+			m_gps[GP_WATER_DRAWER].bind(cb);
+
+			if (!m_renderables[RENDERABLE_TYPE_WATER].empty())
+			{
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_WATER_DRAWER].pl,
+					1, 1, &m_water->ds, 0, nullptr);
+				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_WATER_DRAWER].pl,
+					2, 1, &m_renderables[RENDERABLE_TYPE_SKY][0].mat_light_ds, 0, nullptr);
+
+				vkCmdDraw(cb, m_water_tiles_count.x * 4, m_water_tiles_count.y, 0, 0);
 			}
 
 			vkCmdEndRenderPass(cb);
@@ -2728,6 +3020,8 @@ void gta5_pass::process_settings(const render_settings & settings)
 		data->irradiance = settings.irradiance;
 		data->cam_pos = settings.pos;
 		data->height_bias = height_bias;
+		data->previous_proj_x_view = m_previous_proj_x_view;
+		data->previous_view_pos = m_previous_view_pos;
 	}
 
 	glm::mat4 view_at_origin = settings.view;
@@ -2784,6 +3078,25 @@ void gta5_pass::process_settings(const render_settings & settings)
 			/ m_water->grid_size_in_meters)+glm::vec2(0.5f))*
 			m_water->grid_size_in_meters;
 		m_water_tiles_count = static_cast<glm::uvec2>(glm::ceil(glm::vec2(2.f*settings.far) / m_water->grid_size_in_meters));
+		data->ambient_irradiance = settings.ambient_irradiance;
+		data->height_bias = height_bias;
+		data->mirrored_proj_x_view = glm::mat4(1.f); //CORRECT IT!!!
+		data->irradiance = settings.irradiance;
+	}
+
+	//refraction map gen
+	{
+		auto data = m_res_data.get<refraction_map_gen_data>();
+		data->far = settings.far;
+		data->proj_x_view_at_origin = proj_x_view_at_origin;
+	}
+
+	//ssr ray casting
+	{
+		auto data = m_res_data.get<ssr_ray_casting_data>();
+		data->proj_x_view= settings.proj*settings.view;
+		data->ray_length = glm::length(glm::vec3(settings.far / settings.proj[0][0], settings.far / settings.proj[1][1], settings.far));
+		data->view_pos = settings.pos;
 	}
 
 	//water compute data
@@ -2794,6 +3107,9 @@ void gta5_pass::process_settings(const render_settings & settings)
 		data->time = settings.time;
 	}
 
+
+	m_previous_proj_x_view = settings.proj*settings.view;
+	m_previous_view_pos = settings.pos;
 }
 
 std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> gta5_pass::calc_projs(const render_settings& settings)

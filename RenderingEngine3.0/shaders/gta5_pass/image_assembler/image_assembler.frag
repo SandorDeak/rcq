@@ -34,7 +34,7 @@ layout(set=0, binding=5) uniform image_assembler_data
 } data;
 
 layout(set=0, binding=6) uniform sampler2D prev_image_tex;
-layout(input_attachment_index=2, set=0, binding=7) uniform isubpassInput ssr_ray_casting_coord_in;
+layout(set=0, binding=7, r32i) uniform iimage2D ssr_ray_casting_coord_in;
 
 layout(set=1, binding=0) uniform sampler3D Rayleigh_tex;
 layout(set=1, binding=1) uniform sampler3D Mie_tex;
@@ -197,14 +197,16 @@ void main()
 	vec3 irradiance =(tr+sun_color)*data.irradiance;
 	
 	//calculate reflected specular color
-	int raw_refl_ray_end_coord=subpassLoad(ssr_ray_casting_coord_in).x;
+	int raw_refl_ray_end_coord=imageLoad(ssr_ray_casting_coord_in, ivec2(gl_FragCoord.xy)).x;
+	int current_frag=int(gl_FragCoord.x) & (int(gl_FragCoord.y)<<16);
+	imageStore(ssr_ray_casting_coord_in, ivec2(gl_FragCoord.xy), ivec4(current_frag));
 	ivec2 refl_ray_end_coord=ivec2(raw_refl_ray_end_coord & 0xffff, (raw_refl_ray_end_coord>>16));
 	
 	vec3 refl_color;
 	bool has_valid_ssr=false;
-	if (refl_ray_end_coord!=ivec2(gl_FragCoord.xy)) //screen space data is valid
+	if (current_frag!=raw_refl_ray_end_coord) //screen space data is valid
 	{
-		vec2 sample_coords=vec2(refl_ray_end_coord);
+		vec2 sample_coords=vec2(refl_ray_end_coord)+0.5f;
 		vec3 refl_pos=texture(pos_roughness_in, sample_coords).xyz;
 		vec3 refl_normal=texture(normal_ao_in, sample_coords).xyz;
 		
@@ -213,12 +215,13 @@ void main()
 		
 		if (abs(prev_proj_pos.x)<=1.f && abs(prev_proj_pos.y)<=1.f)
 		{
-			vec3 refl_color=texture(prev_image_tex, 0.5f*prev_proj_pos.xy+0.5f).xyz;
+			refl_color=texture(prev_image_tex, 0.5f*prev_proj_pos.xy+0.5f).xyz;
 			vec3 dist_vector=normalize(pos-refl_pos);
-			refl_color*=(dot(refl_normal, dist_vector)/dot(refl_normal, normalize(data.previous_view_pos-refl_pos)));
+			refl_color*=(max(0.f, dot(refl_normal, dist_vector))/max(0.0001f, dot(refl_normal, normalize(data.previous_view_pos-refl_pos))));
 			has_valid_ssr=true;
 		}
-		
+		has_valid_ssr=true;
+		refl_color=vec3(0.f, 1.f, 0.f);
 	}
 	
 	if(!has_valid_ssr) //sreen space data is invalid, sample from sky
@@ -257,4 +260,6 @@ void main()
 	vec3 color_with_areal=transm*color+sky_scattering*data.irradiance;
 	
 	color_out=vec4(color_with_areal, 1.f);
+	
+	//color_out=0.5f*vec4(color_with_areal, 1.f)+0.5f*texture(prev_image_tex, gl_FragCoord.xy/vec2(1360.f, 768.f));
 }

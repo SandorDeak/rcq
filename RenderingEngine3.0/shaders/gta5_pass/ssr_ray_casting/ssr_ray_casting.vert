@@ -7,5 +7,5 @@ layout(location=0) out ivec2 fragment_id_out;
 void main()
 {
 	fragment_id_out=ivec2(gl_VertexIndex, gl_InstanceIndex);
-	gl_Position=vec4(gl_VertexIndex, gl_InstanceIndex, 0.f, 0.f);
+	gl_Position=vec4(float(gl_VertexIndex)+0.5f, float(gl_InstanceIndex)+0.5f, 0.f, 0.f);
 }

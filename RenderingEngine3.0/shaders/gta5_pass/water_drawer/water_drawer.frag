@@ -32,7 +32,7 @@ layout(set=0, binding=0) uniform water_drawer_data
 
 
 layout(set=0, binding=1) uniform sampler2D refraction_tex;
-layout(set=0, binding=2) uniform sampler2D reflection_tex;
+//layout(set=0, binding=2) uniform sampler2D reflection_tex;
 
 layout(set=2, binding=0) uniform sampler3D Rayleigh_tex;
 layout(set=2, binding=1) uniform sampler3D Mie_tex;
@@ -170,7 +170,8 @@ void main()
 	
 	vec4 tex_coords=0.5f*vec4(refl_proj.xy, refr_proj.xy)+0.5f;
 	
-	vec4 refl_color=texture(reflection_tex, tex_coords.xy);
+	//vec4 refl_color=texture(reflection_tex, tex_coords.xy);
+	vec4 refl_color=vec4(0.f);
 	vec4 refr_color=texture(refraction_tex, tex_coords.zw);
 	
 	if (refl_color.w==0.f) //data is invalid, sample from sky
@@ -240,4 +241,5 @@ void main()
 	vec3 color_with_areal=transm*color+sky_scattering*data.irradiance;
 	
 	color_out=vec4(color_with_areal, 1.f);
+	//color_out=vec4(refr_color.xyz, 1.f);
 }

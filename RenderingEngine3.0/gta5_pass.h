@@ -38,6 +38,8 @@ namespace rcq
 			RES_DATA_TERRAIN_TILE_REQUEST,
 			RES_DATA_WATER_COMPUTE_DATA,
 			RES_DATA_WATER_DRAWER_DATA,
+			RES_DATA_REFRACTION_MAP_GEN,
+			RES_DATA_SSR_RAY_CASTING,
 			RES_DATA_COUNT
 		};
 		enum RES_IMAGE
@@ -109,6 +111,8 @@ namespace rcq
 			RENDER_PASS_GBUFFER_ASSEMBLER,
 			RENDER_PASS_SSAO_MAP_GEN,
 			RENDER_PASS_PREIMAGE_ASSEMBLER,
+			RENDER_PASS_REFRACTION_IMAGE_GEN,
+			RENDER_PASS_WATER,
 			RENDER_PASS_POSTPROCESSING,
 			RENDER_PASS_COUNT
 		};
@@ -125,10 +129,13 @@ namespace rcq
 			GP_SS_DIR_SHADOW_MAP_BLUR,
 			GP_SSAO_GEN,
 			GP_SSAO_BLUR,
+			GP_SSR_RAY_CASTING,
 			GP_IMAGE_ASSEMBLER,
 			GP_TERRAIN_DRAWER,
 			GP_SKY_DRAWER,
 			GP_SUN_DRAWER,
+
+			GP_REFRACTION_IMAGE_GEN,
 			GP_WATER_DRAWER,
 
 			GP_POSTPROCESSING,
@@ -207,6 +214,9 @@ namespace rcq
 		};
 		struct image_assembler_data
 		{
+			glm::mat4 previous_proj_x_view;
+			glm::vec3 previous_view_pos;
+			uint32_t padding0;
 			glm::vec3 dir; //in view space
 			float height_bias;
 			glm::vec3 irradiance;
@@ -252,14 +262,31 @@ namespace rcq
 		struct water_drawer_data
 		{
 			glm::mat4 proj_x_view;
+			glm::mat4 mirrored_proj_x_view;
 			glm::vec3 view_pos;
-			uint32_t padding0;
+			float height_bias;
 			glm::vec3 light_dir;
+			uint32_t padding0;
+			glm::vec3 irradiance;
 			uint32_t padding1;
+			glm::vec3 ambient_irradiance;
+			uint32_t padding2;
 			glm::vec2 tile_offset;
 			glm::vec2 tile_size_in_meter;
 			glm::vec2 half_resolution;
-			uint32_t padding2[2];
+		};
+
+		struct refraction_map_gen_data
+		{
+			glm::mat4 proj_x_view_at_origin;
+			float far;
+		};
+
+		struct ssr_ray_casting_data
+		{
+			glm::mat4 proj_x_view;
+			glm::vec3 view_pos;
+			float ray_length;
 		};
 
 		struct water_compute_data
@@ -276,6 +303,8 @@ namespace rcq
 			VkFramebuffer gbuffer_assembler;
 			VkFramebuffer ssao_map_gen;
 			VkFramebuffer preimage_assembler;
+			VkFramebuffer refraction_image_gen;
+			VkFramebuffer water;
 			std::vector<VkFramebuffer> postprocessing;
 		};
 
@@ -294,7 +323,9 @@ namespace rcq
 				terrain_drawer_data*,
 				terrain_tile_request_data*,
 				water_compute_data*,
-				water_drawer_data*
+				water_drawer_data*,
+				refraction_map_gen_data*,
+				ssr_ray_casting_data*
 			> data;
 
 			VkBuffer buffer;
@@ -317,7 +348,9 @@ namespace rcq
 					sizeof(terrain_drawer_data),
 					sizeof(terrain_tile_request_data),
 					sizeof(water_compute_data),
-					sizeof(water_drawer_data)
+					sizeof(water_drawer_data),
+					sizeof(refraction_map_gen_data),
+					sizeof(ssr_ray_casting_data)
 				};
 			}
 
@@ -440,6 +473,9 @@ namespace rcq
 		};
 
 		terrain_manager m_terrain_manager;
+
+		glm::mat4 m_previous_proj_x_view;
+		glm::vec3 m_previous_view_pos;
 	};
 }
 

@@ -213,14 +213,14 @@ void scene::build()
 
 	for (int i = 0; i < buddha_count; ++i)
 	{
-		tr.data.model = glm::translate(glm::mat4(1.f), glm::vec3(float(i - 5)*0.5f, -0.55f, 0.f));
+		tr.data.model = glm::translate(glm::mat4(1.f), glm::vec3(float(i - 5)*0.5f, -0.55f+10.f, 0.f));
 		tr.id = ENTITY_GOLD_BUDDHA+i;
 		m_trs.push_back(tr);
 		rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 	}
 
 	//floor
-	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, -1.f, 0.f });
+	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, -1.f+10.f, 0.f });
 	tr.data.scale = glm::vec3(6.f);
 	tr.data.tex_scale = glm::vec2(1.f);
 	tr.id = ENTITY_FLOOR;
@@ -229,7 +229,7 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//self
-	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, -0.4f, -4.f });
+	tr.data.model= glm::translate(glm::mat4(1.f), { 0.f, -0.4f+10.f, -4.f });
 	tr.data.scale = glm::vec3(0.015f);
 	tr.data.tex_scale = glm::vec2(5.f);
 	tr.id = ENTITY_SHELF;
@@ -238,21 +238,21 @@ void scene::build()
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//warehouse
-	tr.data.model = glm::translate(glm::mat4(1.f), { -30.f, 1.f, 0.f });
+	tr.data.model = glm::translate(glm::mat4(1.f), { -30.f, 1.f+10.f, 0.f });
 	tr.data.scale = glm::vec3(2.f, 2.f, 2.f);
 	tr.id = ENTITY_WAREHOUSE;
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//rusted iron sphere
-	tr.data.model = glm::translate(glm::mat4(1.f), { -1., -0.75f, -1.f });
+	tr.data.model = glm::translate(glm::mat4(1.f), { -1., -0.75f+10.f, -1.f });
 	tr.data.scale = glm::vec3(0.2f);
 	tr.id = ENTITY_RUSTED_IRON_SPHERE;
 	m_trs.push_back(tr);
 	rcq::engine::instance()->cmd_build<rcq::RESOURCE_TYPE_TR>(tr.id, tr.data, tr.usage);
 
 	//scuffed aluminium sphere
-	tr.data.model = glm::translate(glm::mat4(1.f), { -3., -0.75f, -3.f });
+	tr.data.model = glm::translate(glm::mat4(1.f), { -3., -0.75f+10.f, -3.f });
 	tr.data.scale = glm::vec3(0.2f);
 	tr.id = ENTITY_SCUFFED_ALUMINIUM_SPHERE;
 	m_trs.push_back(tr);
