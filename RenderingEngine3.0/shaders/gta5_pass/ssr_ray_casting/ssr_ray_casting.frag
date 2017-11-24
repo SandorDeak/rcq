@@ -17,7 +17,7 @@ void main()
 	
 	ivec2 current_frag_coord=ivec2(gl_FragCoord.xy);
 	
-	int begin_coord=fragment_id.x & (fragment_id.y<<16);
+	int begin_coord=0;//fragment_id.x & (fragment_id.y<<16);
 	int current_coord=current_frag_coord.x & (current_frag_coord.y<<16);
 	
 	/*int contained_coord=imageAtomicCompSwap(ray_end_fragment_ids, fragment_id, begin_coord, current_coord);

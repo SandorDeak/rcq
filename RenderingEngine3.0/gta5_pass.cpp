@@ -278,6 +278,12 @@ void gta5_pass::create_graphics_pipelines()
 		!= VK_SUCCESS)
 		throw std::runtime_error("failed to create gta5 graphics pipelines!");
 
+	/*for (uint32_t i = 0; i < GP_COUNT; ++i)
+	{
+		vkCreateGraphicsPipelines(m_base.device, VK_NULL_HANDLE, 1, create_infos.data() + i, m_alloc, gps.data() + i);
+		int k = 3;
+	}*/
+
 	for (uint32_t i = 0; i < GP_COUNT; ++i)
 		m_gps[i].gp = gps[i];
 }
@@ -292,6 +298,9 @@ void gta5_pass::create_compute_pipelines()
 	compute_pipeline_water_fft::runtime_info r1(m_base.device);
 	r1.fill_create_info(create_infos[CP_WATER_FFT]);
 
+	compute_pipeline_bloom_blur::runtime_info r2(m_base.device);
+	r2.fill_create_info(create_infos[CP_BLOOM_BLUR]);
+
 	//create_layouts
 	m_cps[CP_TERRAIN_TILE_REQUEST].create_layout(m_base.device, 
 	{
@@ -302,6 +311,8 @@ void gta5_pass::create_compute_pipelines()
 		resource_manager::instance()->get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE_WATER_COMPUTE)
 	}, m_alloc, { {VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t)} });
 
+	m_cps[CP_BLOOM_BLUR].create_layout(m_base.device, {}, m_alloc,
+	{ {VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t)} });
 	for (uint32_t i = 0; i < CP_COUNT; ++i)
 		create_infos[i].layout = m_cps[i].pl;
 
@@ -375,6 +386,9 @@ void gta5_pass::create_dsls_and_allocate_dss()
 
 	m_cps[CP_WATER_FFT].create_dsl(m_base.device,
 		compute_pipeline_water_fft::dsl::create_info, m_alloc);
+
+	m_cps[CP_BLOOM_BLUR].create_dsl(m_base.device,
+		compute_pipeline_bloom_blur::dsl::create_info, m_alloc);
 
 	//create descriptor pool
 	if (vkCreateDescriptorPool(m_base.device, &dp::create_info,
@@ -666,7 +680,8 @@ void gta5_pass::send_memory_requirements()
 		image.samples = VK_SAMPLE_COUNT_1_BIT;
 		image.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		image.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+		image.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT 
+			| VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
 		if (vkCreateImage(m_base.device, &image, m_alloc, &m_res_image[RES_IMAGE_PREIMAGE].image)
 			!= VK_SUCCESS)
@@ -878,6 +893,34 @@ void gta5_pass::send_memory_requirements()
 
 		alloc_infos[MEMORY_SSAO_MAP].allocationSize = mr.size;
 		alloc_infos[MEMORY_SSAO_MAP].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
+			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	}
+
+	//bloom blur
+	{
+		VkImageCreateInfo im = {};
+		im.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+		im.arrayLayers = 2;
+		im.extent.width = m_base.swap_chain_image_extent.width / BLOOM_IMAGE_SIZE_FACTOR;
+		im.extent.height = m_base.swap_chain_image_extent.height / BLOOM_IMAGE_SIZE_FACTOR;
+		im.extent.depth = 1;
+		im.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		im.imageType = VK_IMAGE_TYPE_2D;
+		im.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		im.mipLevels = 1;
+		im.samples = VK_SAMPLE_COUNT_1_BIT;
+		im.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		im.tiling = VK_IMAGE_TILING_OPTIMAL;
+		im.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+		if (vkCreateImage(m_base.device, &im, m_alloc, &m_res_image[RES_IMAGE_BLOOM_BLUR].image) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image!");
+
+		VkMemoryRequirements mr;
+		vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_BLOOM_BLUR].image, &mr);
+
+		alloc_infos[MEMORY_BLOOM_BLUR].allocationSize = mr.size;
+		alloc_infos[MEMORY_BLOOM_BLUR].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
 			VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	}
 
@@ -1111,6 +1154,26 @@ void gta5_pass::get_memory_and_build_resources()
 		view.subresourceRange.levelCount = 1;
 
 		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create view!");
+	}
+
+	//bloom blur
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_BLOOM_BLUR].image,
+			mem[MEMORY_BLOOM_BLUR], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 2;
+		view.subresourceRange.levelCount = 1;
+
+		view.image = m_res_image[RES_IMAGE_BLOOM_BLUR].image;
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_BLOOM_BLUR].view) != VK_SUCCESS)
 			throw std::runtime_error("failed to create view!");
 	}
 
@@ -1857,7 +1920,17 @@ void gta5_pass::update_descriptor_sets()
 		refr_tex.imageView = m_res_image[RES_IMAGE_REFRACTION_IMAGE].view;
 		refr_tex.sampler = m_samplers[SAMPLER_GENERAL];
 
-		w.resize(2);
+		VkDescriptorImageInfo pos_tex;
+		pos_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		pos_tex.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
+		pos_tex.sampler = m_samplers[SAMPLER_GENERAL];
+
+		VkDescriptorImageInfo normal_tex;
+		normal_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		normal_tex.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
+		normal_tex.sampler = m_samplers[SAMPLER_GENERAL];
+
+		w.resize(4);
 		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[0].descriptorCount = 1;
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -1873,6 +1946,22 @@ void gta5_pass::update_descriptor_sets()
 		w[1].dstBinding = 1;
 		w[1].dstSet = m_gps[GP_WATER_DRAWER].ds;
 		w[1].pImageInfo = &refr_tex;
+
+		w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[2].descriptorCount = 1;
+		w[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[2].dstArrayElement = 0;
+		w[2].dstBinding = 2;
+		w[2].dstSet = m_gps[GP_WATER_DRAWER].ds;
+		w[2].pImageInfo = &pos_tex;
+
+		w[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[3].descriptorCount = 1;
+		w[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[3].dstArrayElement = 0;
+		w[3].dstBinding = 3;
+		w[3].dstSet = m_gps[GP_WATER_DRAWER].ds;
+		w[3].pImageInfo = &normal_tex;
 
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
@@ -1897,6 +1986,24 @@ void gta5_pass::update_descriptor_sets()
 
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
+	//bloom blur
+	{
+		VkDescriptorImageInfo blur_im;
+		blur_im.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		blur_im.imageView = m_res_image[RES_IMAGE_BLOOM_BLUR].view;
+
+		w.resize(1);
+
+		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 0;
+		w[0].dstSet = m_cps[CP_BLOOM_BLUR].ds;
+		w[0].pImageInfo = &blur_im;
+
+		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+	}
 
 	//postprocessing
 	{
@@ -1905,7 +2012,12 @@ void gta5_pass::update_descriptor_sets()
 		preimage.imageView = m_res_image[RES_IMAGE_PREIMAGE].view;
 		preimage.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
 
-		w.resize(1);
+		VkDescriptorImageInfo bloom_blur;
+		bloom_blur.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		bloom_blur.imageView = m_res_image[RES_IMAGE_BLOOM_BLUR].view;
+		bloom_blur.sampler = m_samplers[SAMPLER_GENERAL];
+
+		w.resize(2);
 
 		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[0].descriptorCount = 1;
@@ -1914,6 +2026,14 @@ void gta5_pass::update_descriptor_sets()
 		w[0].dstBinding = 0;
 		w[0].dstSet = m_gps[GP_POSTPROCESSING].ds;
 		w[0].pImageInfo = &preimage;
+
+		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 1;
+		w[1].dstSet = m_gps[GP_POSTPROCESSING].ds;
+		w[1].pImageInfo = &bloom_blur;
 
 		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
 	}
@@ -1970,7 +2090,9 @@ void gta5_pass::create_sync_objects()
 	VkSemaphoreCreateInfo s = {};
 	s.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 	if (vkCreateSemaphore(m_base.device, &s, m_alloc, &m_image_available_s) != VK_SUCCESS ||
-		vkCreateSemaphore(m_base.device, &s, m_alloc, &m_render_finished_s) != VK_SUCCESS)
+		vkCreateSemaphore(m_base.device, &s, m_alloc, &m_render_finished_s) != VK_SUCCESS ||
+		vkCreateSemaphore(m_base.device, &s, m_alloc, &m_bloom_blur_ready_s) != VK_SUCCESS ||
+		vkCreateSemaphore(m_base.device, &s, m_alloc, &m_preimage_ready_s) != VK_SUCCESS)
 		throw std::runtime_error("failed to create semaphores!");
 
 	m_present_ready_ss.resize(m_base.swap_chain_image_views.size());
@@ -2220,6 +2342,9 @@ void gta5_pass::allocate_command_buffers()
 
 		if (vkAllocateCommandBuffers(m_base.device, &alloc, &m_water_fft_cb) != VK_SUCCESS)
 			throw std::runtime_error("failed to allocate command buffer!");
+
+		if (vkAllocateCommandBuffers(m_base.device, &alloc, &m_bloom_blur_cb) != VK_SUCCESS)
+			throw std::runtime_error("failed to allocate command buffer!");
 	}
 
 	//secondary cbs
@@ -2259,6 +2384,67 @@ void gta5_pass::record_present_command_buffers()
 		vkCmdEndRenderPass(m_present_cbs[i]);
 
 		if (vkEndCommandBuffer(m_present_cbs[i]) != VK_SUCCESS)
+			throw std::runtime_error("failed to record command buffer!");
+	}
+
+	//record bloom blur cb
+	{
+		VkCommandBufferBeginInfo begin = {};
+		begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+		if (vkBeginCommandBuffer(m_bloom_blur_cb, &begin) != VK_SUCCESS)
+			throw std::runtime_error("failed to begin command buffer!");
+
+		glm::ivec2 size = { m_base.swap_chain_image_extent.width / BLOOM_IMAGE_SIZE_FACTOR,
+			m_base.swap_chain_image_extent.height / BLOOM_IMAGE_SIZE_FACTOR };
+
+		m_cps[CP_BLOOM_BLUR].bind(m_bloom_blur_cb, VK_PIPELINE_BIND_POINT_COMPUTE);
+		uint32_t step = 0;
+		vkCmdPushConstants(m_bloom_blur_cb, m_cps[CP_BLOOM_BLUR].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &step);
+		vkCmdDispatch(m_bloom_blur_cb, size.x, size.y, 1);
+
+		for (uint32_t i = 0; i < 3; ++i)
+		{
+			VkMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+			b.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			vkCmdPipelineBarrier(m_bloom_blur_cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+				0, 1, &b, 0, nullptr, 0, nullptr);
+
+			step = 1;
+			vkCmdPushConstants(m_bloom_blur_cb, m_cps[CP_BLOOM_BLUR].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &step);
+			vkCmdDispatch(m_bloom_blur_cb, size.x, size.y, 1);
+
+			vkCmdPipelineBarrier(m_bloom_blur_cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+				0, 1, &b, 0, nullptr, 0, nullptr);
+
+			step = 2;
+			vkCmdPushConstants(m_bloom_blur_cb, m_cps[CP_BLOOM_BLUR].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &step);
+			vkCmdDispatch(m_bloom_blur_cb, size.x, size.y, 1);
+		}
+
+		//barrier for bloom blur image
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.image = m_res_image[RES_IMAGE_BLOOM_BLUR].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 2;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(m_bloom_blur_cb, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
+
+		if (vkEndCommandBuffer(m_bloom_blur_cb) != VK_SUCCESS)
 			throw std::runtime_error("failed to record command buffer!");
 	}
 }
@@ -2779,23 +2965,10 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 				vkCmdDraw(cb, 18, 1, 0, 0);
 			}
 
-			/*m_gps[GP_WATER_DRAWER].bind(cb);
-
-			vkCmdWaitEvents(cb, 1, &m_water_tex_ready_e, VK_PIPELINE_STAGE_HOST_BIT,
-				VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT, 0, nullptr, 0, nullptr, 0, nullptr);
-
-			if (!m_renderables[RENDERABLE_TYPE_WATER].empty())
-			{
-				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_WATER_DRAWER].pl,
-					1, 1, &m_water->ds, 0, nullptr);
-				vkCmdDraw(cb, m_water_tiles_count.x*4, m_water_tiles_count.y, 0, 0);
-				//vkCmdDraw(cb, 100, 100, 0, 0);
-			}*/
-
 			vkCmdEndRenderPass(cb);
 		}
 
-		//barrier for preimage
+		/*//barrier for preimage
 		{
 			VkImageMemoryBarrier b = {};
 			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -2814,7 +2987,7 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 
 			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 				0, 0, nullptr, 0, nullptr, 1, &b);
-		}
+		}*/
 
 		//refraction map gen
 		{
@@ -2884,16 +3057,100 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			vkCmdEndRenderPass(cb);
 		}
 
-		//barrier for preimage
+		/*//barrier for preimage
 		{
 			VkImageMemoryBarrier b = {};
 			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 			b.image = m_res_image[RES_IMAGE_PREIMAGE].image;
 			b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 			b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}*/
+
+		//transition bloom blur image
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_BLOOM_BLUR].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			b.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			b.srcAccessMask = 0;
+			b.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 2;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
+
+		//blit preimage to bloom blur
+		{
+			VkImageBlit blit = {};
+			blit.srcOffsets[0] = { 0, 0, 0 };
+			blit.srcOffsets[1] = { 
+				static_cast<int32_t>(m_base.swap_chain_image_extent.width),
+				static_cast<int32_t>(m_base.swap_chain_image_extent.height), 1 };
+			blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.srcSubresource.baseArrayLayer = 0;
+			blit.srcSubresource.layerCount = 1;
+			blit.srcSubresource.mipLevel = 0;
+
+			blit.dstOffsets[0] = { 0, 0, 0 };
+			blit.dstOffsets[1] = { 
+				static_cast<int32_t>(m_base.swap_chain_image_extent.width / BLOOM_IMAGE_SIZE_FACTOR),
+				static_cast<int32_t>(m_base.swap_chain_image_extent.height / BLOOM_IMAGE_SIZE_FACTOR), 1 };
+			blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			blit.dstSubresource.baseArrayLayer = 0;
+			blit.dstSubresource.layerCount = 1;
+			blit.dstSubresource.mipLevel = 0;
+
+			vkCmdBlitImage(cb, m_res_image[RES_IMAGE_PREIMAGE].image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				m_res_image[RES_IMAGE_BLOOM_BLUR].image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+		}
+
+		//transition bloom blur
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_BLOOM_BLUR].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			b.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 2;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
+
+		//barrier for preimage
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_PREIMAGE].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			b.subresourceRange.baseArrayLayer = 0;
@@ -2901,7 +3158,7 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 			b.subresourceRange.layerCount = 1;
 			b.subresourceRange.levelCount = 1;
 
-			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 				0, 0, nullptr, 0, nullptr, 1, &b);
 		}
 
@@ -2917,35 +3174,61 @@ void gta5_pass::render(const render_settings & settings, std::bitset<RENDERABLE_
 	vkAcquireNextImageKHR(m_base.device, m_base.swap_chain, std::numeric_limits<uint64_t>::max(), m_image_available_s,
 		VK_NULL_HANDLE, &image_index);
 
-	//submit command buffers
+	//submit render_buffer
 	{
-		std::array<VkSubmitInfo, 2> submit = {};
-		submit[0].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit[0].commandBufferCount = 1;
-		submit[0].pCommandBuffers = &m_render_cb;
-		submit[0].pSignalSemaphores = &m_render_finished_s;
-		submit[0].signalSemaphoreCount = 1;
-		
-		submit[1].sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit[1].commandBufferCount = 1;
-		submit[1].pCommandBuffers = &m_present_cbs[image_index];
-
-		std::array<VkSemaphore, 2> wait_ss = { m_image_available_s, m_render_finished_s };
-		submit[1].pWaitSemaphores = wait_ss.data();
-		submit[1].waitSemaphoreCount = 2;
-		std::array<VkPipelineStageFlags, 2> waits = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT };
-		submit[1].pWaitDstStageMask = waits.data();
-		submit[1].pSignalSemaphores = &m_present_ready_ss[image_index];
-		submit[1].signalSemaphoreCount = 1;
+		VkSubmitInfo submit = {};
+		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit.commandBufferCount = 1;
+		submit.pCommandBuffers = &m_render_cb;
+		std::array<VkSemaphore, 2> signal_s = { m_render_finished_s, m_preimage_ready_s };
+		submit.pSignalSemaphores = signal_s.data();
+		submit.signalSemaphoreCount = 2;
 		
 		vkWaitForFences(m_base.device, 1, &m_compute_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
 		//vkSetEvent(m_base.device, m_water_tex_ready_e);
 		
 		std::lock_guard<std::mutex> lock(m_base.graphics_queue_mutex);
-		if (vkQueueSubmit(m_base.graphics_queue, 2, submit.data(), m_render_finished_f) != VK_SUCCESS)
+		if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS)
 			throw std::runtime_error("failed to submit command buffers!");
+	}
 
+	//submit bloom blur
+	{
+		VkSubmitInfo submit = {};
+		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit.commandBufferCount = 1;
+		submit.pCommandBuffers = &m_bloom_blur_cb;
+		submit.pSignalSemaphores = &m_bloom_blur_ready_s;
+		submit.signalSemaphoreCount = 1;
+		submit.waitSemaphoreCount = 1;
+		submit.pWaitSemaphores = &m_preimage_ready_s;
+		VkPipelineStageFlags wait = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+		submit.pWaitDstStageMask = &wait;
+
+		std::lock_guard<std::mutex> lock(m_base.compute_queue_mutex);
+		if (vkQueueSubmit(m_base.compute_queue, 1, &submit, VK_NULL_HANDLE) != VK_SUCCESS)
+			throw std::runtime_error("failed to submit command buffer!");
+	}
+
+	//submit postprocessing
+	{
+		VkSubmitInfo submit = {};
+		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		submit.commandBufferCount = 1;
+		submit.pCommandBuffers = &m_present_cbs[image_index];
+
+		std::array<VkSemaphore, 3> wait_ss = { m_image_available_s, m_render_finished_s, m_bloom_blur_ready_s };
+		submit.pWaitSemaphores = wait_ss.data();
+		submit.waitSemaphoreCount = wait_ss.size();
+		std::array<VkPipelineStageFlags, 3> waits = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT };
+		submit.pWaitDstStageMask = waits.data();
+		submit.pSignalSemaphores = &m_present_ready_ss[image_index];
+		submit.signalSemaphoreCount = 1;
+
+		std::lock_guard<std::mutex> lock(m_base.graphics_queue_mutex);
+		if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, m_render_finished_f) != VK_SUCCESS)
+			throw std::runtime_error("failed to submit command buffers!");
 	}
 
 	//present swap chain image
@@ -3088,7 +3371,9 @@ void gta5_pass::process_settings(const render_settings & settings)
 	{
 		auto data = m_res_data.get<refraction_map_gen_data>();
 		data->far = settings.far;
-		data->proj_x_view_at_origin = proj_x_view_at_origin;
+		data->proj_x_view = settings.proj*settings.view;
+		data->view_pos_at_ground = { settings.pos.x, glm::min(0.05f*glm::dot(settings.wind, settings.wind) / 9.81f,
+			settings.pos.y - settings.near - 0.000001f), settings.pos.z };
 	}
 
 	//ssr ray casting

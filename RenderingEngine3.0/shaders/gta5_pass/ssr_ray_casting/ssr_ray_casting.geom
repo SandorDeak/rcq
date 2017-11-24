@@ -15,8 +15,6 @@ layout(invocations=1) in;
 
 layout(points) in;
 
-layout(location=0) in ivec2 fragment_id_in[1];
-
 layout(location=0) out vec2 fragment_id_out;
 
 layout(line_strip, max_vertices=2) out;
@@ -30,11 +28,11 @@ void main()
 	
 	fragment_id_out=gl_in[0].gl_Position.xy;
 	gl_Position=data.proj_x_view*vec4(pos, 1.f);
-	EmitVertex();
+	//EmitVertex();
 	
 	fragment_id_out=gl_in[0].gl_Position.xy;
-	gl_Position=data.proj_x_view*vec4(pos+/*data.ray_length*/10.f*r, 1.f); 
-	EmitVertex();
+	gl_Position=data.proj_x_view*vec4(pos+/*data.ray_length*/100.f*r, 1.f); 
+	//EmitVertex();
 
 	EndPrimitive();
 }

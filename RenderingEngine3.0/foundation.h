@@ -325,6 +325,7 @@ namespace rcq
 	//engine related
 
 	extern const uint32_t GRID_SIZE;
+	extern const uint32_t BLOOM_IMAGE_SIZE_FACTOR;
 
 
 	std::vector<char> read_file(const std::string_view& filename);
@@ -623,6 +624,8 @@ namespace rcq
 		VkBuffer current_mip_levels_buffer;
 		VkDeviceMemory current_mip_levels_memory;
 		float* current_mip_levels_data;
+
+		VkImageView greatest_level_view;
 
 		pool_id pool_index;
 

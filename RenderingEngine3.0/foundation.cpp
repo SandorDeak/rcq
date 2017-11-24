@@ -3,6 +3,8 @@
 
 const uint32_t rcq::OMNI_SHADOW_MAP_SIZE=128;
 const uint32_t rcq::GRID_SIZE = 1024;
+const uint32_t rcq::BLOOM_IMAGE_SIZE_FACTOR=4;
+
 
 
 std::vector<char> rcq::read_file(const std::string_view& filename)

@@ -197,14 +197,15 @@ void main()
 	vec3 irradiance =(tr+sun_color)*data.irradiance;
 	
 	//calculate reflected specular color
-	int raw_refl_ray_end_coord=imageLoad(ssr_ray_casting_coord_in, ivec2(gl_FragCoord.xy)).x;
+	//int raw_refl_ray_end_coord=imageLoad(ssr_ray_casting_coord_in, ivec2(gl_FragCoord.xy)).x;
 	int current_frag=int(gl_FragCoord.x) & (int(gl_FragCoord.y)<<16);
-	imageStore(ssr_ray_casting_coord_in, ivec2(gl_FragCoord.xy), ivec4(current_frag));
+	//imageStore(ssr_ray_casting_coord_in, ivec2(gl_FragCoord.xy), ivec4(current_frag));
+	int raw_refl_ray_end_coord=imageAtomicExchange(ssr_ray_casting_coord_in, ivec2(gl_FragCoord.xy), /*current_frag*/ 0);
 	ivec2 refl_ray_end_coord=ivec2(raw_refl_ray_end_coord & 0xffff, (raw_refl_ray_end_coord>>16));
 	
 	vec3 refl_color;
 	bool has_valid_ssr=false;
-	if (current_frag!=raw_refl_ray_end_coord) //screen space data is valid
+	if (/*current_frag*/ 0!=raw_refl_ray_end_coord) //screen space data is valid
 	{
 		vec2 sample_coords=vec2(refl_ray_end_coord)+0.5f;
 		vec3 refl_pos=texture(pos_roughness_in, sample_coords).xyz;

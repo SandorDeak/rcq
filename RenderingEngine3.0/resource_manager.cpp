@@ -2381,6 +2381,23 @@ terrain resource_manager::build<RESOURCE_TYPE_TERRAIN>(const std::string& filena
 			throw std::runtime_error("failed to create image view!");
 	}
 
+	//create greatet level view
+	{
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = t.tex.image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.baseMipLevel = mip_level_count-1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &t.greatest_level_view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
 	//create terrain data buffer
 	{
 		VkBufferCreateInfo buffer = {};
@@ -2660,6 +2677,7 @@ void resource_manager::destroy(terrain&& t)
 
 	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].availability[t.pool_index];
 
+	vkDestroyImageView(m_base.device, t.greatest_level_view, m_alloc);
 	vkDestroyImageView(m_base.device, t.tex.view, m_alloc);
 	vkDestroyImage(m_base.device, t.tex.image, m_alloc);
 	vkDestroySampler(m_base.device, t.tex.sampler, m_alloc);

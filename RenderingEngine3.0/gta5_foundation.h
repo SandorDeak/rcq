@@ -37,8 +37,64 @@ namespace rcq
 	{
 		CP_TERRAIN_TILE_REQUEST,
 		CP_WATER_FFT,
+		CP_BLOOM_BLUR,
 		CP_COUNT
 	};
+
+	namespace compute_pipeline_bloom_blur
+	{
+		struct runtime_info
+		{
+			runtime_info(VkDevice d) : device(d), shader{}
+			{
+				create_shaders(device,
+				{
+					"shaders/gta5_pass/bloom_blur/comp.spv"
+				},
+				{
+					VK_SHADER_STAGE_COMPUTE_BIT
+				}, &shader);
+			}
+			~runtime_info()
+			{
+				vkDestroyShaderModule(device, shader.module, nullptr);
+			}
+
+			void fill_create_info(VkComputePipelineCreateInfo& info)
+			{
+				info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+				info.basePipelineHandle = VK_NULL_HANDLE;
+				info.basePipelineIndex = -1;
+				info.stage = shader;
+			}
+			VkDevice device;
+			VkPipelineShaderStageCreateInfo shader;
+		};
+
+		namespace dsl
+		{
+			constexpr auto create_binding()
+			{
+				VkDescriptorSetLayoutBinding binding = {};
+				binding.binding = 0;
+				binding.descriptorCount = 1;
+				binding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+				binding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+				return binding;
+			}
+			constexpr auto binding = create_binding();
+
+			constexpr auto create_create_info()
+			{
+				VkDescriptorSetLayoutCreateInfo dsl = {};
+				dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+				dsl.bindingCount = 1;
+				dsl.pBindings = &binding;
+				return dsl;
+			}
+			constexpr auto create_info = create_create_info();
+		}
+	}
 
 	namespace compute_pipeline_water_fft
 	{
@@ -1922,9 +1978,26 @@ namespace rcq
 					d.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
 					d.depthBoundsTestEnable = VK_FALSE;
 					d.depthCompareOp = VK_COMPARE_OP_GREATER;
-					d.depthTestEnable = VK_TRUE;
+					d.depthTestEnable = VK_FALSE;
 					d.depthWriteEnable = VK_FALSE;
-					d.stencilTestEnable = VK_FALSE;
+					d.stencilTestEnable = VK_TRUE;
+
+					d.front.compareMask = 1;
+					d.front.writeMask = 1;
+					d.front.compareOp = VK_COMPARE_OP_EQUAL;
+					d.front.depthFailOp = VK_STENCIL_OP_KEEP;
+					d.front.failOp = VK_STENCIL_OP_KEEP;
+					d.front.passOp = VK_STENCIL_OP_KEEP;
+					d.front.reference = 1;
+
+					d.back.compareMask = 1;
+					d.back.writeMask = 1;
+					d.back.compareOp = VK_COMPARE_OP_EQUAL;
+					d.back.depthFailOp = VK_STENCIL_OP_KEEP;
+					d.back.failOp = VK_STENCIL_OP_KEEP;
+					d.back.passOp = VK_STENCIL_OP_KEEP;
+					d.back.reference = 1;
+
 					return d;
 				}
 				constexpr auto depth = create_depth();
@@ -2116,8 +2189,8 @@ namespace rcq
 			atts[ATT_DEPTHSTENCIL].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 			atts[ATT_DEPTHSTENCIL].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 			atts[ATT_DEPTHSTENCIL].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			atts[ATT_DEPTHSTENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			atts[ATT_DEPTHSTENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			atts[ATT_DEPTHSTENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			atts[ATT_DEPTHSTENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 			atts[ATT_DEPTHSTENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
 
 			return atts;
@@ -2519,7 +2592,16 @@ namespace rcq
 					d.depthTestEnable = VK_TRUE;
 					d.depthWriteEnable = VK_TRUE;
 					d.depthCompareOp = VK_COMPARE_OP_LESS;
-					d.stencilTestEnable = VK_FALSE;
+					d.stencilTestEnable = VK_TRUE;
+
+					d.front.compareMask = 1;
+					d.front.writeMask = 1;
+					d.front.compareOp = VK_COMPARE_OP_ALWAYS;
+					d.front.depthFailOp = VK_STENCIL_OP_KEEP;
+					d.front.failOp = VK_STENCIL_OP_KEEP;
+					d.front.passOp = VK_STENCIL_OP_REPLACE;
+					d.front.reference = 1;
+
 					return d;
 				}
 				constexpr auto depthstencil = create_depthstencil();
@@ -2699,7 +2781,15 @@ namespace rcq
 					d.depthTestEnable = VK_TRUE;
 					d.depthWriteEnable = VK_TRUE;
 					d.depthCompareOp = VK_COMPARE_OP_LESS;
-					d.stencilTestEnable = VK_FALSE;
+					d.stencilTestEnable = VK_TRUE;
+
+					d.front.compareMask = 1;
+					d.front.writeMask = 1;
+					d.front.compareOp = VK_COMPARE_OP_ALWAYS;
+					d.front.depthFailOp = VK_STENCIL_OP_KEEP;
+					d.front.failOp = VK_STENCIL_OP_KEEP;
+					d.front.passOp = VK_STENCIL_OP_REPLACE;
+					d.front.reference = 1;
 					return d;
 				}
 				constexpr auto depthstencil = create_depthstencil();
@@ -3060,6 +3150,8 @@ namespace rcq
 			atts[ATT_DEPTHSTENCIL].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
 			atts[ATT_DEPTHSTENCIL].format = VK_FORMAT_D32_SFLOAT_S8_UINT;
 			atts[ATT_DEPTHSTENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
+			atts[ATT_DEPTHSTENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+			atts[ATT_DEPTHSTENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 
 			atts[ATT_SS_DIR_SHADOW_MAP].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 			atts[ATT_SS_DIR_SHADOW_MAP].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
@@ -3179,7 +3271,7 @@ namespace rcq
 					r.cullMode = VK_CULL_MODE_NONE;
 					r.depthBiasEnable = VK_FALSE;
 					r.depthClampEnable = VK_FALSE;
-					r.frontFace = VK_FRONT_FACE_CLOCKWISE;
+					r.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 					r.lineWidth = 1.f;
 					r.polygonMode = VK_POLYGON_MODE_FILL;
 					r.rasterizerDiscardEnable = VK_FALSE;
@@ -3195,7 +3287,24 @@ namespace rcq
 					d.depthCompareOp = VK_COMPARE_OP_LESS;
 					d.depthTestEnable = VK_TRUE;
 					d.depthWriteEnable = VK_FALSE;
-					d.stencilTestEnable = VK_FALSE;				
+					d.stencilTestEnable = VK_TRUE;
+
+					d.front.compareMask = 1;
+					d.front.writeMask = 0;
+					d.front.compareOp = VK_COMPARE_OP_EQUAL;
+					d.front.depthFailOp = VK_STENCIL_OP_KEEP;
+					d.front.failOp = VK_STENCIL_OP_KEEP;
+					d.front.passOp = VK_STENCIL_OP_KEEP;
+					d.front.reference = 1;
+
+					d.back.compareMask = 1;
+					d.back.writeMask = 0;
+					d.back.compareOp = VK_COMPARE_OP_EQUAL;
+					d.back.depthFailOp = VK_STENCIL_OP_KEEP;
+					d.back.failOp = VK_STENCIL_OP_KEEP;
+					d.back.passOp = VK_STENCIL_OP_KEEP;
+					d.back.reference = 1;
+
 					return d;
 				}
 				constexpr auto depth = create_depth();
@@ -3346,8 +3455,8 @@ namespace rcq
 			atts[ATT_DEPTHSTENCIL].samples = VK_SAMPLE_COUNT_1_BIT;
 			atts[ATT_DEPTHSTENCIL].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
 			atts[ATT_DEPTHSTENCIL].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-			atts[ATT_DEPTHSTENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-			atts[ATT_DEPTHSTENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+			atts[ATT_DEPTHSTENCIL].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+			atts[ATT_DEPTHSTENCIL].stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE;
 
 			return atts;
 		}
@@ -3558,7 +3667,7 @@ namespace rcq
 				{
 					constexpr auto create_bindings()
 					{
-						std::array<VkDescriptorSetLayoutBinding, 2> bindings = {};
+						std::array<VkDescriptorSetLayoutBinding, 4> bindings = {};
 						bindings[0].binding = 0;
 						bindings[0].descriptorCount = 1;
 						bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -3570,10 +3679,15 @@ namespace rcq
 						bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 						bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-						/*bindings[2].binding = 2;
+						bindings[2].binding = 2;
 						bindings[2].descriptorCount = 1;
 						bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-						bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;*/
+						bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+						bindings[3].binding = 3;
+						bindings[3].descriptorCount = 1;
+						bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
 						return bindings;
 					}
@@ -3589,17 +3703,6 @@ namespace rcq
 					}
 					constexpr auto create_info = create_create_info();
 
-					constexpr auto create_push_constants()
-					{
-						std::array<VkPushConstantRange, 1> p = {};
-						p[0].offset = 0;
-						p[0].size = sizeof(glm::ivec2);
-						p[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-						return p;
-					}
-					constexpr auto push_constants = create_push_constants();
-
 				}//namespace dsl
 			} //namespace pipeline
 		} //namespace subpass water_drawer
@@ -3611,7 +3714,7 @@ namespace rcq
 			std::array<VkAttachmentDescription, ATT_COUNT> atts = {};
 
 			atts[ATT_FRAME_IMAGE].initialLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-			atts[ATT_FRAME_IMAGE].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			atts[ATT_FRAME_IMAGE].finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
 			atts[ATT_FRAME_IMAGE].format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			atts[ATT_FRAME_IMAGE].samples = VK_SAMPLE_COUNT_1_BIT;
 			atts[ATT_FRAME_IMAGE].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -3812,30 +3915,34 @@ namespace rcq
 				};
 				namespace dsl
 				{
-					constexpr auto create_binding()
+					constexpr auto create_bindings()
 					{
-						VkDescriptorSetLayoutBinding binding = {};
-						binding.binding = 0;
-						binding.descriptorCount = 1;
-						binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-						binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+						std::array<VkDescriptorSetLayoutBinding, 2> bindings = {};
+						bindings[0].binding = 0;
+						bindings[0].descriptorCount = 1;
+						bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-						return binding;
+						bindings[1].binding = 1;
+						bindings[1].descriptorCount = 1;
+						bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+						bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+						return bindings;
 					}
-					constexpr auto binding = create_binding();
+					constexpr auto bindings = create_bindings();
 
 					constexpr auto create_create_info()
 					{
 						VkDescriptorSetLayoutCreateInfo dsl = {};
 						dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-						dsl.bindingCount = 1;
-						dsl.pBindings = &binding;
+						dsl.bindingCount = bindings.size();
+						dsl.pBindings = bindings.data();
 						return dsl;
 					}
 					constexpr auto create_info = create_create_info();
 				}//namespace dsl
 			}//namespace pipeline
-
 
 		}// namespace subpass_bypass
 
@@ -3904,11 +4011,11 @@ namespace rcq
 			std::array<VkDescriptorPoolSize, 4> sizes = {};
 			sizes[0].descriptorCount = 14;
 			sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-			sizes[1].descriptorCount = 16;
+			sizes[1].descriptorCount = 19;
 			sizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 			sizes[2].descriptorCount = 4;
 			sizes[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-			sizes[3].descriptorCount = 2;
+			sizes[3].descriptorCount = 3;
 			sizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 
 			return sizes;

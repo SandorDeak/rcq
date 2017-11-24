@@ -1,0 +1,55 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+
+
+layout(local_size_x=1, local_size_y=1, local_size_z=1) in;
+
+const float weight[5] = float[] (0.227027f, 0.1945946f, 0.1216216f, 0.054054f, 0.016216f);
+
+const uint blur_count=5;
+
+layout(set=0, binding=0, rgba32f) uniform image2DArray blur_im;
+
+#define EXTRACT 0;
+#define HORIZONTAL 1;
+#define VERTICAL 2;
+
+layout(push_constant) uniform push_constants
+{
+	uint current_step;
+} pc;
+
+
+void main()
+{
+	ivec2 id=ivec2(gl_WorkGroupID.x,  gl_WorkGroupID.y);
+	ivec2 size=imageSize(blur_im).xy;
+	
+	if (pc.current_step==0)
+	{
+		vec4 color=imageLoad(blur_im, ivec3(id, 0));
+	
+		if (dot(color.xyz, vec3(0.2126f, 0.7152f, 0.0722f))<2.f)
+			color=vec4(0.f);
+			
+		imageStore(blur_im, ivec3(id, 1), color); 
+	}
+	else if (pc.current_step==1)
+	{
+		vec4 color=imageLoad(blur_im, ivec3(id, 1));
+		color*=weight[0];
+		for(int j=1; j<5; ++j)
+			color+=weight[j]*(imageLoad(blur_im, ivec3(min(id.x+j, size.x-1), id.y, 1))+imageLoad(blur_im, ivec3(max(id.x-j, 0), id.y, 1)));
+		
+		imageStore(blur_im, ivec3(id, 0), color);
+	}
+	else if (pc.current_step==2)
+	{
+		vec4 color=imageLoad(blur_im, ivec3(id, 0));
+		color*=weight[0];
+		for(int j=1; j<5; ++j)
+			color+=weight[j]*(imageLoad(blur_im, ivec3(id.x, min(id.y+j, size.y-1), 0))+imageLoad(blur_im, ivec3(id.x, max(id.y-j, 0), 0)));
+		
+		imageStore(blur_im, ivec3(id, 1), color);
+	}
+}

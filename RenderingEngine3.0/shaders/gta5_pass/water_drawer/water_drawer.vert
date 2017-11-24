@@ -20,14 +20,14 @@ void main()
 {	
 	uint vertex_id=gl_VertexIndex & 3;
 	
-	if (vertex_id>>1==0)
+	/*if (vertex_id>>1==0)
 	{
 		vertex_id=1-vertex_id;
-	}
+	}*/
 	
 	vec2 pos=vec2(
-		float((gl_VertexIndex>>2) + (vertex_id >> 1)),
-		float(gl_InstanceIndex + (vertex_id & 1))
+		float((gl_VertexIndex>>2) + (vertex_id & 1)),
+		float(gl_InstanceIndex + (vertex_id >> 1))
 	);
 	pos=pos*data.tile_size_in_meter+data.tile_offset;
 

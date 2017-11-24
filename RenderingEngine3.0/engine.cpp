@@ -36,6 +36,7 @@ engine::engine()
 	base_create.device_features.tessellationShader = VK_TRUE;
 	base_create.device_features.depthBounds = VK_TRUE;
 	base_create.device_features.sparseBinding = VK_TRUE;
+	base_create.device_features.fillModeNonSolid = VK_TRUE;
 	//base_info.device_features.sparseResidencyImage2D = VK_TRUE;
 
 	base::init(base_create);

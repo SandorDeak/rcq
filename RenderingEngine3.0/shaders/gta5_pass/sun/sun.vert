@@ -3,7 +3,7 @@
 
 #define PI 3.1415926535897f
 
-const float r=32.f*PI/(180.f*60.f);
+const float r=2.f*32.f*PI/(180.f*60.f);
 const float dtheta=2.f*PI/16.f;
 
 

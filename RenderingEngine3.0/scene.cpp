@@ -406,7 +406,7 @@ void scene::build()
 	rcq::engine::instance()->cmd_dispatch();
 
 	//set camera
-	m_camera.pos = glm::vec3(0.f);
+	m_camera.pos = glm::vec3(0.f, 10.f, 0.f);
 	m_camera.look_dir = glm::normalize(glm::vec3(-2.f));
 	m_camera.proj = glm::perspective(glm::radians(45.f), m_window_size.x / m_window_size.y, 0.1f, 500.f);
 	m_camera.proj[1][1] *= (-1);
@@ -444,7 +444,7 @@ void scene::update(float dt)
 	rcq::engine::instance()->cmd_render(m_render_settings);
 	rcq::engine::instance()->cmd_dispatch();
 
-	std::cout << "view pos xyz: " << m_render_settings.pos.x << ' ' <<m_render_settings.pos.y << ' ' << m_render_settings.pos.z << '\n';
+	std::cout << "wind: " << m_render_settings.wind.x << ' ' <<m_render_settings.wind.y << '\n';
 }
 
 void scene::update_settings(float dt)
@@ -524,4 +524,22 @@ void scene::update_settings(float dt)
 	glm::mat4 rot = glm::rotate(scale*dt*theta, glm::vec3(0.f, 1.f, 0.f));
 	rot = glm::rotate(rot, scale*dt*phi, glm::vec3(1.f, 0.f, 0.f));
 	m_render_settings.light_dir = static_cast<glm::mat3>(rot)*m_render_settings.light_dir;
+
+	//wind
+	theta = 0.f;
+	float speed = 0.f;
+
+	if (glfwGetKey(m_window, GLFW_KEY_N))
+		speed += 5.f;
+	if (glfwGetKey(m_window, GLFW_KEY_M))
+		speed -= 5.f;
+	if (glfwGetKey(m_window, GLFW_KEY_V))
+		theta += 1.f;
+	if (glfwGetKey(m_window, GLFW_KEY_B))
+		theta -= 1.f;
+
+	m_render_settings.wind = (glm::length(m_render_settings.wind) + dt*speed)*glm::normalize(m_render_settings.wind);
+
+	glm::mat2 rot2d(cosf(theta), sinf(theta), -sinf(theta), cosf(theta));
+	m_render_settings.wind = rot2d*m_render_settings.wind;
 }

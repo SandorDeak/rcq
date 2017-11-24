@@ -58,6 +58,7 @@ namespace rcq
 			RES_IMAGE_PREV_IMAGE,
 			RES_IMAGE_REFRACTION_IMAGE,
 			RES_IMAGE_SSR_RAY_CASTING_COORDS,
+			RES_IMAGE_BLOOM_BLUR,
 			RES_IMAGE_COUNT
 		};
 
@@ -80,6 +81,7 @@ namespace rcq
 			MEMORY_PREV_IMAGE,
 			MEMORY_REFRACTION_IMAGE,
 			MEMORY_SSR_RAY_CASTING_COORDS,
+			MEMORY_BLOOM_BLUR,
 			MEMORY_COUNT
 		};
 
@@ -146,6 +148,7 @@ namespace rcq
 		{
 			CP_TERRAIN_TILE_REQUEST,
 			CP_WATER_FFT,
+			CP_BLOOM_BLUR,
 			CP_COUNT
 		};
 
@@ -278,7 +281,8 @@ namespace rcq
 
 		struct refraction_map_gen_data
 		{
-			glm::mat4 proj_x_view_at_origin;
+			glm::mat4 proj_x_view;
+			glm::vec3 view_pos_at_ground;
 			float far;
 		};
 
@@ -421,6 +425,7 @@ namespace rcq
 		VkCommandBuffer m_render_cb;
 		VkCommandBuffer m_terrain_request_cb;
 		VkCommandBuffer m_water_fft_cb;
+		VkCommandBuffer m_bloom_blur_cb;
 		std::vector<VkCommandBuffer> m_present_cbs;
 		std::array<VkCommandBuffer, SECONDARY_CB_COUNT> m_secondary_cbs;
 		VkSemaphore m_image_available_s;
@@ -429,6 +434,8 @@ namespace rcq
 		VkFence m_render_finished_f;
 		VkFence m_compute_finished_f;
 		VkEvent m_water_tex_ready_e;
+		VkSemaphore m_preimage_ready_s;
+		VkSemaphore m_bloom_blur_ready_s;
 
 		water* m_water;
 		glm::uvec2 m_water_tiles_count;
