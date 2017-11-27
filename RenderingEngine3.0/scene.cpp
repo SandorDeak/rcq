@@ -416,7 +416,7 @@ void scene::build()
 
 	m_render_settings.ambient_irradiance = glm::vec3(0.2f);
 	m_render_settings.far = 500.f;
-	m_render_settings.irradiance = glm::vec3(8.f);
+	m_render_settings.irradiance = glm::vec3(10.f);
 	m_render_settings.light_dir = glm::normalize(glm::vec3(0.1f, -1.f, 0.f));
 	m_render_settings.near = 0.1f;
 	m_render_settings.pos = m_camera.pos;

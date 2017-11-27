@@ -2392,10 +2392,10 @@ void gta5_pass::record_present_command_buffers()
 		VkCommandBufferBeginInfo begin = {};
 		begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		begin.flags = VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-		if (vkBeginCommandBuffer(m_bloom_blur_cb, &begin) != VK_SUCCESS)
+		if (vkBeginCommandBuffer(m_bloom_blur_cb, &begin) != VK_SUCCESS)  
 			throw std::runtime_error("failed to begin command buffer!");
 
-		glm::ivec2 size = { m_base.swap_chain_image_extent.width / BLOOM_IMAGE_SIZE_FACTOR,
+		glm::ivec2 size = { m_base.swap_chain_image_extent.width / BLOOM_IMAGE_SIZE_FACTOR, 
 			m_base.swap_chain_image_extent.height / BLOOM_IMAGE_SIZE_FACTOR };
 
 		m_cps[CP_BLOOM_BLUR].bind(m_bloom_blur_cb, VK_PIPELINE_BIND_POINT_COMPUTE);
@@ -2403,7 +2403,7 @@ void gta5_pass::record_present_command_buffers()
 		vkCmdPushConstants(m_bloom_blur_cb, m_cps[CP_BLOOM_BLUR].pl, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(uint32_t), &step);
 		vkCmdDispatch(m_bloom_blur_cb, size.x, size.y, 1);
 
-		for (uint32_t i = 0; i < 3; ++i)
+		for (uint32_t i = 0; i < 1; ++i)
 		{
 			VkMemoryBarrier b = {};
 			b.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
