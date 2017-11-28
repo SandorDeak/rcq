@@ -1356,6 +1356,7 @@ namespace rcq
 			static_cast<allocator*>(user_data)->internal_free_notification(size, type, scope);
 		}
 	};
+
 }
 
 namespace std

@@ -2,10 +2,209 @@
 
 #include "foundation.h"
 
+#include "foundation2.h"
+
 namespace rcq
 {
 	class resource_manager
 	{
+
+	public:
+		enum get
+		{
+			if_ready,
+			immediately
+		};
+
+		template<size_t res_type>
+		resource<res_type>::build_info* get_build_info()
+		{
+			if (auto p = m_build_queue.next_available(); p == nullptr)
+				throw std::runtime_error("queue is full!");
+			else
+			{
+				p->res_type = res_type;
+				p->id = m_container.get_new<res_type>();
+				return reinterpret_cast<resource<res_type>::build_info*>(p->data);
+			}
+		}
+
+		void dispach_build_info()
+		{
+			{
+				std::unique_lock<std::mutex> lock(m_build_queue_mutex);
+				m_build_queue.push();
+			}
+			if (m_build_queue.size() == 1)
+				m_build_queue_cv.notify_one();
+		}
+
+		template<size_t res_type>
+		void destroy_res(uint64_t id)
+		{
+			auto p = m_destroy_queue.next_available();
+			p->first = res_type;
+			p->second = id;
+			{
+				std::unique_lock<std::mutex> lock(m_destroy_queue_mutex);
+				m_destroy_queue.push();
+			}
+			if (m_destroy_queue.size() == 0)
+				m_destroy_queue_cv.notify_one();
+		}
+
+		template<size_t res_type, get g>
+		resource<res_type>* get_res(uint64_t id)
+		{
+			resource<res_type>* p = m_container.get<res_type>(id);
+			if (!p->ready)
+			{
+				if constexpr (g == get::if_ready)
+					return nullptr;
+
+				std::lock_guard<std::mutex> lock(m_container_mutex);
+				if (!p->ready)
+					vkWaitForFences(m_base.device, 1, &p->ready_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+			}
+			return p;
+		}
+
+	private:
+		template<size_t res_type>
+		void build(resource<res_type>*, resource<res_type>::build_info*);
+		
+		template<size_t res_type>
+		void destroy(resource<res_type>*);
+
+		void build_loop()
+		{
+			while (!m_should_end_build)
+			{
+				if (m_build_queue.empty())
+				{
+					std::unique_lock<std::mutex> lock;
+					while (m_build_queue.empty())
+						m_build_queue_cv.wait(lock);
+				}
+
+				res_build_info* info = m_build_queue.front();
+				switch (info->res_type)
+				{
+				case 0:
+					build<0>(m_container.get<0>(info->id), reinterpret_cast<resource<0>::build_info*>(info->data));
+					break;
+				case 1:
+					build<1>(m_container.get<1>(info->id), reinterpret_cast<resource<1>::build_info*>(info->data));
+					break;
+				case 2:
+					build<2>(m_container.get<2>(info->id), reinterpret_cast<resource<2>::build_info*>(info->data));
+					break;
+				case 3:
+					build<3>(m_container.get<3>(info->id), reinterpret_cast<resource<3>::build_info*>(info->data));
+					break;
+				case 4:
+					build<4>(m_container.get<4>(info->id), reinterpret_cast<resource<4>::build_info*>(info->data));
+				case 5:
+					build<5>(m_container.get<5>(info->id), reinterpret_cast<resource<5>::build_info*>(info->data));
+					break;
+				case 6:
+					build<6>(m_container.get<6>(info->id), reinterpret_cast<resource<6>::build_info*>(info->data));
+					break;
+				case 7:
+					build<7>(m_container.get<0>(info->id), reinterpret_cast<resource<7>::build_info*>(info->data));
+					break;
+				}
+				static_assert(8 == RES_TYPE_COUNT);
+
+				m_build_queue.pop();
+
+			}
+		}
+
+		void destroy_loop()
+		{
+			while (!m_should_end_destroy)
+			{
+				if (m_destroy_queue.empty())
+				{
+					std::unique_lock<std::mutex> lock(m_destroy_queue_mutex);
+					while (m_destroy_queue.empty())
+						m_destroy_queue_cv.wait(lock);
+				}
+
+				auto info = m_destroy_queue.front();
+
+				switch (info->first)
+				{
+				case 0:
+					destroy<0>(m_container.get<0>(info->second));
+					break;
+				case 1:
+					destroy<1>(m_container.get<1>(info->second));
+					break;
+				case 2:
+					destroy<2>(m_container.get<2>(info->second));
+					break;
+				case 3:
+					destroy<3>(m_container.get<3>(info->second));
+					break;
+				case 4:
+					destroy<4>(m_container.get<4>(info->second));
+					break;
+				case 5:
+					destroy<5>(m_container.get<5>(info->second));
+					break;
+				case 6:
+					destroy<6>(m_container.get<6>(info->second));
+					break;
+				case 7:
+					destroy<7>(m_container.get<7>(info->second));
+					break;
+				}
+				static_assert(8 == RES_TYPE_COUNT);
+
+				m_destroy_queue.pop();
+			}
+		}
+
+		resource_container<
+			RES_TYPE_MAT_OPAQUE,
+			RES_TYPE_MAT_EM,
+			RES_TYPE_SKY,
+			RES_TYPE_TERRAIN,
+			RES_TYPE_WATER,
+			//RES_TYPE_LIGHT_OMNI,
+			//RES_TYPE_SKYBOX,
+			RES_TYPE_MESH,
+			RES_TYPE_TR,
+			RES_TYPE_MEMORY
+		> m_container;
+		std::mutex m_container_mutex;
+
+		static_queue<res_build_info> m_build_queue;
+		std::mutex m_build_queue_mutex;
+		std::condition_variable m_build_queue_cv;
+
+		static_queue<std::pair<size_t, uint64_t>> m_destroy_queue;
+		std::mutex m_destroy_queue_mutex;
+		std::condition_variable m_destroy_queue_cv;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	public:
 		resource_manager(const resource_manager&) = delete;
 		resource_manager(resource_manager&&) = delete;

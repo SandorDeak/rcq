@@ -95,5 +95,17 @@
     <ClInclude Include="gta5_infos_impl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="foundation2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="slot_map.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="memory_resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="data_structures.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

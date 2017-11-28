@@ -2,13 +2,16 @@
 
 using namespace rcq;
 
-const size_t device_memory::BLOCK_SIZE[USAGE_COUNT] = { 128, 128 };
+//const size_t device_memory::BLOCK_SIZE[USAGE_COUNT] = { 128, 128 };
 
 device_memory* device_memory::m_instance = nullptr;
 
 device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info{}, m_alloc("device_memory")
 {
-	VkPhysicalDeviceProperties props;
+	m_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	vkGetPhysicalDeviceMemoryProperties(m_base.physical_device, &m_memory_properties);
+
+	/*VkPhysicalDeviceProperties props;
 	vkGetPhysicalDeviceProperties(m_base.physical_device, &props);
 	std::cout << props.deviceName << std::endl;
 	size_t alignment = static_cast<size_t>(props.limits.minUniformBufferOffsetAlignment);
@@ -50,7 +53,7 @@ device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info
 	m_alloc_info[USAGE_DYNAMIC].memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits,
 		VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	vkDestroyBuffer(m_base.device, temp_buffer, m_alloc);
+	vkDestroyBuffer(m_base.device, temp_buffer, m_alloc);*/
 }
 
 
