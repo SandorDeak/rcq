@@ -26,6 +26,7 @@
     <ClCompile Include="entity.cpp" />
     <ClCompile Include="foundation.cpp" />
     <ClCompile Include="gta5_pass.cpp" />
+    <ClCompile Include="host_memory.cpp" />
     <ClCompile Include="omni_light_shadow_pass.cpp" />
     <ClCompile Include="resource_manager.cpp" />
     <ClCompile Include="main.cpp" />
@@ -33,8 +34,17 @@
     <ClCompile Include="scene.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="data_structures.h" />
-    <ClInclude Include="memory_resource.h" />
+    <ClInclude Include="freelist_resource_host.h" />
+    <ClInclude Include="hash_table.h" />
+    <ClInclude Include="host_memory.h" />
+    <ClInclude Include="iterator.h" />
+    <ClInclude Include="malloc_free_resource.h" />
+    <ClInclude Include="monotonic_buffer_resource_host.h" />
+    <ClInclude Include="null_memory_resource.h" />
+    <ClInclude Include="queue.h" />
+    <ClInclude Include="freelist_resource.h" />
+    <ClInclude Include="list.h" />
+    <ClInclude Include="pool_resource.h" />
     <ClInclude Include="base.h" />
     <ClInclude Include="basic_pass.h" />
     <ClInclude Include="core.h" />
@@ -46,11 +56,17 @@
     <ClInclude Include="gta5_infos_impl.h" />
     <ClInclude Include="gta5_foundation.h" />
     <ClInclude Include="gta5_pass.h" />
+    <ClInclude Include="memory_resource.h" />
+    <ClInclude Include="monotonic_buffer_resource.h" />
     <ClInclude Include="omni_light_shadow_pass.h" />
     <ClInclude Include="resource_manager.h" />
     <ClInclude Include="slot_map.h" />
+    <ClInclude Include="stack.h" />
     <ClInclude Include="structs.h" />
     <ClInclude Include="scene.h" />
+    <ClInclude Include="vector.h" />
+    <ClInclude Include="vulkan_allocator.h" />
+    <ClInclude Include="device_memory_resource.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>15.0</VCProjectVersion>

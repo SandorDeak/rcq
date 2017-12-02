@@ -6,7 +6,9 @@ using namespace rcq;
 
 device_memory* device_memory::m_instance = nullptr;
 
-device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info{}, m_alloc("device_memory")
+device_memory::device_memory(const base_info& base, memory_resource* host_memory_resource) : 
+	m_base(base),
+	m_host_memory_resource(host_memory_resource)
 {
 	m_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
 	vkGetPhysicalDeviceMemoryProperties(m_base.physical_device, &m_memory_properties);
@@ -59,23 +61,16 @@ device_memory::device_memory(const base_info& base) : m_base(base), m_alloc_info
 
 device_memory::~device_memory()
 {
-	for (auto& blocks : m_blocks)
-	{
-		for (auto block : blocks)
-		{
-			if (block != VK_NULL_HANDLE)
-				vkFreeMemory(m_base.device, block, m_alloc);
-		}
-	}
+	
 }
 
-void device_memory::init(const base_info& base)
+void device_memory::init(const base_info& base, memory_resource* host_memory_resource, uint64_t place)
 {
 	if (m_instance != nullptr)
 	{
 		throw std::runtime_error("core is already initialised!");
 	}
-	m_instance = new device_memory(base);
+	m_instance = new(reinterpret_cast<void*>((place)) device_memory(base);
 }
 
 void device_memory::destroy()
@@ -85,10 +80,11 @@ void device_memory::destroy()
 		throw std::runtime_error("cannot destroy core, it doesn't exist!");
 	}
 
-	delete m_instance;
+	m_instance->~device_memory();
+	m_instance = nullptr;
 }
 
-cell_info device_memory::alloc_buffer_memory(USAGE usage, VkBuffer buffer, void** mapped_data)
+/*cell_info device_memory::alloc_buffer_memory(USAGE usage, VkBuffer buffer, void** mapped_data)
 {
 	std::lock_guard<std::mutex> lock(m_block_mutexes[usage]);
 
@@ -136,4 +132,4 @@ void device_memory::free_buffer(USAGE usage, const cell_info& cell)
 		vkFreeMemory(m_base.device, m_blocks[usage][cell.first], m_alloc); 
 		m_blocks[usage][cell.first] = VK_NULL_HANDLE;
 	}
-}
+}*/

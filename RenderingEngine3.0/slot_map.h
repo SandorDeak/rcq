@@ -1,22 +1,12 @@
 #pragma once
 
+#include "memory_resource.h"
+#include "vector.h"
+#include <stdint.h>
+
 namespace rcq
 {
-	enum class dealloc_pattern
-	{
-		destruct,
-		ignore
-	};
-
-	enum class location
-	{
-		host,
-		device
-	};
-
-	const uint32_t device_alignment = 256;
-
-	template<typename T, dealloc_pattern dealloc = dealloc_pattern::destruct, location loc = location::host>
+	template<typename T>
 	class slot_map
 	{
 	public:
@@ -26,7 +16,10 @@ namespace rcq
 			uint32_t generation;
 		};
 
-		slot_map() {}
+		slot_map(memory_resource<size_t>* memory) :
+			m_memory(memory)
+		{}
+
 		slot_map(const slot_map&) = delete;
 
 		slot_map(slot_map&& other) :
@@ -37,11 +30,7 @@ namespace rcq
 			m_capacity(other.m_capacity),
 			m_next(other.m_next)
 		{
-			other.m_chunks = nullptr;
-			other.m_chunks_size = 0;
-			other.m_chunks_capacity = 0;
-			other.m_size = 0;
-			other.m_capacity = 0;
+			other.release();
 		}
 
 		slot_map& operator=(slot_map&& other)
@@ -132,51 +121,26 @@ namespace rcq
 
 			std::free(m_chunks);
 
-			m_chunks = nullptr;
-			m_chunks_size = 0;
-			m_chunks_capacity = 0;
-			m_size = 0;
-			m_capacity = 0;
+			release();
 		}
 
-		template<typename... Ts>
-		slot emplace(Ts&&... args)
+		T* push(slot& s)
 		{
 			if (m_size == m_capacity)
 				extend();
 
 			slot* next = get_slot(m_next);
 
-			slot ret = { m_next, next->generation };
+			s = { m_next, next->generation };
 
-			new(get_data(m_size)) T(std::forward<Ts>(args)...);
 			*(get_slot_view(m_size)) = next;
 
 			m_next = next->index;
 			next->index = m_size;
 			++m_size;
 
-			return ret;
+			return get_data(s.index);
 		}
-
-		template<typename... Ts>
-		bool replace(slot& id, Ts&&... args)
-		{
-			slot* real_id = get_slot(id.index);
-			if (real_id->generation != id.generation)
-				return false;
-
-			T* data = get_data(real_id->index);
-
-			if constexpr (dealloc == dealloc_pattern::destruct)
-				data->~T();
-
-			new(data) T(std::forward<Ts>(args)...);
-			++real_id->generation;
-			++id.generation;
-			return true;
-		}
-
 
 
 		T* get(const slot& id)
@@ -197,8 +161,6 @@ namespace rcq
 			T* deleted = get_data(real_id->index);
 			++real_id->generation;
 
-			if constexpr(dealloc == dealloc_pattern::destruct)
-				deleted->~T();
 
 			--m_size;
 
@@ -229,25 +191,6 @@ namespace rcq
 			}
 		}
 
-		void print()
-		{
-			std::cout << "slot map content:\n" <<
-				'\t' << "size: " << m_size << '\n' <<
-				'\t' << "capacity: " << m_capacity << '\n';
-			for (uint32_t i = 0; i < m_chunks_size; ++i)
-			{
-				std::cout << '\t' << "chunk" << i << '\n';
-				for (uint32_t j = 0; j < chunk_size; ++j)
-				{
-					std::cout << "\t\t" << "slot:\n" <<
-						"\t\t\t" << "index: " << (m_chunks[i].slots + j)->index << '\n' <<
-						"\t\t\t" << "generation: " << (m_chunks[i].slots + j)->generation << '\n';
-
-					std::cout << "\t\t" << "data: " << m_chunks[i].data[j] << '\n';
-				}
-			}
-		}
-
 	private:
 		static const uint32_t chunk_size_bit_count = 8;
 		static const uint32_t chunk_size = 256;
@@ -264,15 +207,23 @@ namespace rcq
 		uint32_t m_capacity = 0;
 		uint32_t m_next;
 
-		chunk* m_chunks = nullptr;
-		uint32_t m_chunks_size = 0;
-		uint32_t m_chunks_capacity = 0;
+		vector<chunk> m_chunks;
+		memory_resource<size_t>* m_memory;
+
+		void release()
+		{
+			m_chunks = nullptr;
+			m_chunks_size = 0;
+			m_chunks_capacity = 0;
+			m_size = 0;
+			m_capacity = 0;
+		}
 
 		void extend()
 		{
 			if (m_chunks_size == m_chunks_capacity)
 			{
-				m_chunks_capacity = m_chunks_capacity == 0 ? 1 : 2 * m_chunks_capacity;
+				m_chunks_capacity = m_chunks_capacity == 0 ? 1 : m_chunks_capacity << 1;
 				m_chunks = reinterpret_cast<chunk*>(std::realloc(m_chunks, sizeof(chunk)*m_chunks_capacity));
 			}
 
@@ -299,19 +250,19 @@ namespace rcq
 			}
 		}
 
-		inline T* get_data(uint32_t index)
+		T* get_data(uint32_t index)
 		{
 			return m_chunks[index >> chunk_size_bit_count].data + (index&chunk_index_mask);
 		}
 
-		inline slot* get_slot(uint32_t index)
+		slot* get_slot(uint32_t index)
 		{
 			auto i0 = index >> chunk_size_bit_count;
 			auto i1 = index&chunk_size;
 			return m_chunks[index >> chunk_size_bit_count].slots + (index&chunk_index_mask);
 		}
 
-		inline slot** get_slot_view(uint32_t index)
+		slot** get_slot_view(uint32_t index)
 		{
 			return m_chunks[index >> chunk_size_bit_count].slot_views + (index&chunk_index_mask);
 		}
