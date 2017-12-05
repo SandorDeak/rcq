@@ -14,204 +14,161 @@ namespace rcq
 			T data;
 		};
 
-		queue(memory_resource<size_t>* memory) :
+		queue(memory_resource* memory) :
 			m_memory(memory),
-			m_last_node(nullptr),
-			m_first_node(nullptr),
-			m_first_available_node(nullptr),
-			m_prep_node(nullptr),
 			m_size(0)
 		{}
 
-		queue(const queue& other) :
-			m_memory(other.m_memory),
-			m_first_available_node(nullptr)
-		{
-			copy(other);
-		}
+		queue(const queue& other) = delete;
 
 		queue(queue&& other) :
 			m_memory(other.m_memory),
-			m_first_node(other.m_first_node),
-			m_last_node(other.m_last_node),
-			m_first_available_node(other.m_first_available_node),
-			m_size(other.m_size),
-			m_back_node(other.m_back_node)
+			m_first(other.m_first),
+			m_first_back(other.m_first_back),
+			m_first_free(other.m_first_free),
+			m_size(other.m_size)
 		{
-			other.release();
+			other.m_size.store(0, std::memory_order_relaxed);
+			other.m_first.store(nullptr, std::memory_order_relaxed);
 		}
 
 		~queue()
 		{
-			reset();
+			node* first = m_first.load(std::memory_order_acquire);
+			if (first != nullptr)
+			{
+				node* end = first;
+				first = first->next;
+				end->next = nullptr;
+				while (first != nullptr)
+				{
+					node* next = first->next;
+					m_memory->deallocate(reinterpret_cast<uint64_t>(first));
+					first = next;
+				}
+			}
 		}
+			
+		queue& operator=(const queue& other) = delete;
 
-		queue& operator=(const queue& other)
+		queue& operator=(queue&& other)
 		{
-			clear();
-			copy(other);
-		}
-
-		queue& operator(queue&& other)
-		{
-			reset();
+			node* first = m_first.load(std::memory_order_acquire);
+			if (first != nullptr)
+			{
+				node* end = first;
+				first = first->next;
+				end->next = nullptr;
+				while (first != nullptr)
+				{
+					node* next = first->next;
+					m_memory->deallocate(reinterpret_cast<uint64_t>(first));
+					first = next;
+				}
+			}
 
 			m_memory = other.m_memory;
-			m_first_node = other.m_first_node;
-			m_last_node = other.m_last_node;
-			m_first_available_node = other.m_first_available_node;
+			m_first = other.m_first;
+			m_first_back = other.m_first_back;
+			m_first_free = other.m_first_free;
 			m_size = other.m_size;
-			m_back_node = other.m_back_node;
 
-			other.release();
+			other.m_size = 0;
+			other.m_size_back = 0;
+			other.m_frist = nullptr;	
+
+			return *this;
+		}
+
+		void init()
+		{
+			m_first = reinterpret_cast<node*>(m_memory->allocate(sizeof(node), alignof(node)));
+			m_first->next = m_first;
+			m_first_back = m_first;
+			m_first_free = m_first;
 		}
 
 		void reset()
 		{
 			m_size = 0;
-			while (m_first_node != nullptr)
+			m_size_back = 0;
+
+			node* first = m_first.load(std::memory_order_acquire);
+			if (first != nullptr)
 			{
-				m_memoy->dealloc(reinterpret_cast<size_t>(m_first_node));
-				m_first_node = m_first_node->next;
-			}
-			m_last_node = nullptr;
-			while (m_first_available_node != nullptr)
-			{
-				m_memory->dealloc(reinterpret_cast<size_t>(m_first_available_node));
-				m_first_available_node = m_first_available_node->next;
-			}
-			if (m_back_node != nullptr)
-			{
-				m_memory->dealloc(reinterpret_cast<size_t>(m_back_node));
-				m_back_node = nullptr;
+				node* end = first;
+				first = first->next;
+				end->next = nullptr;
+				while (first != nullptr)
+				{
+					node* next = first->next;
+					m_memory->deallocate(reinterpret_cast<uint64_t>(first));
+					first = next;
+				}
+
+				m_first.store(nullptr, std::memory_order_release);
 			}
 		}
 
 		void clear()
 		{
-			if (m_size != 0)
-			{
-				m_size = 0;
-				m_last_node->next = m_first_available_node;
-				m_first_available_node = m_first_node;
-				m_first_node = nullptr;
-				m_last_node = nullptr;
-			}
-			if (m_back_node != nullptr)
-			{
-				m_back_node->next = m_first_available_node;
-				m_first_available_node = m_back_node;
-				m_back_node = nullptr;
-			}
+			node* first_free = m_first_free.load(std::memory_order_relaxed);
+			m_first.store(first_free, std::memory_order_relaxed);
+			m_first_back.store(first_free, std::memory_order_relaxed);
+			m_size.store(0, std::memory_order_relaxed);
+			m_size_back = 0;
 		}
 
 
 
-		T& create_back()
+		T* create_back()
 		{
-			m_back_node = get_node();
-			m_back_node->next = nullptr;
-			return m_back_node->data;
-		}
-
-		T& back()
-		{
-			return m_back_node->data;
-		}
-
-		void push()
-		{
-			if (m_size == 0)
+			
+			if (m_first_free!=m_first)
 			{
-				m_first_node = m_back_node;
-				m_last_node = m_back_node;
-				m_size = 1;
+				T* ret = &m_first_free->data;
+				m_first_free = m_first_free->next;
+				return ret;
 			}
 			else
 			{
-				m_last_node->next = m_back_node;
-				++m_size;
+				node* last = m_first_back;
+				while (last->next != m_first_free)
+					last = last->next;
+
+				last->next = reinterpret_cast<node*>(m_memory->allocate(sizeof(node), alignof(node)));
+				last->next->next = m_first_free;
+				return &last->next->data;
 			}
 		}
 
-		T& front()
+		void commit()
 		{
-			return m_first_node->data;
+			m_first_back.store(m_first_free, std::memory_order_relaxed;
+		}
+
+		T* front()
+		{
+			return &m_first->data;
 		}
 
 		void pop()
 		{
-			node* popped = m_first_node;
-			m_first_node = m_first_node->next;
-			popped->next = m_first_available_node;
-			m_first_available_node = popped;
-			--m_size;
+			m_first = m_first->next;
+		}
+
+		bool empty()
+		{
+			return m_first == m_first_back;
 		}
 
 	private:
-		node* m_last_node;
-		node* m_first_node;
-		node* m_first_available_node;
-		node* m_back_node;
-		size_t m_size;
-		memory_resouce<size_t>* m_memory;
+		std::atomic<node*> m_first;
+		std::atomic<node*> m_first_back;
 
-		node* get_node()
-		{
-			if (m_first_available_node != nullptr)
-			{
-				node* ret = m_first_available_node;
-				m_first_available_node = m_first_available_node->next;
-				return ret;
-			}
-			return reinterpret_cast<node*>(m_memory->allocate(sizeof(T), alignof(T)));
-		}
+		node* m_first_free;
 
-		void release()
-		{
-			m_last_node = nullptr;
-			m_first_node = nullptr;
-			m_first_available_node = nullptr;
-			m_back_node = nullptr;
-			m_size = 0;
-		}
-
-		void copy(const queue& other)
-		{
-			m_size = other.m_size;
-			if (m_size != 0)
-			{
-				m_first_node = get_node();
-				m_last_node = m_first_node;
-				node* n = other.m_first_node;
-				memcpy(&m_last_node->data, &n->data, sizeof(T));
-				n = n->next;
-				while (n != nullptr)
-				{
-					m_last_node->next = get_node();
-					m_last_node = m_last_node->next;
-					memcpy(&m_last_node->data, &n->data, sizeof(T));
-					n = n->next;
-				}
-				m_last_node->next = nullptr;
-			}
-			else
-			{
-				m_last_node = nullptr;
-				m_first_node = nullptr;
-			}
-
-			if (other.m_back_node != nullptr)
-			{
-				m_back_node = get_node();
-				m_back_node->next = nullptr;
-				memcpy(&m_back_node->data, &other.m_back_node->data, sizeof(T));
-			}
-			else
-			{
-				m_back_node = nullptr;
-			}
-		}
+		memory_resouce* m_memory;
 	};
 	
 } //namespace rcq

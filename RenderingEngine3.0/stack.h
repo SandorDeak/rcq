@@ -9,13 +9,7 @@ namespace rcq
 	{
 	public:
 
-		struct node
-		{
-			node* next;
-			T data;
-		};
-
-		stack(memory_resource<size_t>* memory) :
+		stack(memory_resource* memory) :
 			m_memory(memory),
 			m_size(0),
 			m_top_node(nullptr),
@@ -79,6 +73,11 @@ namespace rcq
 			m_size = 0;
 		}
 
+		bool empty()
+		{
+			return m_top_node == nullptr;
+		}
+
 		void clear()
 		{
 			node* n = nullptr;
@@ -98,18 +97,18 @@ namespace rcq
 			}
 		}
 
-		T& push()
+		T* push()
 		{
 			node* new_node = get_node();
 			new_node->next = m_top_node;
 			m_top_node = new_node;
 			++m_size;
-			return new_node->data;
+			return &new_node->data;
 		}
 
-		T& top()
+		T* top()
 		{
-			return m_top_node->data;
+			return &m_top_node->data;
 		}
 
 		void pop()
@@ -121,10 +120,16 @@ namespace rcq
 			--m_size;
 		}
 	private:
+		struct node
+		{
+			node* next;
+			T data;
+		};
+
 		node* m_top_node;
 		node* m_first_available_node;
 		size_t m_size;
-		memory_resource<size_t>* m_memory;
+		memory_resource* m_memory;
 
 		node* get_node()
 		{

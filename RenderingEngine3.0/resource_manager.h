@@ -1,8 +1,17 @@
 #pragma once
 
-#include "foundation.h"
 
 #include "foundation2.h"
+#include "queue.h"
+#include "stack.h"
+#include "array.h"
+#include "pool_memory_resource_host.h"
+#include "monotonic_buffer_resource.h"
+#include "vk_allocator.h"
+#include "vk_memory_resource.h"
+#include "freelist_resource.h"
+#include <atomic>
+#include <mutex>
 
 namespace rcq
 {
@@ -10,71 +19,129 @@ namespace rcq
 	{
 
 	public:
-		enum get
+		resource_manager(const resource_manager&) = delete;
+		resource_manager(resource_manager&&) = delete;
+
+		~resource_manager();
+
+		static void init(const base_info& info, memory_resource* memory_res);
+		static void destroy();
+		static resource_manager* instance() { return m_instance; }
+
+		template<uint32_t res_type>
+		struct resource_user_info
 		{
-			if_ready,
-			immediately
+			resource<res_type>::build_info* build_info;
+			base_resource* resource;
 		};
 
-		template<size_t res_type>
-		resource<res_type>::build_info* get_build_info()
+		template<uint32_t res_type>
+		resource_user_info<res_type> create_resource()
 		{
-			if (auto p = m_build_queue.next_available(); p == nullptr)
-				throw std::runtime_error("queue is full!");
-			else
-			{
-				p->res_type = res_type;
-				p->id = m_container.get_new<res_type>();
-				return reinterpret_cast<resource<res_type>::build_info*>(p->data);
-			}
+			resource_user_info<res_type> ret;
+			ret.resource = reinterpret_cast<base_resource*>(m_resource_pool->allocate(sizeof(base_resource), alignof(base_resource)));
+			base_resource_build_info* raw_build_info = m_build_queue.create_back();
+			raw_build_info->resource_type = res_type;
+			raw_build_info->base_res = ret.resource;
+			ret.build_info = reinterpret_cast<resource<res_type>::build_info*>(raw_build_info->data);
+			ret.resource->res_type = res_type;
+			ret.resource->ready_bit = false;
+
+			return ret;
 		}
 
-		void dispach_build_info()
+		void destroy_resource(base_resource* res)
 		{
+			*m_destroy_queue.create_back() = res;
+		}
+
+		void dispach_builds()
+		{
+			bool should_notify;
 			{
 				std::unique_lock<std::mutex> lock(m_build_queue_mutex);
-				m_build_queue.push();
+				should_notify = m_build_queue.empty();
+				m_build_queue.commit();
 			}
-			if (m_build_queue.size() == 1)
+			if (should_notify)
 				m_build_queue_cv.notify_one();
 		}
 
-		template<size_t res_type>
-		void destroy_res(uint64_t id)
+		void dispatch_destroys()
 		{
-			auto p = m_destroy_queue.next_available();
-			p->first = res_type;
-			p->second = id;
+			bool should_notify;
 			{
 				std::unique_lock<std::mutex> lock(m_destroy_queue_mutex);
-				m_destroy_queue.push();
+				should_notify = m_destroy_queue.empty();
+				m_destroy_queue.commit();
 			}
-			if (m_destroy_queue.size() == 0)
+			if (should_notify)
 				m_destroy_queue_cv.notify_one();
 		}
 
-		template<size_t res_type, get g>
-		resource<res_type>* get_res(uint64_t id)
-		{
-			resource<res_type>* p = m_container.get<res_type>(id);
-			if (!p->ready)
-			{
-				if constexpr (g == get::if_ready)
-					return nullptr;
-
-				std::lock_guard<std::mutex> lock(m_container_mutex);
-				if (!p->ready)
-					vkWaitForFences(m_base.device, 1, &p->ready_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
-			}
-			return p;
-		}
-
 	private:
-		template<size_t res_type>
-		void build(resource<res_type>*, resource<res_type>::build_info*);
+		static resource_manager* m_instance;
+
+		resource_manager(const base_info& base);
+
+		const base_info& m_base;
+
+		//memory resources
+		static memory_resource* m_memory_resource;
+		pool_memory_resource_host m_resource_pool;
+		vk_allocator m_vk_alloc;
+
+		vk_memory_resource m_vk_mappable_memory;
+		monotonic_buffer_resource m_mappable_memory;
 		
+		freelist_resource m_device_memory_res;
+
+
+		//threads
+		std::thread m_build_thread;
+		std::thread m_destroy_thread;
+
+		//atomic bits
+		std::atomic_bool m_should_end_build;
+		std::atomic_bool m_should_end_destroy;
+		std::atomic_bool m_resource_pool_sync_bit;
+		//std::atomic_bool m_fences_sync_bit;
+
+		//queues
+		queue<base_resource_build_info> m_build_queue;
+		queue<base_resource*> m_destroy_queue;
+
+		//mutexes
+		std::mutex m_build_queue_mutex;
+		std::mutex m_destroy_queue_mutex;
+
+		//condition variables
+		std::condition_variable m_build_queue_cv;
+		std::condition_variable m_destroy_queue_cv;
+
+		//pools
+		//stack<VkFence> m_fences;
+		array<dp_pool, DSL_TYPE_COUNT> m_dp_pools;
+
+		//utility objects
+		array<VkDescriptorSetLayout, DSL_TYPE_COUNT> m_dsls;
+		VkBuffer m_staging_buffer;
+		VkFence m_build_f;
+
+		VkCommandPool m_build_cp;
+		VkCommandBuffer m_build_cb;
+
+		VkSampler m_samplers[SAMPLER_TYPE_COUNT];
+
+
+		//void load_texture(const char* filename, uint64_t& staging_buffer_offset);
+
+
 		template<size_t res_type>
-		void destroy(resource<res_type>*);
+		void build(base_resource* res, const char* build_info);
+
+		template<uint32_t res_type>
+		void destroy(base_resource* res);
 
 		void build_loop()
 		{
@@ -87,31 +154,31 @@ namespace rcq
 						m_build_queue_cv.wait(lock);
 				}
 
-				res_build_info* info = m_build_queue.front();
-				switch (info->res_type)
+				base_resource_build_info* info = m_build_queue.front(); 
+				switch (info->resource_type)
 				{
 				case 0:
-					build<0>(m_container.get<0>(info->id), reinterpret_cast<resource<0>::build_info*>(info->data));
+					build<0>(info->base_res, info->data);
 					break;
 				case 1:
-					build<1>(m_container.get<1>(info->id), reinterpret_cast<resource<1>::build_info*>(info->data));
+					build<1>(info->base_res, info->data);
 					break;
 				case 2:
-					build<2>(m_container.get<2>(info->id), reinterpret_cast<resource<2>::build_info*>(info->data));
+					build<2>(info->base_res, info->data);
 					break;
 				case 3:
-					build<3>(m_container.get<3>(info->id), reinterpret_cast<resource<3>::build_info*>(info->data));
+					build<3>(info->base_res, info->data);
 					break;
 				case 4:
-					build<4>(m_container.get<4>(info->id), reinterpret_cast<resource<4>::build_info*>(info->data));
+					build<4>(info->base_res, info->data);
 				case 5:
-					build<5>(m_container.get<5>(info->id), reinterpret_cast<resource<5>::build_info*>(info->data));
+					build<5>(info->base_res, info->data);
 					break;
 				case 6:
-					build<6>(m_container.get<6>(info->id), reinterpret_cast<resource<6>::build_info*>(info->data));
+					build<6>(info->base_res, info->data);
 					break;
 				case 7:
-					build<7>(m_container.get<0>(info->id), reinterpret_cast<resource<7>::build_info*>(info->data));
+					build<7>(info->base_res, info->data);
 					break;
 				}
 				static_assert(8 == RES_TYPE_COUNT);
@@ -132,33 +199,35 @@ namespace rcq
 						m_destroy_queue_cv.wait(lock);
 				}
 
-				auto info = m_destroy_queue.front();
+				base_resource* base_res = *m_destroy_queue.front();
+				
+				while (!base_res->ready_bit.load());
 
-				switch (info->first)
+				switch (base_res->res_type)
 				{
 				case 0:
-					destroy<0>(m_container.get<0>(info->second));
+					destroy<0>(base_res);
 					break;
 				case 1:
-					destroy<1>(m_container.get<1>(info->second));
+					destroy<1>(base_res);
 					break;
 				case 2:
-					destroy<2>(m_container.get<2>(info->second));
+					destroy<2>(base_res);
 					break;
 				case 3:
-					destroy<3>(m_container.get<3>(info->second));
+					destroy<3>(base_res);
 					break;
 				case 4:
-					destroy<4>(m_container.get<4>(info->second));
+					destroy<4>(base_res);
 					break;
 				case 5:
-					destroy<5>(m_container.get<5>(info->second));
+					destroy<5>(base_res);
 					break;
 				case 6:
-					destroy<6>(m_container.get<6>(info->second));
+					destroy<6>(base_res);
 					break;
 				case 7:
-					destroy<7>(m_container.get<7>(info->second));
+					destroy<7>(base_res);
 					break;
 				}
 				static_assert(8 == RES_TYPE_COUNT);
@@ -167,446 +236,13 @@ namespace rcq
 			}
 		}
 
-		resource_container<
-			RES_TYPE_MAT_OPAQUE,
-			RES_TYPE_MAT_EM,
-			RES_TYPE_SKY,
-			RES_TYPE_TERRAIN,
-			RES_TYPE_WATER,
-			//RES_TYPE_LIGHT_OMNI,
-			//RES_TYPE_SKYBOX,
-			RES_TYPE_MESH,
-			RES_TYPE_TR,
-			RES_TYPE_MEMORY
-		> m_container;
-		std::mutex m_container_mutex;
-
-		static_queue<res_build_info> m_build_queue;
-		std::mutex m_build_queue_mutex;
-		std::condition_variable m_build_queue_cv;
-
-		static_queue<std::pair<size_t, uint64_t>> m_destroy_queue;
-		std::mutex m_destroy_queue_mutex;
-		std::condition_variable m_destroy_queue_cv;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	public:
-		resource_manager(const resource_manager&) = delete;
-		resource_manager(resource_manager&&) = delete;
-
-		~resource_manager();
-
-		static void init(const base_info& info);
-		static void destroy();
-		static resource_manager* instance() { return m_instance; }
-
-		void process_build_package(build_package&& package);
-		void push_destroy_package(std::unique_ptr<destroy_package>&& package)
-		{
-			std::lock_guard<std::mutex> lock(m_destroy_p_queue_mutex);
-			m_destroy_p_queue.push(std::move(package));
-		}
-
-
-		template<size_t res_type, RESOURCE_GET res_get = RESOURCE_GET::IMMEDIATELY>
-		auto& get_res(unique_id id);
-
-		void update_tr(const std::vector<update_tr_info>& trs);
-		VkDescriptorSetLayout get_dsl(DESCRIPTOR_SET_LAYOUT_TYPE type) { return m_dsls[type]; }
-
-	private:
-		resource_manager(const base_info& info);
-		
-		void create_samplers();
-		void create_descriptor_set_layouts();
-		void create_staging_buffers();
+		void begin_build_cb();
+		void end_build_cb();
+		void wait_for_build_fence();
+		void create_dsls();
+		void create_dp_pools();
 		void create_command_pool();
-
-
-		template<DESCRIPTOR_SET_LAYOUT_TYPE dsl_type>
-		inline void extend_descriptor_pool_pool();
-
-		template<size_t... render_passes>
-		inline void wait_for_finish(std::index_sequence<render_passes...>);
-
-		static resource_manager* m_instance;
-
-		const base_info& m_base;
-
-		VkCommandPool m_cp_build;
-		VkCommandPool m_cp_update;
-
-		//resources
-		VkBuffer m_single_cell_sb; //used by build thread
-		VkDeviceMemory m_single_cell_sb_mem;
-		char* m_single_cell_sb_data;
-
-		static const uint32_t STAGING_BUFFER_CELL_COUNT = 128;
-		VkBuffer m_sb; //used by core thread, size=
-		VkDeviceMemory m_sb_mem;
-		char* m_sb_data;
-
-		std::array<VkSampler, SAMPLER_TYPE_COUNT> m_samplers;
-		std::array<VkDescriptorSetLayout, DESCRIPTOR_SET_LAYOUT_TYPE_COUNT> m_dsls;
-
-		static const uint32_t DESCRIPTOR_POOL_SIZE = 64;
-		std::array<descriptor_pool_pool, DESCRIPTOR_SET_LAYOUT_TYPE_COUNT> m_dpps;
-		
-
-
-		std::tuple<
-			std::map<unique_id, material_opaque>,
-			std::map<unique_id, material_em>,
-			std::map<unique_id, sky>,
-			std::map<unique_id, terrain>,
-			std::map<unique_id, water>,
-			std::map<unique_id, light_omni>,
-			std::map<unique_id, skybox>,
-			std::map<unique_id, mesh>,
-			std::map<unique_id, transform>,
-			std::map<unique_id, memory>
-		> m_resources_ready;
-		std::mutex m_resources_ready_mutex;
-
-		std::tuple<
-			std::map<unique_id, std::future<material_opaque>>,
-			std::map<unique_id, std::future<material_em>>,
-			std::map<unique_id, std::future<sky>>,
-			std::map<unique_id, std::future<terrain>>,
-			std::map<unique_id, std::future<water>>,
-			std::map<unique_id, std::future<light_omni>>,
-			std::map<unique_id, std::future<skybox>>,
-			std::map<unique_id, std::future<mesh>>,
-			std::map<unique_id, std::future<transform>>,
-			std::map<unique_id, std::future<memory>>
-		> m_resources_proc;
-		std::mutex m_resources_proc_mutex;
-
-
-		template<size_t... res_types>
-		inline void check_resource_leak(std::index_sequence<res_types...>)
-		{
-			auto l = { (check_resource_leak_impl<res_types>(),0)... };
-		}
-
-		template<size_t res_type>
-		inline void check_resource_leak_impl()
-		{
-			if (!std::get<res_type>(m_resources_ready).empty())
-				throw std::runtime_error("resource leak of resource type " + std::to_string(res_type)+ 
-					". used resource is not destroyed");
-			if (!std::get<res_type>(m_resources_proc).empty())
-				throw std::runtime_error("resource leak of resource type " + std::to_string(res_type) +
-					". resource is build but never used and deleted");
-		}
-
-
-		//build thread
-		std::thread m_build_thread;
-		void build_loop();
-		std::queue<std::unique_ptr<build_task_package>> m_build_task_p_queue;
-		std::mutex m_build_task_p_queue_mutex;
-		std::unique_ptr<build_task_package> m_current_build_task_p;
-		bool m_should_end_build;
-
-		template<typename TaskTuple, size_t... types>
-		inline void do_build_tasks(TaskTuple&& p, std::index_sequence<types...>);
-
-		template<size_t res_type, typename VectOfTuple, size_t IdIndex, size_t... indices>
-		inline void create_build_tasks_impl(VectOfTuple&& build_infos, std::index_sequence<IdIndex, indices...>);
-
-
-		template<size_t... res_types>
-		inline void create_build_tasks(build_package&& p, std::index_sequence<res_types...>);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<mesh, typename resource_typename<res_type>::type>, mesh>
-			build(const std::string& filename, bool calc_tb);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<material_opaque, typename resource_typename<res_type>::type>, material_opaque>
-		 build(const material_opaque_data& data, const texfiles& files);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<transform, typename resource_typename<res_type>::type>, transform>
-			build(const transform_data& data, USAGE usage);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<light_omni, typename resource_typename<res_type>::type>, light_omni>
-			build(const light_omni_data& data, USAGE usage);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<memory, typename resource_typename<res_type>::type>, memory>
-			build(const std::vector<VkMemoryAllocateInfo>& requirements);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<skybox, typename resource_typename<res_type>::type>, skybox>
-			build(const std::string& filename);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<material_em, typename resource_typename<res_type>::type>, material_em>
-			build(const std::string& x) { return material_em(); }
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<sky, typename resource_typename<res_type>::type>, sky>
-			build(const std::string& filename, const glm::uvec3& sky_image_size, const glm::uvec2& transmittance_size);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<terrain, typename resource_typename<res_type>::type>, terrain>
-			build(const std::string& filename, uint32_t mip_level_count, const glm::uvec2& level0_image_size, 
-				const glm::vec3& size_in_meters, const glm::uvec2& level0_tile_size);
-
-		template<size_t res_type>
-		typename std::enable_if_t<std::is_same_v<water, typename resource_typename<res_type>::type>, water>
-			build(const std::string& filename, const glm::vec2& grid_size_in_meters, float base_frequency, float A);
-
-
-		texture load_texture(const std::string& filename);
-
-
-		//destroy thread
-		std::thread m_destroy_thread;
-		void destroy_loop();
-		std::queue<std::unique_ptr<destroy_package>> m_destroy_p_queue;
-		std::mutex m_destroy_p_queue_mutex;
-		destroy_ids m_pending_destroys;
-		bool m_should_end_destroy;
-		std::tuple<
-			std::vector<material_opaque>,
-			std::vector<material_em>,
-			std::vector<sky>,
-			std::vector<terrain>,
-			std::vector<water>,
-			std::vector<light_omni>,
-			std::vector<skybox>,
-			std::vector<mesh>,
-			std::vector<transform>,
-			std::vector<memory>
-		> m_destroyables;
-
-		template<size_t... res_types>
-		inline void check_pending_destroys(std::index_sequence<res_types...>);
-
-
-		template<size_t res_type>
-		inline void check_pending_destroys_impl();
-
-		template<size_t... res_types>
-		inline void process_destroy_package(const destroy_ids& package, std::index_sequence<res_types...>);
-
-		template<size_t res_type>
-		inline void process_destroy_package_element(const std::vector<unique_id>& ids);
-
-		template<size_t... res_types>
-		inline void destroy_destroyables(std::index_sequence<res_types...>);
-
-	
-		void destroy(mesh&& _mesh);
-		void destroy(material_opaque&& _mat);
-		void destroy(transform&& _tr);
-		void destroy(light_omni&& _light);
-		void destroy(memory&& _memory);
-		void destroy(skybox&& _sb);
-		void destroy(material_em&& _mat) {}
-		void destroy(sky&& _sky);
-		void destroy(terrain&& t);
-		void destroy(water&& w);
-
-		//allocator
-		allocator m_alloc;
+		void create_samplers();
 
 	};
-
-
-	template<size_t res_type, RESOURCE_GET res_get=RESOURCE_GET::IMMEDIATELY>
-	auto& resource_manager::get_res(unique_id id)
-	{
-		auto& res_ready = std::get<res_type>(m_resources_ready);
-		auto& res_proc = std::get<res_type>(m_resources_proc);
-		{
-			std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
-			if (auto itr = res_ready.find(id); itr != res_ready.end())
-			{
-				if constexpr (res_get == RESOURCE_GET::IMMEDIATELY)
-				{
-					return itr->second;
-				}
-				if constexpr (res_get==RESOURCE_GET::IF_READY)
-				{
-					std::optional<typename resource_typename<res_type>::type *> ret;
-					ret.emplace(&(itr->second));
-					return ret;
-				}
-			}
-		}
-
-		std::lock_guard<std::mutex> lock_proc(m_resources_proc_mutex);
-		if (auto itp = res_proc.find(id); itp != res_proc.end())
-		{
-			if constexpr (res_get == RESOURCE_GET::IMMEDIATELY)
-			{
-				auto ready_resource = itp->second.get();
-				std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
-				auto[itr, insert] = res_ready.insert_or_assign(id, ready_resource);
-				if (!insert)
-					throw std::runtime_error("id conflict!");
-				res_proc.erase(itp);
-				return itr->second;
-			}
-			if constexpr (res_get == RESOURCE_GET::IF_READY)
-			{
-				std::optional<typename resource_typename<res_type>::type *> ret;
-				if (itp->second.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
-				{
-					auto ready_resource = itp->second.get();
-					std::lock_guard<std::mutex> lock_ready(m_resources_ready_mutex);
-					auto[itr, insert] = res_ready.insert_or_assign(id, ready_resource);
-					if (!insert)
-						throw std::runtime_error("id conflict!");
-					res_proc.erase(itp);
-					ret.emplace(&(itr->second));
-				}
-				return ret;
-			}
-		}
-
-		throw std::runtime_error("invalid id!");
-	}
-
-	template<size_t res_type, typename VectOfTuple, size_t IdIndex, size_t... indices>
-	void resource_manager::create_build_tasks_impl(VectOfTuple&& build_infos, std::index_sequence<IdIndex, indices...>)
-	{
-		auto& task_vector = std::get<res_type>(*m_current_build_task_p.get());
-		task_vector.reserve(build_infos.size());
-		//std::map<unique_id, std::future<resource_typename<res_type>::type>> m;
-		//std::remove_reference_t<decltype(std::get<res_type>(m_resources_proc))> m;
-		std::tuple_element_t<res_type, decltype(m_resources_proc)> m; 
-		using TaskType = std::remove_reference_t<decltype(*task_vector.data())>;
-
-		for (auto& build_info : build_infos)
-		{
-			TaskType task([t=std::make_tuple(this, std::move(std::get<indices>(build_info))...)]() 
-			{
-				return std::apply(&resource_manager::build<res_type>, std::move(t));
-			});
-			m.insert_or_assign(std::get<IdIndex>(build_info), task.get_future());
-			task_vector.push_back(std::move(task));
-		}
-		std::lock_guard<std::mutex> lock(m_resources_proc_mutex);
-		for (auto& node : m)
-		{
-			bool insert=std::get<res_type>(m_resources_proc).insert_or_assign(node.first, std::move(node.second)).second; //should use extract when it's available
-			if (!insert)
-				throw std::runtime_error("id conflict!");
-		}
-	}
-
-	template<size_t... res_types>
-	void resource_manager::create_build_tasks(build_package&& p, std::index_sequence<res_types...>)
-	{
-		auto l = { (create_build_tasks_impl<res_types>(std::get<res_types>(p), 
-			std::make_index_sequence<std::tuple_size_v<std::tuple_element_t<res_types, build_package>::value_type>>()), 0)... };
-
-	}
-
-	/*template<size_t res_type>
-	void resource_manager::create_destroy_tasks_impl(std::vector<unique_id>& destroy_ids)
-	{
-		auto& task_vector = std::get<res_type>(m_current_task_p->destroy_task_p);
-		task_vector.reserve(destroy_ids.size());
-		for (auto destroy_id : destroy_ids)
-			task_vector.emplace_back(std::bind(&resource_manager::destroy<res_type>,
-				this, destroy_id));
-	}
-
-	template<size_t... types, typename DestroyPackage>
-	void resource_manager::create_destroy_tasks(DestroyPackage&& p, std::index_sequence<types...>)
-	{
-		auto l = { (create_destroy_tasks_impl<types>(std::get<types>(p)), 0)... };
-	}*/
-
-	template<typename TaskTuple, size_t... types>
-	void resource_manager::do_build_tasks(TaskTuple&& p, std::index_sequence<types...>)
-	{
-		auto l = { ([](auto&& task_vector) { for (auto& task : task_vector) task(); }(std::get<types>(p)), 0)... };
-	}
-
-	template<size_t... res_types>
-	inline void resource_manager::check_pending_destroys(std::index_sequence<res_types...>)
-	{
-		auto l = { (check_pending_destroys_impl<res_types>() ,0)... };
-	}
-
-	template<size_t res_type>
-	inline void resource_manager::check_pending_destroys_impl()
-	{
-		auto& pending_destroys = std::get<res_type>(m_pending_destroys);
-
-		pending_destroys.erase(std::remove_if(pending_destroys.begin(), pending_destroys.end(), [this](unique_id id)
-		{
-			if (auto it = std::get<res_type>(m_resources_ready).find(id); it != std::get<res_type>(m_resources_ready).end())
-			{
-				std::get<res_type>(m_destroyables).push_back(std::move(it->second));
-				std::get<res_type>(m_resources_ready).erase(it);
-				return true;
-			}
-			if (auto it = std::get<res_type>(m_resources_proc).find(id); it != std::get<res_type>(m_resources_proc).end())
-			{
-				std::get<res_type>(m_destroyables).push_back(std::move(it->second.get()));
-				std::get<res_type>(m_resources_proc).erase(it);
-				return true;
-			}
-			return false;
-		}), pending_destroys.end());
-	}
-
-	template<size_t... res_types>
-	inline void resource_manager::process_destroy_package(const destroy_ids& package, std::index_sequence<res_types...>)
-	{
-		auto l = { (process_destroy_package_element<res_types>(std::get<res_types>(package)), 0)... };
-	}
-
-	template<size_t res_type>
-	inline void resource_manager::process_destroy_package_element(const std::vector<unique_id>& ids)
-	{
-		static auto& res_ready = std::get<res_type>(m_resources_ready);
-		for (unique_id id : ids)
-		{
-			if (auto it = res_ready.find(id); it != res_ready.end())
-			{
-				std::get<res_type>(m_destroyables).push_back(std::move(it->second));
-				res_ready.erase(it);
-			}
-			else
-			{
-				std::get<res_type>(m_pending_destroys).push_back(id);
-			}
-		}
-	}
-
-	template<size_t... res_types>
-	void resource_manager::destroy_destroyables(std::index_sequence<res_types...>)
-	{
-		auto l = { ([this](auto&& destroyable_vect)
-		{
-			for (auto& destroyable : destroyable_vect)
-				destroy(std::move(destroyable));
-			destroyable_vect.clear();
-		}(std::get<res_types>(m_destroyables)), 0)... };
-	}
 }

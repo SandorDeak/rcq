@@ -110,12 +110,12 @@ namespace rcq
 		RESOURCE_TYPE_COUNT
 	};
 
-	enum SAMPLER_TYPE
+	/*enum SAMPLER_TYPE
 	{
 		SAMPLER_TYPE_SIMPLE,
 		SAMPLER_TYPE_CUBE,
 		SAMPLER_TYPE_COUNT
-	};
+	};*/
 
 	enum DESCRIPTOR_SET_LAYOUT_TYPE
 	{
@@ -536,6 +536,7 @@ namespace rcq
 		VkQueue graphics_queue;
 		VkQueue present_queue;
 		VkQueue compute_queue;
+		VkQueue transfer_queue;
 		GLFWwindow* window;
 		VkFormatProperties format_properties;
 

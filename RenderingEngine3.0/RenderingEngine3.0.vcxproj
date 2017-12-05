@@ -34,6 +34,7 @@
     <ClCompile Include="scene.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="array.h" />
     <ClInclude Include="freelist_resource_host.h" />
     <ClInclude Include="hash_table.h" />
     <ClInclude Include="host_memory.h" />
@@ -41,10 +42,11 @@
     <ClInclude Include="malloc_free_resource.h" />
     <ClInclude Include="monotonic_buffer_resource_host.h" />
     <ClInclude Include="null_memory_resource.h" />
+    <ClInclude Include="pool_memory_resource.h" />
     <ClInclude Include="queue.h" />
     <ClInclude Include="freelist_resource.h" />
     <ClInclude Include="list.h" />
-    <ClInclude Include="pool_resource.h" />
+    <ClInclude Include="pool_memory_resource_host.h" />
     <ClInclude Include="base.h" />
     <ClInclude Include="basic_pass.h" />
     <ClInclude Include="core.h" />
@@ -65,7 +67,8 @@
     <ClInclude Include="structs.h" />
     <ClInclude Include="scene.h" />
     <ClInclude Include="vector.h" />
-    <ClInclude Include="vulkan_allocator.h" />
+    <ClInclude Include="vk_memory_resource.h" />
+    <ClInclude Include="vk_allocator.h" />
     <ClInclude Include="device_memory_resource.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

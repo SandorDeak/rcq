@@ -1,53 +1,48 @@
 #pragma once
 
-#include "vulkan_allocator.h"
-#include "foundation.h"
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW\glfw3.h>
+
+#include "memory_resource.h"
 
 namespace rcq
 {
 	class device_memory_resource : public memory_resource
 	{
-		device_memory_resource(VkDevice device, uint32_t memory_type_index, const vulkan_allocator* vk_alloc) :
-			memory_resource(std::numeric_limits<VkDeviceSize>::max(), nullptr),
-			m_vk_alloc(vk_alloc),
+	public:
+		device_memory_resource(uint64_t max_alignment, VkDevice device, VkDeviceMemory handle, device_memory_resource* upstream) :
+			memory_resource(max_alignment, upstream),
 			m_device(device),
-			m_alloc{}
+			m_handle(handle)
+		{}
+
+		virtual ~device_memory_resource() {}
+
+		VkDeviceMemory handle() const
 		{
-			m_alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-			m_alloc.memoryTypeIndex = memory_type_index;
+			return m_handle;
 		}
 
-		uint64_t allocate(uint64_t size, uint64_t alignment=0) override
+		VkDevice device() const
 		{
-			VkDeviceMemory mem;
-			m_alloc.allocationSize = size;
-			VkResult res = vkAllocateMemory(m_device, &m_alloc, *m_vk_alloc, &mem);
-			switch (res)
-			{
-			case VK_ERROR_OUT_OF_HOST_MEMORY:
-				throw std::runtime_error("vulkan memory allocation failed, out of host memory!");
-				break;
-			case VK_ERROR_OUT_OF_DEVICE_MEMORY:
-				throw std::runtime_error("vulkan allocation failed, out of device memory!");
-				break;
-			case VK_ERROR_TOO_MANY_OBJECTS:
-				throw std::runtime_error("vulkan allocation failed, too many objects!");
-				break;
-			default:
-				return mem;
-				break;
-			}
+			return m_device;
 		}
 
-		void deallocate(uint64_t p) override
+		uint64_t map(uint64_t p, uint64_t size)
 		{
-			vkFreeMemory(m_device, p, *m_vk_alloc);
+			void* data;
+			vkMapMemory(m_device, m_handle, static_cast<VkDeviceSize>(p), static_cast<VkDeviceSize>(size), 0, &data);
+			return reinterpret_cast<uint64_t>(data);
+		}
+		void unmap()
+		{
+			vkUnmapMemory(m_device, m_handle);
 		}
 
-	private:
-		VkMemoryAllocateInfo m_alloc;
+	protected:
+		device_memory_resource* m_upstream;
+		uint64_t m_max_alignment;
+		VkDeviceMemory m_handle;
 		VkDevice m_device;
-		const vulkan_allocator* m_vk_alloc;
 	};
-
 }

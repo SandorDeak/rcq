@@ -155,8 +155,25 @@ namespace rcq
 			return m_size;
 		}
 
+		void resize(size_t size)
+		{
+			if (size <= m_capacity)
+			{
+				m_size = size;
+			}
+			else
+			{
+				while (m_capacity < size)
+					m_capacity <<= 1;
+
+				m_memory->deallocate(reinterpret_cast<uint64_t>(m_data));
+				m_memory->allocate(m_capacity * sizeof(T));
+				m_size = size;
+			}
+		}
+
 	private:
-		rcq::memory_resource<size_t>* m_memory;
+		memory_resource* m_memory;
 		T* m_data;
 		size_t m_size;
 		size_t m_capacity;

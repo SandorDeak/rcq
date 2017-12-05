@@ -3,16 +3,16 @@
 #include<stdexcept>
 #include <assert.h>
 
-#include "memory_resource.h"
+#include "device_memory_resource.h"
 
 namespace rcq
 {
-	class freelist_resource : public memory_resource
+	class freelist_resource : public device_memory_resource
 	{
 	public:
-		freelist_resource(uint64_t size, uint64_t alignment, memory_resource* upstream,
+		freelist_resource(uint64_t size, uint64_t alignment, device_memory_resource* upstream,
 			memory_resource* metadata_memory_resource) :
-			memory_resource(alignment, upstream),
+			device_memory_resource(alignment, upstream->device(), upstream->handle(), upstream),
 			m_metadata_resource(metadata_memory_resource)
 		{
 			static_assert(sizeof(block) % alignof(block) == 0);

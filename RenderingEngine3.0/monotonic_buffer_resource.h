@@ -2,17 +2,19 @@
 
 #include<stdexcept>
 
-#include "memory_resource.h"
+#include "device_memory_resource.h"
 #include "vector.h"
+
+//this doesnt work currently!!!
 
 namespace rcq
 {
-	class monotonic_buffer_resource : public memory_resource
+	class monotonic_buffer_resource : public device_memory_resource
 	{
 	public:
-		monotonic_buffer_resource(uint64_t chunk_size, uint64_t alignment, memory_resource* upstream,
+		monotonic_buffer_resource(uint64_t chunk_size, uint64_t alignment, device_memory_resource* upstream,
 			memory_resource* metadata_memory_resource) :
-			memory_resource(alignment, upstream),
+			device_memory_resource(alignment, upstream->device(), upstream->handle(), upstream),
 			m_chunk_size(chunk_size),
 			m_chunks(metadata_memory_resource)
 		{

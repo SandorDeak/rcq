@@ -1,5 +1,7 @@
 #pragma once
 
+#include "foundation.h"
+
 namespace rcq
 {
 	class memory_resource

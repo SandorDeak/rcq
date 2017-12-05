@@ -5,10 +5,10 @@
 
 namespace rcq
 {
-	class vulkan_allocator
+	class vk_allocator
 	{
 	public:
-		vulkan_allocator(memory_resource* memory) 
+		vk_allocator(memory_resource* memory) 
 		{
 			m_callbacks.pUserData = reinterpret_cast<void*>(this);
 			m_callbacks.pfnAllocation = &alloc_static;
@@ -53,29 +53,29 @@ namespace rcq
 		static void* VKAPI_CALL alloc_static(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope alloc_scope)
 		{
 
-			return static_cast<vulkan_allocator*>(user_data)->alloc(size, alignment);
+			return static_cast<vk_allocator*>(user_data)->alloc(size, alignment);
 		}
 
 		static void VKAPI_CALL free_static(void* user_data, void* ptr)
 		{
-			static_cast<vulkan_allocator*>(user_data)->free(ptr);
+			static_cast<vk_allocator*>(user_data)->free(ptr);
 		}
 
 		static void* VKAPI_CALL realloc_static(void* user_data, void* original, size_t size, size_t alignment, VkSystemAllocationScope alloc_scope)
 		{
-			return static_cast<vulkan_allocator*>(user_data)->realloc(original, size, alignment, alloc_scope);
+			return static_cast<vk_allocator*>(user_data)->realloc(original, size, alignment, alloc_scope);
 		}
 
 		static void VKAPI_CALL internal_alloc_notification_static(void* user_data, size_t size, VkInternalAllocationType type,
 			VkSystemAllocationScope scope)
 		{
-			static_cast<vulkan_allocator*>(user_data)->internal_alloc_notification(size, type, scope);
+			static_cast<vk_allocator*>(user_data)->internal_alloc_notification(size, type, scope);
 		}
 
 		static void VKAPI_CALL internal_free_notification_static(void* user_data, size_t size, VkInternalAllocationType type,
 			VkSystemAllocationScope scope)
 		{
-			static_cast<vulkan_allocator*>(user_data)->internal_free_notification(size, type, scope);
+			static_cast<vk_allocator*>(user_data)->internal_free_notification(size, type, scope);
 		}
 	};
 }
