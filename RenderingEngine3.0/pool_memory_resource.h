@@ -8,6 +8,8 @@ namespace rcq
 	class pool_memory_resource : public device_memory_resource
 	{
 	public:
+		pool_memory_resource() {}
+
 		pool_memory_resource(uint64_t block_size, uint64_t block_alignment, device_memory_resource* upstream,
 			memory_resource* metadata_memory_resource) :
 			device_memory_resource(block_alignment, upstream->device(), upstream->handle(), upstream),
@@ -15,6 +17,18 @@ namespace rcq
 			m_free_blocks(metadata_memory_resource),
 			m_next_chunk_size(block_size)
 		{
+			assert(block_size%block_alignment == 0);
+		}
+
+		void init(uint64_t block_size, uint64_t block_alignment, device_memory_resource* upstream,
+			memory_resource* metadata_memory_resource)
+		{
+			device_memory_resource::init(block_alignment, upstream->device(), upstream->handle(), upstream);
+
+			m_chunks.init(metadata_memory_resource);
+			m_free_blocks.init(metadata_memory_resource);
+			m_next_chunk_size = block_size;
+
 			assert(block_size%block_alignment == 0);
 		}
 

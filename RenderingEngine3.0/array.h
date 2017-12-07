@@ -6,9 +6,9 @@ namespace rcq
 	class alignas(alignof(T)) array
 	{
 	public:
-		constexpr T* operator[](size_t index)
+		constexpr T& operator[](size_t index)
 		{
-			return m_data + sizeof(T)*index;
+			return *reinterpret_cast<T*>(m_data + sizeof(T)*index);
 		}
 
 		constexpr size_t size()
@@ -16,7 +16,12 @@ namespace rcq
 			return _size;
 		}
 
+		constexpr T* data()
+		{
+			return reinterpret_cast<T*>(m_data);
+		}
+
 	private:
 		char m_data[sizeof(T)*_size];
-	}
+	};
 }

@@ -14,10 +14,18 @@ namespace rcq
 			T data;
 		};
 
+		queue() {}
+
 		queue(memory_resource* memory) :
 			m_memory(memory),
 			m_size(0)
 		{}
+
+		void init(memory_resource* memory)
+		{
+			m_memory = memory;
+			m_size = 0;
+		}
 
 		queue(const queue& other) = delete;
 
@@ -80,7 +88,7 @@ namespace rcq
 			return *this;
 		}
 
-		void init()
+		void init_buffer()
 		{
 			m_first = reinterpret_cast<node*>(m_memory->allocate(sizeof(node), alignof(node)));
 			m_first->next = m_first;

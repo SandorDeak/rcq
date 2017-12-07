@@ -6,7 +6,7 @@
 
 namespace rcq
 {
-	class malloc_free_resource : public memory_resource<size_t, size_t>
+	class malloc_free_resource : public memory_resource
 	{
 	public:
 		malloc_free_resource() :

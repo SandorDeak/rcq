@@ -7,6 +7,8 @@ namespace rcq
 	class memory_resource
 	{
 	public:
+		memory_resource() {}
+
 		memory_resource(uint64_t max_alignment, memory_resource* upstream) :
 			m_upstream(upstream),
 			m_max_alignment(max_alignment)
@@ -33,6 +35,12 @@ namespace rcq
 		}
 
 	protected:
+		void init(uint64_t max_alignment, memory_resource* upstream)
+		{
+			m_max_alignment = max_alignment;
+			m_upstream = upstream;
+		}
+
 		memory_resource* m_upstream;
 		uint64_t m_max_alignment;
 	};

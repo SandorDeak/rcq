@@ -9,6 +9,8 @@
 #include "vk_allocator.h"
 #include "pool_memory_resource.h"
 #include "freelist_resource_host.h"
+#include "monotonic_buffer_resource.h"
+#include "slot_map.h"
 
 namespace rcq
 {
@@ -19,33 +21,71 @@ namespace rcq
 		gta5_pass(gta5_pass&&) = delete;
 		~gta5_pass();
 
-		static void init(const base_info& info, const renderable_container& rends);
+		static void init(const base_info& info);
 		static void destroy();
 		static gta5_pass* instance() { return m_instance; }
 
-		void render(const render_settings& settings, std::bitset<RENDERABLE_TYPE_COUNT> record_mask);
-		void wait_for_finish();
-		void set_terrain(terrain* t);
-		void delete_terrain();
-		void set_water(water* w);
-		void delete_water();
+		void render();
 
+		slot add_opaque_object(base_resource* mesh, base_resource* opaque_material, base_resource* transform)
+		{
+			slot ret;
+			renderable<REND_TYPE_OPAQUE_OBJECT>* new_obj = m_opaque_objects.push(ret);
+			new_obj->mesh_vb = reinterpret_cast<resource<RES_TYPE_MESH>*>(mesh->data)->vb;
+			new_obj->mesh_ib = reinterpret_cast<resource<RES_TYPE_MESH>*>(mesh->data)->ib;
+			new_obj->mesh_veb = reinterpret_cast<resource<RES_TYPE_MESH>*>(mesh->data)->veb;
+			new_obj->mesh_index_size = reinterpret_cast<resource<RES_TYPE_MESH>*>(mesh->data)->size;
+
+			new_obj->mat_opaque_ds = reinterpret_cast<resource<RES_TYPE_MAT_OPAQUE>*>(opaque_material->data)->ds;
+			new_obj->tr_ds = reinterpret_cast<resource<RES_TYPE_TR>*>(transform->data)->ds;
+
+			return ret;
+		}
+
+		bool destroy_opaque_object(slot s)
+		{
+			return m_opaque_objects.destroy(s);
+		}
+
+		void set_sky(base_resource* sky)
+		{
+			m_sky.ds = reinterpret_cast<resource<RES_TYPE_SKY>*>(sky->data)->ds;
+			m_sky_valid = true;
+		}
+
+		void set_terrain(base_resource* terrain);
+		void set_water(base_resource* water);
+
+		void destroy_sky()
+		{
+			m_sky_valid = false;
+		}
+
+		void destroy_terrain()
+		{
+			m_terrain_valid = false;
+		}
+
+		void destroy_water()
+		{
+			m_water_valid = false;
+		}
 
 	private:
 		enum RES_DATA
 		{
-			RES_DATA_ENVIRONMENT_MAP_GEN_MAT_DATA,
-			RES_DATA_ENVIRONMENT_MAP_GEN_SKYBOX_DATA,
-			RES_DATA_GBUFFER_GEN_DATA,
-			RES_DATA_DIR_SHADOW_MAP_GEN_DATA,
-			RES_DATA_SS_DIR_SHADOW_MAP_GEN_DATA,
-			RES_DATA_IMAGE_ASSEMBLER_DATA,
-			RES_DATA_SKY_DRAWER_DATA,
-			RES_DATA_SUN_DRAWER_DATA,
+			RES_DATA_ENVIRONMENT_MAP_GEN_MAT,
+			RES_DATA_ENVIRONMENT_MAP_GEN_SKYBOX,
+			RES_DATA_GBUFFER_GEN,
+			RES_DATA_DIR_SHADOW_MAP_GEN,
+			RES_DATA_SS_DIR_SHADOW_MAP_GEN,
+			RES_DATA_IMAGE_ASSEMBLER,
+			RES_DATA_SKY_DRAWER,
+			RES_DATA_SUN_DRAWER,
 			RES_DATA_TERRAIN_DRAWER,
 			RES_DATA_TERRAIN_TILE_REQUEST,
-			RES_DATA_WATER_COMPUTE_DATA,
-			RES_DATA_WATER_DRAWER_DATA,
+			RES_DATA_WATER_COMPUTE,
+			RES_DATA_WATER_DRAWER,
 			RES_DATA_REFRACTION_MAP_GEN,
 			RES_DATA_SSR_RAY_CASTING,
 			RES_DATA_COUNT
@@ -176,8 +216,7 @@ namespace rcq
 			}
 			void create_dsl(VkDevice device, const VkDescriptorSetLayoutCreateInfo& create_info, const VkAllocationCallbacks* alloc)
 			{
-				if (vkCreateDescriptorSetLayout(device, &create_info, alloc, &dsl) != VK_SUCCESS)
-					throw std::runtime_error("failed to create dsl!");
+				assert(vkCreateDescriptorSetLayout(device, &create_info, alloc, &dsl) == VK_SUCCESS);
 			}
 			void bind(VkCommandBuffer cb, VkPipelineBindPoint bind_point= VK_PIPELINE_BIND_POINT_GRAPHICS)
 			{
@@ -192,7 +231,11 @@ namespace rcq
 			VkImageView view;
 		};
 
-		struct environment_map_gen_mat_data
+		template<uint32_t res_data>
+		struct resource_data;
+
+		template<>
+		struct resource_data<RES_DATA_ENVIRONMENT_MAP_GEN_MAT>
 		{
 			glm::mat4 view;
 			glm::vec3 dir; //in worlds space
@@ -202,20 +245,24 @@ namespace rcq
 			glm::vec3 ambient_irradiance;
 			uint32_t padding2;
 		};
-		struct environment_map_gen_skybox_data
+		template<>
+		struct resource_data<RES_DATA_ENVIRONMENT_MAP_GEN_SKYBOX>
 		{
 			glm::mat4 view;
 		};
-		struct gbuffer_gen_data
+		template<>
+		struct resource_data<RES_DATA_GBUFFER_GEN>
 		{
 			glm::mat4 proj_x_view;
 			glm::vec3 cam_pos;
 		};
-		struct dir_shadow_map_gen_data
+		template<>
+		struct resource_data<RES_DATA_DIR_SHADOW_MAP_GEN>
 		{
 			glm::mat4 projs[FRUSTUM_SPLIT_COUNT];
 		};
-		struct ss_dir_shadow_map_gen_data
+		template<>
+		struct resource_data<RES_DATA_SS_DIR_SHADOW_MAP_GEN>
 		{
 			glm::mat4 projs[FRUSTUM_SPLIT_COUNT];
 			glm::mat4 view;
@@ -223,7 +270,8 @@ namespace rcq
 			float near;
 			float far;
 		};
-		struct image_assembler_data
+		template<>
+		struct resource_data<RES_DATA_IMAGE_ASSEMBLER>
 		{
 			glm::mat4 previous_proj_x_view;
 			glm::vec3 previous_view_pos;
@@ -237,7 +285,8 @@ namespace rcq
 			glm::vec3 cam_pos;
 			uint32_t padding3;
 		};
-		struct sky_drawer_data
+		template<>
+		struct resource_data<RES_DATA_SKY_DRAWER>
 		{
 			glm::mat4 proj_x_view_at_origin;
 			glm::vec3 light_dir;
@@ -245,7 +294,8 @@ namespace rcq
 			glm::vec3 irradiance;
 			uint32_t padding0;
 		};
-		struct sun_drawer_data
+		template<>
+		struct resource_data<RES_DATA_SUN_DRAWER>
 		{
 			glm::mat4 proj_x_view_at_origin;
 			glm::vec3 light_dir;
@@ -255,22 +305,23 @@ namespace rcq
 			glm::vec3 irradiance;
 			uint32_t padding1;
 		};
-		struct terrain_drawer_data
+		template<>
+		struct resource_data<RES_DATA_TERRAIN_DRAWER>
 		{
 			glm::mat4 proj_x_view;
 			glm::vec3 view_pos;
 			uint32_t padding0;
 		};
-
-		struct terrain_tile_request_data
+		template<>
+		struct resource_data<RES_DATA_TERRAIN_TILE_REQUEST>
 		{
 			glm::vec3 view_pos;
 			float near;
 			float far;
 			uint32_t padding0[3];
 		};
-
-		struct water_drawer_data
+		template<>
+		struct resource_data<RES_DATA_WATER_DRAWER>
 		{
 			glm::mat4 proj_x_view;
 			glm::mat4 mirrored_proj_x_view;
@@ -286,22 +337,22 @@ namespace rcq
 			glm::vec2 tile_size_in_meter;
 			glm::vec2 half_resolution;
 		};
-
-		struct refraction_map_gen_data
+		template<>
+		struct resource_data<RES_DATA_REFRACTION_MAP_GEN>
 		{
 			glm::mat4 proj_x_view;
 			glm::vec3 view_pos_at_ground;
 			float far;
 		};
-
-		struct ssr_ray_casting_data
+		template<>
+		struct resource_data<RES_DATA_SSR_RAY_CASTING>
 		{
 			glm::mat4 proj_x_view;
 			glm::vec3 view_pos;
 			float ray_length;
 		};
-
-		struct water_compute_data
+		template<>
+		struct resource_data<RES_DATA_WATER_COMPUTE>
 		{
 			glm::vec2 wind_dir;
 			float one_over_wind_speed_to_the_4;
@@ -317,30 +368,16 @@ namespace rcq
 			VkFramebuffer preimage_assembler;
 			VkFramebuffer refraction_image_gen;
 			VkFramebuffer water;
-			std::vector<VkFramebuffer> postprocessing;
+			VkFramebuffer postprocessing[SWAP_CHAIN_SIZE];
 		};
-
 
 		struct res_data
 		{
-			std::tuple<
-				environment_map_gen_mat_data*,
-				environment_map_gen_skybox_data*,
-				gbuffer_gen_data*,
-				dir_shadow_map_gen_data*,
-				ss_dir_shadow_map_gen_data*,
-				image_assembler_data*,
-				sky_drawer_data*,
-				sun_drawer_data*,
-				terrain_drawer_data*,
-				terrain_tile_request_data*,
-				water_compute_data*,
-				water_drawer_data*,
-				refraction_map_gen_data*,
-				ssr_ray_casting_data*
-			> data;
+			uint64_t data[RES_DATA_COUNT];
 
+			uint64_t buffer_offset;
 			VkBuffer buffer;
+			uint64_t staging_buffer_offset;
 			VkBuffer staging_buffer;
 			VkDeviceMemory staging_buffer_mem;
 			size_t size;
@@ -348,84 +385,78 @@ namespace rcq
 
 			static constexpr std::array<size_t, RES_DATA_COUNT> get_sizes()
 			{
-				return {
-					sizeof(environment_map_gen_mat_data),
-					sizeof(environment_map_gen_skybox_data),
-					sizeof(gbuffer_gen_data),
-					sizeof(dir_shadow_map_gen_data),
-					sizeof(ss_dir_shadow_map_gen_data),
-					sizeof(image_assembler_data),
-					sizeof(sky_drawer_data),
-					sizeof(sun_drawer_data),
-					sizeof(terrain_drawer_data),
-					sizeof(terrain_tile_request_data),
-					sizeof(water_compute_data),
-					sizeof(water_drawer_data),
-					sizeof(refraction_map_gen_data),
-					sizeof(ssr_ray_casting_data)
-				};
+				return get_sizes_impl(std::make_index_sequence<RES_DATA_COUNT>());
 			}
 
-			void calcoffset_and_size(size_t alignment)
+			template<size_t... res_data>
+			static constexpr std::array<size_t, RES_DATA_COUNT> get_sizes_impl(std::index_sequence<res_data...>)
+			{
+				return { sizeof(ressource_data<res_data>), ... };
+			}
+
+			void calc_offset_and_size(uint64_t alignment)
 			{
 				constexpr auto res_data_sizes = res_data::get_sizes();
 				size = 0;
 				for (uint32_t i = 0; i < RES_DATA_COUNT; ++i)
 				{
 					offsets[i] = size;
-					size += calc_offset(alignment, res_data_sizes[i]);
+					size += memory_resource::align(alignment, res_data_sizes[i]);
 				}
 			}
 
-			template<size_t... indices>
-			void set_pointers(char* base, std::index_sequence<indices...>)
+			//template<size_t... indices>
+			void set_pointers(uint64_t base/*, std::index_sequence<indices...>*/)
 			{
+				for(uint32_t i=0; i<RES_DATA_COUNT; ++i)
+				{ 
+					data[i] = base + offsets[i];
+				}
+				/*
 				auto l = { ([](auto&& p, char* val) {
 					p = reinterpret_cast<std::remove_reference_t<decltype(p)>>(val);
 				}(std::get<indices>(data), base + std::get<indices>(offsets))
-					, 0)... };
+					, 0)... };*/
 			}
-			template<typename T>
+			template<uint32_t res_data>
 			auto get()
 			{
-				return std::get<T*>(data);
+				return reinterpret_cast<resource_data<res_data>*>(data[res_data]);
 			}
 		};
 
-		gta5_pass(const base_info& info, const renderable_container& rends);
+		gta5_pass(const base_info& info);
 
 		static gta5_pass* m_instance;
 		const base_info& m_base;
 
+		void create_memory_resources_and_containers();
 		void create_render_passes();
 		void create_dsls_and_allocate_dss();
 		void create_graphics_pipelines();
 		void create_compute_pipelines();
-		void send_memory_requirements();
-		void get_memory_and_build_resources();
+		void create_resources();
 		void update_descriptor_sets();
 		void create_command_pool();
 		void create_samplers();
 		void create_framebuffers();
 		void allocate_command_buffers();
 		void record_present_command_buffers();
-		void process_settings(const render_settings& settings);
-		std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> calc_projs(const render_settings& settings);
+		void process_settings();
+		std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> calc_projs();
 		void create_sync_objects();
 
-		std::array<VkRenderPass, GP_COUNT> m_passes;
-		std::array<pipeline, GP_COUNT> m_gps;
-		std::array<pipeline, CP_COUNT> m_cps;
+		VkRenderPass m_passes[RENDER_PASS_COUNT];
+		pipeline m_gps[GP_COUNT];
+		pipeline m_cps[CP_COUNT];
 
 		//resources
 		VkDescriptorPool m_dp;
 		res_data m_res_data;
-		std::array<res_image, RES_IMAGE_COUNT> m_res_image;
-		std::array<VkSampler, SAMPLER_COUNT> m_samplers;
+		res_image m_res_image[RES_IMAGE_COUNT];
+		VkSampler m_samplers[SAMPLER_COUNT];
 
 		//render
-		const renderable_container& m_renderables;
-
 		VkCommandPool m_graphics_cp;
 		VkCommandPool m_present_cp;
 		VkCommandPool m_compute_cp;
@@ -434,95 +465,39 @@ namespace rcq
 		VkCommandBuffer m_terrain_request_cb;
 		VkCommandBuffer m_water_fft_cb;
 		VkCommandBuffer m_bloom_blur_cb;
-		std::vector<VkCommandBuffer> m_present_cbs;
-		std::array<VkCommandBuffer, SECONDARY_CB_COUNT> m_secondary_cbs;
+		VkCommandBuffer m_present_cbs[SWAP_CHAIN_SIZE];
+		VkCommandBuffer m_secondary_cbs[SECONDARY_CB_COUNT];
 		VkSemaphore m_image_available_s;
 		VkSemaphore m_render_finished_s;
-		std::vector<VkSemaphore> m_present_ready_ss;
+		VkSemaphore m_present_ready_ss[SWAP_CHAIN_SIZE];
 		VkFence m_render_finished_f;
 		VkFence m_compute_finished_f;
 		VkEvent m_water_tex_ready_e;
 		VkSemaphore m_preimage_ready_s;
 		VkSemaphore m_bloom_blur_ready_s;
 
-		water* m_water;
+		//memory resources
+		freelist_resource_host m_host_memory_resource;
+		monotonic_buffer_resource m_device_memory_resource;
+		vk_memory_resource m_vk_mappable_memory_resource;
+		monotonic_buffer_resource m_mappable_memory_resource;
+		vk_allocator m_vk_alloc;
+
+
+		slot_map<renderable<REND_TYPE_OPAQUE_OBJECT>> m_opaque_objects;
+		renderable<REND_TYPE_SKY> m_sky;
+		bool m_sky_valid;
+		renderable<REND_TYPE_TERRAIN> m_terrain;
+		bool m_terrain_valid;
+		renderable<REND_TYPE_WATER> m_water;
 		glm::uvec2 m_water_tiles_count;
+		bool m_water_valid;
 
-		//allocator
-		allocator m_alloc;
 
-		//terrain managing
-		class terrain_manager
-		{
-		public:
-			terrain_manager(const base_info& base);
-			~terrain_manager();
-			
-			void poll_requests();
-			void poll_results();
-			void init(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count, VkCommandPool cp, memory_resource* host_memory_res,
-				device_memory_resource* device_memory_res);
-			void destroy();
 
-			void set_terrain(resource<RES_TYPE_TERRAIN>* t)
-			{
-				m_terrain = t;
-			}
+		render_settings m_render_settings;
 
-		private:
-			void loop();
-			void decrease_min_mip_level(const glm::uvec2& tile_id);
-			void increase_min_mip_level(const glm::uvec2& tile_id);
-
-			struct request_data
-			{
-				static const uint32_t max_request_count = 256;
-				uint32_t requests[max_request_count];
-				uint32_t request_count;
-				uint32_t padding;
-			};
-
-			const base_info& m_base;
-
-			resource<RES_TYPE_TERRAIN>* m_terrain;
-
-			VkBuffer m_mapped_buffer;
-			uint64_t m_mapped_offset;
-			request_data* m_request_data;
-			VkBufferView m_requested_mip_levels_view;
-			float* m_requested_mip_levels;
-			VkBufferView m_current_mip_levels_view;
-			float* m_current_mip_levels;
-			uint64_t m_pages_staging_offset;
-			char* m_pages_staging;
-
-			//memory resources
-			vk_memory_resource m_mappable_memory_resource;
-			pool_memory_resource m_page_pool;
-			freelist_resource_host m_host_memory_res;
-			vk_allocator m_vk_alloc;
-
-			queue<uint32_t> m_request_queue;
-			//std::mutex m_request_queue_mutex;
-
-			queue<uint32_t> m_result_queue;
-			//std::mutex m_result_queue_mutex;
-			std::thread m_thread;
-			bool m_should_end;
-
-			VkCommandBuffer m_cb;
-			VkCommandPool m_cp;
-			VkSemaphore m_binding_finished_s;
-			VkFence m_copy_finished_f;
-			vector<vector<vector<vector<uint64_t>>>> m_pages; //mip_level, tile_id.x // tile_id.y
-
-			glm::uvec2 m_tile_count;
-			glm::uvec2 m_tile_size;
-			glm::uvec2 m_tile_size_in_pages;
-			uint32_t m_page_size;
-		};
-
-		terrain_manager m_terrain_manager;
+		std::atomic_bool m_render_dispatched;
 
 		glm::mat4 m_previous_proj_x_view;
 		glm::vec3 m_previous_view_pos;

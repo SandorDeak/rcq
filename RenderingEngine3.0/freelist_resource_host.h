@@ -11,6 +11,8 @@ namespace rcq
 	class freelist_resource_host : public memory_resource
 	{
 	public:
+		freelist_resource_host() {}
+
 		freelist_resource_host(uint64_t size, uint64_t max_alignment, memory_resource* upstream) :
 			memory_resource(max_alignment<alignof(block) ? alignof(block) : max_alignment, upstream)
 		{
@@ -39,7 +41,35 @@ namespace rcq
 			m_end->prev = b;
 			m_begin->next_free = b;
 			m_end->prev_free = b;
+		}
 
+		void init(uint64_t size, uint64_t max_alignment, memory_resource* upstream)
+		{
+			memory_resource::init(max_alignment < alignof(block) ? alignof(block) : max_alignment, upstream);
+
+			assert(m_max_alignment < m_upstream->max_alignment());
+			assert(size >= 3 * sizeof(block));
+
+			uint64_t begin = m_upstream->allocate(size, max_alignment);
+			m_begin = reinterpret_cast<block*>(begin);
+			m_end = m_begin + 1;
+
+			m_begin->free = false;
+			m_end->free = false;
+
+			block* b = m_end + 1;
+			b->begin = begin + 2 * sizeof(block);
+			b->end = begin + size;
+			b->free = true;
+			b->prev = m_begin;
+			b->next = m_end;
+			b->prev_free = m_begin;
+			b->next_free = m_end;
+
+			m_begin->next = b;
+			m_end->prev = b;
+			m_begin->next_free = b;
+			m_end->prev_free = b;
 		}
 
 		~freelist_resource_host()

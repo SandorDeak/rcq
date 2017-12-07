@@ -10,6 +10,8 @@ namespace rcq
 	class freelist_resource : public device_memory_resource
 	{
 	public:
+		freelist_resource() {}
+
 		freelist_resource(uint64_t size, uint64_t alignment, device_memory_resource* upstream,
 			memory_resource* metadata_memory_resource) :
 			device_memory_resource(alignment, upstream->device(), upstream->handle(), upstream),
@@ -46,6 +48,43 @@ namespace rcq
 			m_end->prev_res = m_begin;
 			m_end->free = false;
 		}
+
+		void init(uint64_t size, uint64_t alignment, device_memory_resource* upstream,
+			memory_resource* metadata_memory_resource)
+		{
+			device_memory_resource::init(alignment, upstream->device(), upstream->handle(), upstream);
+			m_metadata_resource = metadata_memory_resource;
+
+			assert(m_max_alignment <= m_upstream->max_alignment());
+			assert(alignof(block) <= m_metadata_resource->max_alignment());
+
+			m_begin = reinterpret_cast<block*>(m_metadata_resource->allocate(2 * sizeof(block), alignof(block)));
+			m_end = m_begin + 1;
+
+
+			uint64_t data = m_upstream->allocate(size, alignment);
+			block* b = reinterpret_cast<block*>(m_metadata_resource->allocate(2 * sizeof(block), alignof(block)));;
+			b->begin = data;
+			b->end = data + size;
+			b->prev = m_begin;
+			b->next = m_end;
+			b->prev_free = m_begin;
+			b->next_free = m_end;
+			b->free = true;
+
+			m_begin->next = b;
+			m_begin->next_free = b;
+			m_begin->free = false;
+			m_begin->prev = m_end;
+			m_begin->next_res = m_end;
+
+			m_end->prev = b;
+			m_end->next = m_begin;
+			m_end->prev_free = b;
+			m_end->prev_res = m_begin;
+			m_end->free = false;
+		}
+
 
 		~freelist_resource()
 		{

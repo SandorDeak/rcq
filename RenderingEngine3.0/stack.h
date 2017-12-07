@@ -8,6 +8,7 @@ namespace rcq
 	class stack
 	{
 	public:
+		stack() {}
 
 		stack(memory_resource* memory) :
 			m_memory(memory),
@@ -15,6 +16,14 @@ namespace rcq
 			m_top_node(nullptr),
 			m_first_available_node(nullptr)
 		{}
+
+		void init(memory_resource* memory)
+		{
+			m_memory = memory;
+			m_size = 0;
+			m_top_node = nullptr;
+			m_first_available_node = nullptr;
+		}
 
 		stack(const stack& other) :
 			m_memory(other.m_memory),

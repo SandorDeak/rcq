@@ -8,8 +8,23 @@ namespace rcq
 	class vk_allocator
 	{
 	public:
-		vk_allocator(memory_resource* memory) 
+		vk_allocator() {}
+
+		vk_allocator(memory_resource* memory) :
+			m_memory(memory)
 		{
+			m_callbacks.pUserData = reinterpret_cast<void*>(this);
+			m_callbacks.pfnAllocation = &alloc_static;
+			m_callbacks.pfnFree = &free_static;
+			m_callbacks.pfnReallocation = &realloc_static;
+			m_callbacks.pfnInternalAllocation = &internal_alloc_notification_static;
+			m_callbacks.pfnInternalFree = &internal_free_notification_static;
+		}
+
+		void init(memory_resource* memory)
+		{
+			m_memory = memory;
+
 			m_callbacks.pUserData = reinterpret_cast<void*>(this);
 			m_callbacks.pfnAllocation = &alloc_static;
 			m_callbacks.pfnFree = &free_static;

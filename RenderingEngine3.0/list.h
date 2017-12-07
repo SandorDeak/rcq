@@ -129,14 +129,20 @@ namespace rcq
 			const basic_node* ptr;
 		};
 
+		list() {}
 
-		list(memory_resource<size_t>* memory) :
+		list(memory_resource* memory) :
 			m_memory(memory),
 			m_first_available_node(nullptr),
 			m_size(0)
 		{
 			m_rend.next = &m_end;
 			m_end.prev = &m_rend;
+		}
+
+		void init(memory_resource* memory)
+		{
+			m_memory = memory;
 		}
 
 		list(const list& other) :
@@ -386,7 +392,7 @@ namespace rcq
 		basic_node m_end;
 		size_t m_size;
 		node* m_first_available_node;
-		memory_resource<size_t>* m_memory;
+		memory_resource* m_memory;
 
 		node* get_node()
 		{

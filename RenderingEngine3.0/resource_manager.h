@@ -10,6 +10,7 @@
 #include "vk_allocator.h"
 #include "vk_memory_resource.h"
 #include "freelist_resource.h"
+#include "freelist_resource_host.h"
 #include <atomic>
 #include <mutex>
 
@@ -24,7 +25,7 @@ namespace rcq
 
 		~resource_manager();
 
-		static void init(const base_info& info, memory_resource* memory_res);
+		static void init(const base_info& info);
 		static void destroy();
 		static resource_manager* instance() { return m_instance; }
 
@@ -79,6 +80,11 @@ namespace rcq
 				m_destroy_queue_cv.notify_one();
 		}
 
+		VkDescriptorSetLayout get_dsl(DSL_TYPE dsl_type)
+		{
+			return m_dsls[dsl_type];
+		}
+
 	private:
 		static resource_manager* m_instance;
 
@@ -86,8 +92,7 @@ namespace rcq
 
 		const base_info& m_base;
 
-		//memory resources
-		static memory_resource* m_memory_resource;
+		freelist_resource_host m_host_memory_resource;
 		pool_memory_resource_host m_resource_pool;
 		vk_allocator m_vk_alloc;
 
@@ -120,11 +125,10 @@ namespace rcq
 		std::condition_variable m_destroy_queue_cv;
 
 		//pools
-		//stack<VkFence> m_fences;
 		array<dp_pool, DSL_TYPE_COUNT> m_dp_pools;
 
 		//utility objects
-		array<VkDescriptorSetLayout, DSL_TYPE_COUNT> m_dsls;
+		VkDescriptorSetLayout m_dsls[DSL_TYPE_COUNT];
 		VkBuffer m_staging_buffer;
 		VkFence m_build_f;
 
@@ -134,107 +138,14 @@ namespace rcq
 		VkSampler m_samplers[SAMPLER_TYPE_COUNT];
 
 
-		//void load_texture(const char* filename, uint64_t& staging_buffer_offset);
-
-
 		template<size_t res_type>
 		void build(base_resource* res, const char* build_info);
 
 		template<uint32_t res_type>
 		void destroy(base_resource* res);
 
-		void build_loop()
-		{
-			while (!m_should_end_build)
-			{
-				if (m_build_queue.empty())
-				{
-					std::unique_lock<std::mutex> lock;
-					while (m_build_queue.empty())
-						m_build_queue_cv.wait(lock);
-				}
-
-				base_resource_build_info* info = m_build_queue.front(); 
-				switch (info->resource_type)
-				{
-				case 0:
-					build<0>(info->base_res, info->data);
-					break;
-				case 1:
-					build<1>(info->base_res, info->data);
-					break;
-				case 2:
-					build<2>(info->base_res, info->data);
-					break;
-				case 3:
-					build<3>(info->base_res, info->data);
-					break;
-				case 4:
-					build<4>(info->base_res, info->data);
-				case 5:
-					build<5>(info->base_res, info->data);
-					break;
-				case 6:
-					build<6>(info->base_res, info->data);
-					break;
-				case 7:
-					build<7>(info->base_res, info->data);
-					break;
-				}
-				static_assert(8 == RES_TYPE_COUNT);
-
-				m_build_queue.pop();
-
-			}
-		}
-
-		void destroy_loop()
-		{
-			while (!m_should_end_destroy)
-			{
-				if (m_destroy_queue.empty())
-				{
-					std::unique_lock<std::mutex> lock(m_destroy_queue_mutex);
-					while (m_destroy_queue.empty())
-						m_destroy_queue_cv.wait(lock);
-				}
-
-				base_resource* base_res = *m_destroy_queue.front();
-				
-				while (!base_res->ready_bit.load());
-
-				switch (base_res->res_type)
-				{
-				case 0:
-					destroy<0>(base_res);
-					break;
-				case 1:
-					destroy<1>(base_res);
-					break;
-				case 2:
-					destroy<2>(base_res);
-					break;
-				case 3:
-					destroy<3>(base_res);
-					break;
-				case 4:
-					destroy<4>(base_res);
-					break;
-				case 5:
-					destroy<5>(base_res);
-					break;
-				case 6:
-					destroy<6>(base_res);
-					break;
-				case 7:
-					destroy<7>(base_res);
-					break;
-				}
-				static_assert(8 == RES_TYPE_COUNT);
-
-				m_destroy_queue.pop();
-			}
-		}
+		void build_loop();
+		void destroy_loop();
 
 		void begin_build_cb();
 		void end_build_cb(const VkSemaphore* wait_semaphores=nullptr, const VkPipelineStageFlags* wait_flags=nullptr, 
@@ -244,6 +155,7 @@ namespace rcq
 		void create_dp_pools();
 		void create_command_pool();
 		void create_samplers();
+		void create_memory_resources_and_containers();
 
 	};
 }

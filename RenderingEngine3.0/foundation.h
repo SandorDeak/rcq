@@ -676,7 +676,7 @@ namespace rcq
 		cell_info cell;
 	};
 
-	struct render_settings
+	/*struct render_settings
 	{
 		glm::mat4 view;
 		glm::mat4 proj;
@@ -690,7 +690,7 @@ namespace rcq
 
 		glm::vec2 wind;
 		float time;
-	};
+	};*/
 
 	struct light_omni
 	{
@@ -945,7 +945,7 @@ namespace rcq
 	}
 
 
-	enum class dealloc_pattern
+	/*enum class dealloc_pattern
 	{
 		destruct,
 		ignore
@@ -1249,7 +1249,7 @@ namespace rcq
 		{
 			return m_chunks[index >> chunk_size_bit_count].slot_views + (index&chunk_index_mask);
 		}
-	};
+	};*/
 
 	class timer
 	{
@@ -1373,4 +1373,461 @@ namespace std
 	};
 
 
+}
+
+
+
+
+
+void gta5_pass::get_memory_and_build_resources()
+{
+	memory mem = resource_manager::instance()->get_res<RESOURCE_TYPE_MEMORY>(RENDER_ENGINE_GTA5);
+
+	//staging buffer
+	{
+		m_res_data.staging_buffer_mem = mem[MEMORY_STAGING_BUFFER];
+		vkBindBufferMemory(m_base.device, m_res_data.staging_buffer, m_res_data.staging_buffer_mem, 0);
+
+		void* raw_data;
+		vkMapMemory(m_base.device, m_res_data.staging_buffer_mem, 0, m_res_data.size, 0, &raw_data);
+		char* data = static_cast<char*>(raw_data);
+		m_res_data.set_pointers(data, std::make_index_sequence<RES_DATA_COUNT>());
+	}
+
+	//buffer
+	{
+		vkBindBufferMemory(m_base.device, m_res_data.buffer, mem[MEMORY_BUFFER], 0);
+	}
+
+	//environment map gen depthstencil
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image,
+			mem[MEMORY_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_D32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 6;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//environment map 
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image,
+			mem[MEMORY_ENVIRONMENT_MAP], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 6;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//gbuffer pos roughness
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image,
+			mem[MEMORY_GB_POS_ROUGHNESS], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//gbuffer F0 ssao
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image,
+			mem[MEMORY_GB_BASECOLOR_SSAO], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//gbuffer albedo ssds
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image,
+			mem[MEMORY_GB_METALNESS_SSDS], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_METALNESS_SSDS].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//gbuffer normal ao
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_NORMAL_AO].image,
+			mem[MEMORY_GB_NORMAL_AO], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_GB_NORMAL_AO].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_NORMAL_AO].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//preimage
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_PREIMAGE].image,
+			mem[MEMORY_PREIMAGE], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_PREIMAGE].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_PREIMAGE].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//prev image
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_PREV_IMAGE].image,
+			mem[MEMORY_PREV_IMAGE], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_PREV_IMAGE].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_PREV_IMAGE].view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create view!");
+	}
+
+	//refraction image
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_REFRACTION_IMAGE].image,
+			mem[MEMORY_REFRACTION_IMAGE], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_REFRACTION_IMAGE].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_REFRACTION_IMAGE].view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create view!");
+	}
+
+	//ssr ray casting coords
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image,
+			mem[MEMORY_SSR_RAY_CASTING_COORDS], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32_SINT;
+		view.image = m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create view!");
+	}
+
+	//bloom blur
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_BLOOM_BLUR].image,
+			mem[MEMORY_BLOOM_BLUR], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 2;
+		view.subresourceRange.levelCount = 1;
+
+		view.image = m_res_image[RES_IMAGE_BLOOM_BLUR].image;
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_BLOOM_BLUR].view) != VK_SUCCESS)
+			throw std::runtime_error("failed to create view!");
+	}
+
+	//gbuffer depth
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_DEPTH].image,
+			mem[MEMORY_GB_DEPTH], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
+		view.image = m_res_image[RES_IMAGE_GB_DEPTH].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_GB_DEPTH].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//dir shadow map
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image,
+			mem[MEMORY_DIR_SHADOW_MAP], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_D32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = FRUSTUM_SPLIT_COUNT;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_DIR_SHADOW_MAP].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//ss dir shadow map
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image,
+			mem[MEMORY_SS_DIR_SHADOW_MAP], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_D32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	//ssao map
+	{
+		vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SSAO_MAP].image,
+			mem[MEMORY_SSAO_MAP], 0);
+
+		VkImageViewCreateInfo view = {};
+		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+		view.format = VK_FORMAT_D32_SFLOAT;
+		view.image = m_res_image[RES_IMAGE_SSAO_MAP].image;
+		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+		view.subresourceRange.baseArrayLayer = 0;
+		view.subresourceRange.baseMipLevel = 0;
+		view.subresourceRange.layerCount = 1;
+		view.subresourceRange.levelCount = 1;
+
+		if (vkCreateImageView(m_base.device, &view, m_alloc, &m_res_image[RES_IMAGE_SSAO_MAP].view)
+			!= VK_SUCCESS)
+			throw std::runtime_error("failed to create image view!");
+	}
+
+	/*//transition images to proper layout
+	VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp);
+	std::array<VkImageMemoryBarrier, RES_IMAGE_COUNT> barriers = {};
+
+	//environment map depthstencil
+	{
+	auto& b = barriers[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL];
+	b.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 6;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}
+
+	//environment map
+	{
+	auto& b = barriers[RES_IMAGE_ENVIRONMENT_MAP];
+	b.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 6;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer pos roughness
+	{
+	auto& b = barriers[RES_IMAGE_GB_POS_ROUGHNESS];
+	b.image = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 1;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer F0 ssao
+	{
+	auto& b = barriers[RES_IMAGE_GB_BASECOLOR_SSAO];
+	b.image = m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 1;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer albedo ssds
+	{
+	auto& b = barriers[RES_IMAGE_GB_METALNESS_SSDS];
+	b.image = m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 1;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer normal ao
+	{
+	auto& b = barriers[RES_IMAGE_GB_NORMAL_AO];
+	b.image = m_res_image[RES_IMAGE_GB_NORMAL_AO].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 1;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}
+
+	//gbuffer depth
+	{
+	auto& b = barriers[RES_IMAGE_GB_DEPTH];
+	b.image = m_res_image[RES_IMAGE_GB_DEPTH].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT|VK_IMAGE_ASPECT_STENCIL_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 1;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}
+
+	//dir shadow map
+	{
+	auto& b = barriers[RES_IMAGE_DIR_SHADOW_MAP];
+	b.image = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 1;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}
+
+	//ss dir shadow map
+	{
+	auto& b = barriers[RES_IMAGE_SS_DIR_SHADOW_MAP];
+	b.image = m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image;
+	b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	b.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+	b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+	b.subresourceRange.baseArrayLayer = 0;
+	b.subresourceRange.layerCount = 1;
+	b.subresourceRange.baseMipLevel = 0;
+	b.subresourceRange.levelCount = 1;
+	}*/
 }

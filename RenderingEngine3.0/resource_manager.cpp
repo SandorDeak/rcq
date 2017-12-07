@@ -6,23 +6,24 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#include "host_memory.h"
+#include "device_memory.h"
+
 
 using namespace rcq;
 
 resource_manager* resource_manager::m_instance = nullptr;
-memory_resource* resource_manager::m_memory_resource = nullptr;
 
 void load_mesh(const std::string& file_name, std::vector<vertex>& vertices, std::vector<uint32_t>& indices,
 	bool make_vertex_ext, std::vector<vertex_ext>& vertices_ext);
 
-resource_manager::resource_manager(const base_info& info) : m_base(info),
-m_resource_pool(sizeof(base_resource), alignof(base_resource), m_memory_resource)
+resource_manager::resource_manager(const base_info& info) : m_base(info)
 {
-	/*m_current_build_task_p.reset(new build_task_package);
-
+	create_memory_resources_and_containers();
 	create_samplers();
-	create_descriptor_set_layouts();
-	create_command_pool();*/
+	create_dsls();
+	create_dp_pools();
+	create_command_pool();
 
 	m_should_end_build = false;
 	m_should_end_destroy = false;
@@ -84,31 +85,103 @@ resource_manager::~resource_manager()
 
 	//checking that resources was destroyed properly
 	check_resource_leak(std::make_index_sequence<RESOURCE_TYPE_COUNT>());*/
-
-	
 }
 
-void resource_manager::init(const base_info& info, memory_resource* memory_res)
+void resource_manager::build_loop()
 {
-	m_memory_resource = memory_res;
-
-	if (m_instance != nullptr)
+	while (!m_should_end_build)
 	{
-		throw std::runtime_error("resource manager is already initialised!");
+		if (m_build_queue.empty())
+		{
+			std::unique_lock<std::mutex> lock;
+			while (m_build_queue.empty())
+				m_build_queue_cv.wait(lock);
+		}
+
+		base_resource_build_info* info = m_build_queue.front();
+		switch (info->resource_type)
+		{
+		case 0:
+			build<0>(info->base_res, info->data);
+			break;
+		case 1:
+			build<1>(info->base_res, info->data);
+			break;
+		case 2:
+			build<2>(info->base_res, info->data);
+			break;
+		case 3:
+			build<3>(info->base_res, info->data);
+			break;
+		case 4:
+			build<4>(info->base_res, info->data);
+		case 5:
+			build<5>(info->base_res, info->data);
+			break;
+		}
+		static_assert(6 == RES_TYPE_COUNT);
+
+		m_build_queue.pop();
+
 	}
-	m_instance = new(reinterpret_cast<void*>(m_memory_resource->allocate(sizeof(resource_manager), alignof(resource_manager))))
-		resource_manager(info);
+}
+
+void resource_manager::destroy_loop()
+{
+	while (!m_should_end_destroy)
+	{
+		if (m_destroy_queue.empty())
+		{
+			std::unique_lock<std::mutex> lock(m_destroy_queue_mutex);
+			while (m_destroy_queue.empty())
+				m_destroy_queue_cv.wait(lock);
+		}
+
+		base_resource* base_res = *m_destroy_queue.front();
+
+		while (!base_res->ready_bit.load());
+
+		switch (base_res->res_type)
+		{
+		case 0:
+			destroy<0>(base_res);
+			break;
+		case 1:
+			destroy<1>(base_res);
+			break;
+		case 2:
+			destroy<2>(base_res);
+			break;
+		case 3:
+			destroy<3>(base_res);
+			break;
+		case 4:
+			destroy<4>(base_res);
+			break;
+		case 5:
+			destroy<5>(base_res);
+			break;
+		}
+		static_assert(6 == RES_TYPE_COUNT);
+
+		m_destroy_queue.pop();
+	}
+}
+
+void resource_manager::init(const base_info& info)
+{
+
+	assert(m_instance == nullptr);
+	m_instance = new(reinterpret_cast<void*>(host_memory::instance()->resource()->
+		allocate(sizeof(resource_manager), alignof(resource_manager)))) resource_manager(info);
 }
 
 void resource_manager::destroy()
 {
-	if (m_instance == nullptr)
-	{
-		throw std::runtime_error("cannot destroy resource manager, it doesn't exist!");
-	}
+	assert(m_instance != nullptr);
 
 	m_instance->~resource_manager;
-	m_memory_resource->deallocate(reinterpret_cast<uint64_t>(m_instance));
+	host_memory::instance()->resource()->deallocate(reinterpret_cast<uint64_t>(m_instance));
 	m_instance = nullptr;
 }
 
@@ -142,6 +215,29 @@ void resource_manager::wait_for_build_fence()
 	vkResetFences(m_base.device, 1, &m_build_f);
 }
 
+void resource_manager::create_memory_resources_and_containers()
+{
+	const uint64_t HOST_MEMORY_SIZE = 256 * 1024 * 1024;
+	m_host_memory_resource.init(HOST_MEMORY_SIZE, host_memory::instance()->resource()->max_alignment(),
+		host_memory::instance()->resource());
+
+	m_resource_pool.init(sizeof(base_resource), alignof(base_resource), &m_host_memory_resource);
+	m_vk_alloc.init(&m_host_memory_resource);
+
+	m_vk_mappable_memory.init(m_base.device, device_memory::instance()->find_memory_type(~0,
+		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT), false, &m_vk_alloc);
+	m_mappable_memory.init(256 * 1024 * 1024, m_vk_mappable_memory.max_alignment(), &m_vk_mappable_memory, &m_host_memory_resource);
+
+	m_device_memory_res.init(2 * 1024 * 1024 * 1024, device_memory::instance()->resource()->max_alignment(),
+		device_memory::instance()->resource(), &m_host_memory_resource);
+
+	m_build_queue.init(&m_host_memory_resource);
+	m_build_queue.init_buffer();
+
+	m_destroy_queue.init(&m_host_memory_resource);
+	m_destroy_queue.init_buffer();
+}
+
 void resource_manager::create_dp_pools()
 {
 	const uint32_t TR_POOL_CAPACITY = 64;
@@ -149,57 +245,57 @@ void resource_manager::create_dp_pools()
 
 	//create tr dp_pool
 	{
-		auto pool = m_dp_pools[DSL_TYPE_TR];
+		auto& pool = m_dp_pools[DSL_TYPE_TR];
 
-		new(pool) dp_pool(1, TR_POOL_CAPACITY, m_base.device, m_memory_resource);
-		pool->sizes()[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		pool->sizes()[0].descriptorCount = TR_POOL_CAPACITY;
+		new(&pool) dp_pool(1, TR_POOL_CAPACITY, m_base.device, &m_host_memory_resource);
+		pool.sizes()[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		pool.sizes()[0].descriptorCount = TR_POOL_CAPACITY;
 	}
 
 	//create sky pool
 	{
-		auto pool = m_dp_pools[DSL_TYPE_SKY];
-		new(pool) dp_pool(1, 1, m_base.device, m_memory_resource);
-		pool->sizes()[0].descriptorCount = 3;
-		pool->sizes()[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		auto& pool = m_dp_pools[DSL_TYPE_SKY];
+		new(&pool) dp_pool(1, 1, m_base.device, &m_host_memory_resource);
+		pool.sizes()[0].descriptorCount = 3;
+		pool.sizes()[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	}
 
 	//create water pool
 	{
-		auto pool = m_dp_pools[DSL_TYPE_WATER];
-		new(pool) dp_pool(2, 1, m_base.device, m_memory_resource);
-		pool->sizes()[0].descriptorCount = 1;
-		pool->sizes()[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		pool->sizes()[1].descriptorCount = 1;
-		pool->sizes()[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		pool->sizes()[2].descriptorCount = 2;
-		pool->sizes()[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+		auto& pool = m_dp_pools[DSL_TYPE_WATER];
+		new(&pool) dp_pool(2, 1, m_base.device, &m_host_memory_resource);
+		pool.sizes()[0].descriptorCount = 1;
+		pool.sizes()[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		pool.sizes()[1].descriptorCount = 1;
+		pool.sizes()[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		pool.sizes()[2].descriptorCount = 2;
+		pool.sizes()[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	}
 
 	//create terrain pool
 	{
-		auto pool = m_dp_pools[DSL_TYPE_TERRAIN];
-		new(pool) dp_pool(5, 1, m_base.device, m_memory_resource);
-		pool->sizes()[0].descriptorCount = 1;
-		pool->sizes()[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		pool->sizes()[1].descriptorCount = 1;
-		pool->sizes()[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-		pool->sizes()[2].descriptorCount = 1;
-		pool->sizes()[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		pool->sizes()[3].descriptorCount = 1;
-		pool->sizes()[3].type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
-		pool->sizes()[4].descriptorCount = 1;
-		pool->sizes()[4].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		auto& pool = m_dp_pools[DSL_TYPE_TERRAIN];
+		new(&pool) dp_pool(5, 1, m_base.device, &m_host_memory_resource);
+		pool.sizes()[0].descriptorCount = 1;
+		pool.sizes()[0].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		pool.sizes()[1].descriptorCount = 1;
+		pool.sizes()[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+		pool.sizes()[2].descriptorCount = 1;
+		pool.sizes()[2].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		pool.sizes()[3].descriptorCount = 1;
+		pool.sizes()[3].type = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+		pool.sizes()[4].descriptorCount = 1;
+		pool.sizes()[4].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	}
 
 	//create mat opaque pool
 	{
-		auto pool = m_dp_pools[DSL_TYPE_MAT_OPAQUE];
-		new(pool) dp_pool(2, MAT_OPAQUE_CAPACITY, m_base.device, m_memory_resource);
-		pool->sizes()[0].descriptorCount = MAT_OPAQUE_CAPACITY;
-		pool->sizes()[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		pool->sizes()[1].descriptorCount = TEX_TYPE_COUNT*MAT_OPAQUE_CAPACITY;
-		pool->sizes()[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		auto& pool = m_dp_pools[DSL_TYPE_MAT_OPAQUE];
+		new(&pool) dp_pool(2, MAT_OPAQUE_CAPACITY, m_base.device, &m_host_memory_resource);
+		pool.sizes()[0].descriptorCount = MAT_OPAQUE_CAPACITY;
+		pool.sizes()[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		pool.sizes()[1].descriptorCount = TEX_TYPE_COUNT*MAT_OPAQUE_CAPACITY;
+		pool.sizes()[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	}
 }
 
@@ -735,8 +831,8 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 		VkDescriptorSetAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		alloc_info.descriptorSetCount = 1;
-		alloc_info.pSetLayouts = m_dsls[DSL_TYPE_MAT_OPAQUE];
-		alloc_info.descriptorPool = m_dp_pools[DSL_TYPE_MAT_OPAQUE]->use_dp(mat.dp_index);
+		alloc_info.pSetLayouts = &m_dsls[DSL_TYPE_MAT_OPAQUE];
+		alloc_info.descriptorPool = m_dp_pools[DSL_TYPE_MAT_OPAQUE].use_dp(mat.dp_index);
 
 		assert(vkAllocateDescriptorSets(m_base.device, &alloc_info, &mat.ds) == VK_SUCCESS);	
 	}
@@ -856,9 +952,9 @@ void resource_manager::build<RESOURCE_TYPE_TR>(base_resource* res, const char* b
 		VkDescriptorSetAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		alloc_info.descriptorSetCount = 1;
-		alloc_info.pSetLayouts = m_dsls[DSL_TYPE_TR];
+		alloc_info.pSetLayouts = &m_dsls[DSL_TYPE_TR];
 
-		alloc_info.descriptorPool = m_dp_pools[DSL_TYPE_TR]->use_dp(tr.dp_index);
+		alloc_info.descriptorPool = m_dp_pools[DSL_TYPE_TR].use_dp(tr.dp_index);
 		assert(vkAllocateDescriptorSets(m_base.device, &alloc_info, &tr.ds) == VK_SUCCESS);
 	}
 
@@ -908,7 +1004,7 @@ void resource_manager::destroy<RES_TYPE_MAT_OPAQUE>(base_resource* res)
 {
 	auto mat = reinterpret_cast<resource<RES_TYPE_MAT_OPAQUE>*>(res->data);
 
-	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_MAT_OPAQUE]->stop_using_dp(mat->dp_index), 1, &mat->ds);
+	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_MAT_OPAQUE].stop_using_dp(mat->dp_index), 1, &mat->ds);
 
 
 	for (size_t i = 0; i < TEX_TYPE_COUNT; ++i)
@@ -931,7 +1027,7 @@ void resource_manager::destroy<RES_TYPE_TR>(base_resource* res)
 {
 	auto tr = reinterpret_cast<resource<RES_TYPE_TR>*>(res->data);
 
-	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_TR]->stop_using_dp(tr->dp_index), 1, &tr->ds);
+	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_TR].stop_using_dp(tr->dp_index), 1, &tr->ds);
 	vkDestroyBuffer(m_base.device, tr->data_buffer, m_vk_alloc);
 	m_device_memory_res.deallocate(tr->data_offset);
 }
@@ -997,7 +1093,7 @@ void resource_manager::create_dsls()
 		dsl.bindingCount = 1;
 		dsl.pBindings = &data;
 
-		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, m_dsls[DSL_TYPE_TR]) == VK_SUCCESS);
+		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, &m_dsls[DSL_TYPE_TR]) == VK_SUCCESS);
 	}
 
 	//create material opaque dsl
@@ -1027,7 +1123,7 @@ void resource_manager::create_dsls()
 		dsl.bindingCount = TEX_TYPE_COUNT + 1;
 		dsl.pBindings = bindings;
 
-		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, m_dsls[DSL_TYPE_MAT_OPAQUE]) == VK_SUCCESS);
+		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, &m_dsls[DSL_TYPE_MAT_OPAQUE]) == VK_SUCCESS);
 	}
 
 	//create sky dsl
@@ -1053,7 +1149,7 @@ void resource_manager::create_dsls()
 		dsl.bindingCount = 3;
 		dsl.pBindings = bindings;
 		
-		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, m_dsls[DSL_TYPE_SKY]) == VK_SUCCESS);
+		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, &m_dsls[DSL_TYPE_SKY]) == VK_SUCCESS);
 	}
 
 	//create terrain dsl
@@ -1080,7 +1176,7 @@ void resource_manager::create_dsls()
 		dsl.bindingCount = 3;
 		dsl.pBindings = bindings;
 
-		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, m_dsls[DSL_TYPE_TERRAIN]) == VK_SUCCESS);
+		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, &m_dsls[DSL_TYPE_TERRAIN]) == VK_SUCCESS);
 	}
 
 	//create terrain compute dsl
@@ -1101,7 +1197,7 @@ void resource_manager::create_dsls()
 		dsl.bindingCount = 2;
 		dsl.pBindings = bindings;
 
-		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, m_dsls[DSL_TYPE_TERRAIN_COMPUTE]) == VK_SUCCESS);
+		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, &m_dsls[DSL_TYPE_TERRAIN_COMPUTE]) == VK_SUCCESS);
 	}
 
 	//create water dsl
@@ -1117,7 +1213,7 @@ void resource_manager::create_dsls()
 		dsl.bindingCount = 1;
 		dsl.pBindings = bindings;
 
-		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, m_dsls[DSL_TYPE_WATER]) == VK_SUCCESS);
+		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, &m_dsls[DSL_TYPE_WATER]) == VK_SUCCESS);
 	}
 
 	//create water compute
@@ -1143,7 +1239,7 @@ void resource_manager::create_dsls()
 		dsl_info.bindingCount = 3;
 		dsl_info.pBindings = bindings;
 
-		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl_info, m_vk_alloc, m_dsls[DSL_TYPE_WATER_COMPUTE]) == VK_SUCCESS);
+		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl_info, m_vk_alloc, &m_dsls[DSL_TYPE_WATER_COMPUTE]) == VK_SUCCESS);
 	}
 }
 
@@ -1298,8 +1394,8 @@ void resource_manager::build<RESOURCE_TYPE_SKY>(base_resource* res, const char* 
 		VkDescriptorSetAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		alloc_info.descriptorSetCount = 1;
-		alloc_info.pSetLayouts = m_dsls[DSL_TYPE_SKY];
-		alloc_info.descriptorPool = m_dp_pools[DSL_TYPE_SKY]->use_dp(s->dp_index);
+		alloc_info.pSetLayouts = &m_dsls[DSL_TYPE_SKY];
+		alloc_info.descriptorPool = m_dp_pools[DSL_TYPE_SKY].use_dp(s->dp_index);
 
 		assert(vkAllocateDescriptorSets(m_base.device, &alloc_info, &s->ds) == VK_SUCCESS);
 	}
@@ -1361,7 +1457,7 @@ void resource_manager::destroy<RES_TYPE_SKY>(base_resource* res)
 {
 	auto s = reinterpret_cast<resource<RES_TYPE_SKY>*>(res->data);
 
-	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_SKY]->stop_using_dp(s->dp_index), 1, &s->ds);
+	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_SKY].stop_using_dp(s->dp_index), 1, &s->ds);
 
 	for (uint32_t i=0; i<3; ++i)
 	{
@@ -1377,7 +1473,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 	auto t = reinterpret_cast<resource<RES_TYPE_TERRAIN>*>(res->data);
 	auto build = reinterpret_cast<const resource<RES_TYPE_TERRAIN>::build_info*>(build_info);
 	
-	new(&t->tex.files) vector<std::ifstream>(m_memory_resource, build->mip_level_count);
+	new(&t->tex.files) vector<std::ifstream>(&m_host_memory_resource, build->mip_level_count);
 
 	t->level0_tile_size = build->level0_tile_size;
 
@@ -1393,7 +1489,6 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		new(t->tex.files[i]) std::ifstream(filename, std::ios::binary);
 		assert(t->tex.files[i]->is_open());
 	}
-
 
 	//create image
 	{
@@ -1458,9 +1553,9 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		page_count *= static_cast<uint64_t>((1.f - powf(0.25f, static_cast<float>(build->mip_level_count))) / 0.75f);
 
 
-		vector<VkSparseImageMemoryBind> page_binds(m_memory_resource, page_count);
+		vector<VkSparseImageMemoryBind> page_binds(&m_host_memory_resource, page_count);
 
-		size_t page_index = 0;
+		uint64_t page_index = 0;
 		glm::uvec2 tile_size_in_pages = build->level0_tile_size / page_size;
 		for (uint32_t mip_level = 0; mip_level < build->mip_level_count; ++mip_level)
 		{
@@ -1487,23 +1582,23 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 								static_cast<int32_t>(v*page_size.y),
 								0
 							};
-							page_binds[page_index]->memory = m_device_memory_res.handle();
-							page_binds[page_index]->memoryOffset = t->tex.dummy_page_offset;
-							page_binds[page_index]->offset =
+							page_binds[page_index].memory = m_device_memory_res.handle();
+							page_binds[page_index].memoryOffset = t->tex.dummy_page_offset;
+							page_binds[page_index].offset =
 							{
 								tile_offset.x + page_offset_in_tile.x,
 								tile_offset.y + page_offset_in_tile.y,
 								0
 							};
-							page_binds[page_index]->extent =
+							page_binds[page_index].extent =
 							{
 								page_size.x,
 								page_size.y,
 								1
 							};
-							page_binds[page_index]->subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-							page_binds[page_index]->subresource.arrayLayer = 0;
-							page_binds[page_index]->subresource.mipLevel = mip_level;
+							page_binds[page_index].subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+							page_binds[page_index].subresource.arrayLayer = 0;
+							page_binds[page_index].subresource.mipLevel = mip_level;
 
 							++page_index;
 						}
@@ -1512,6 +1607,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 			}
 			tile_size_in_pages /= 2;
 		}
+
 		VkSparseImageMemoryBindInfo image_bind;
 		image_bind.bindCount = page_binds.size();
 		image_bind.pBinds = page_binds.data();
@@ -1668,90 +1764,6 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &t->tex.view) == VK_SUCCESS);
 	}
 
-	/*//create requested mip levels view
-	{
-		VkBufferCreateInfo buffer = {};
-		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		buffer.size = t.tile_count.x*t.tile_count.y*4;
-		buffer.usage = VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-
-		if (vkCreateBuffer(m_base.device, &buffer, m_alloc, &t.requested_mip_levels_buffer) != VK_SUCCESS)
-			throw std::runtime_error("failed to create buffer!");
-
-		VkMemoryRequirements mr;
-		vkGetBufferMemoryRequirements(m_base.device, t.requested_mip_levels_buffer, &mr);
-
-		VkMemoryAllocateInfo alloc = {};
-		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc.allocationSize = mr.size;
-		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.requested_mip_levels_memory) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate memory!");
-		vkBindBufferMemory(m_base.device, t.requested_mip_levels_buffer, t.requested_mip_levels_memory, 0);
-
-		void* raw_data;
-		vkMapMemory(m_base.device, t.requested_mip_levels_memory, 0, 4*t.tile_count.x*t.tile_count.y, 0, &raw_data);
-		t.requested_mip_levels_data = reinterpret_cast<float*>(raw_data);
-
-		std::fill(t.requested_mip_levels_data, t.requested_mip_levels_data + t.tile_count.x*t.tile_count.y,
-			static_cast<float>(mip_level_count));
-
-		VkBufferViewCreateInfo view = {};
-		view.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
-		view.buffer = t.requested_mip_levels_buffer;
-		view.format = VK_FORMAT_R32_SFLOAT;
-		view.offset = 0;
-		view.range = 4 * t.tile_count.x*t.tile_count.y;
-		
-		if (vkCreateBufferView(m_base.device, &view, m_alloc, &t.requested_mip_levels_view) != VK_SUCCESS)
-			throw std::runtime_error("failed to create buffer view!");
-	}
-
-	//create current mip levels view
-	{
-		VkBufferCreateInfo buffer = {};
-		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		buffer.size = t.tile_count.x*t.tile_count.y * 4;
-		buffer.usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
-
-		if (vkCreateBuffer(m_base.device, &buffer, m_alloc, &t.current_mip_levels_buffer) != VK_SUCCESS)
-			throw std::runtime_error("failed to create buffer!");
-
-		VkMemoryRequirements mr;
-		vkGetBufferMemoryRequirements(m_base.device, t.current_mip_levels_buffer, &mr);
-
-		VkMemoryAllocateInfo alloc = {};
-		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc.allocationSize = mr.size;
-		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.current_mip_levels_memory) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate memory!");
-		vkBindBufferMemory(m_base.device, t.current_mip_levels_buffer, t.current_mip_levels_memory, 0);
-
-		void* raw_data;
-		vkMapMemory(m_base.device, t.current_mip_levels_memory, 0, sizeof(4*t.tile_count.x*t.tile_count.y), 0, &raw_data);
-		t.current_mip_levels_data = reinterpret_cast<float*>(raw_data);
-
-		std::fill(t.current_mip_levels_data, t.current_mip_levels_data + t.tile_count.x*t.tile_count.y,
-			static_cast<float>(mip_level_count));
-
-		VkBufferViewCreateInfo view = {};
-		view.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
-		view.buffer = t.current_mip_levels_buffer;
-		view.format = VK_FORMAT_R32_SFLOAT;
-		view.offset = 0;
-		view.range = 4 * t.tile_count.x*t.tile_count.y;
-
-		if (vkCreateBufferView(m_base.device, &view, m_alloc, &t.current_mip_levels_view) != VK_SUCCESS)
-			throw std::runtime_error("failed to create buffer view!");
-	}*/
-
 	//create sampler
 	{
 		VkSamplerCreateInfo s = {};
@@ -1854,7 +1866,6 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		vkUpdateDescriptorSets(m_base.device, 3, w, 0, nullptr);
 	}
 }
-
 
 
 template<>

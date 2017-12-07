@@ -10,6 +10,8 @@ namespace rcq
 	class device_memory_resource : public memory_resource
 	{
 	public:
+		device_memory_resource() {}
+
 		device_memory_resource(uint64_t max_alignment, VkDevice device, VkDeviceMemory handle, device_memory_resource* upstream) :
 			memory_resource(max_alignment, upstream),
 			m_device(device),
@@ -40,7 +42,15 @@ namespace rcq
 		}
 
 	protected:
-		device_memory_resource* m_upstream;
+
+		void init(uint64_t max_alignment, VkDevice device, VkDeviceMemory handle, device_memory_resource* upstream)
+		{
+			memory_resource::init(max_alignment, upstream);
+			m_device = device;
+			m_handle = handle;
+		}
+
+		//device_memory_resource* m_upstream;
 		uint64_t m_max_alignment;
 		VkDeviceMemory m_handle;
 		VkDevice m_device;

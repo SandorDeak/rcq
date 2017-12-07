@@ -9,10 +9,27 @@ namespace rcq
 	class monotonic_buffer_resource_host : public memory_resource
 	{
 	public:
+		monotonic_buffer_resource_host() {}
+
 		monotonic_buffer_resource_host(size_t first_chunks_size, size_t max_alignment, memory_resource* upstream) :
 			memory_resource(max_alignment < alignof(chunk) ? alignof(chunk) : max_alignment, upstream),
 			m_next_chunk_size(first_chunks_size)
 		{
+			assert(m_max_alignment <= m_upstream->max_alignment());
+			m_begin = m_upstream->allocate(m_next_chunk_size, m_max_alignment);
+			m_end = m_begin + m_next_chunk_size;
+			m_next_chunk_size <<= 1;
+			m_first_chunk = reinterpret_cast<chunk*>(m_begin);
+			m_last_chunk = m_first_chunk;
+			m_last_chunk->next = nullptr;
+			m_begin += sizeof(chunk);
+		}
+
+		void init(size_t first_chunks_size, size_t max_alignment, memory_resource* upstream)
+		{
+			memory_resource::init(max_alignment < alignof(chunk) ? alignof(chunk) : max_alignment, upstream);
+			m_next_chunk_size = first_chunks_size;
+
 			assert(m_max_alignment <= m_upstream->max_alignment());
 			m_begin = m_upstream->allocate(m_next_chunk_size, m_max_alignment);
 			m_end = m_begin + m_next_chunk_size;

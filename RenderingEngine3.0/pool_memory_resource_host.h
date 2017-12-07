@@ -10,6 +10,8 @@ namespace rcq
 	class pool_memory_resource_host : public memory_resource
 	{
 	public:
+		pool_memory_resource_host() {}
+
 		pool_memory_resource_host(uint64_t block_size, uint64_t alignment, memory_resource* upstream) :
 			memory_resource(alignment<min_alignment() ? min_alignment() : alignment, upstream),
 			m_next_chunk_size(block_size),
@@ -19,6 +21,15 @@ namespace rcq
 		{
 			static_assert(sizeof(chunk) % alignof(chunk) == 0 && sizeof(block) % alignof(block) == 0);
 			assert(alignment <= upstream->max_alignment() && block_size%alignment==0 && block_size>=sizeof(block));
+		}
+
+		void init(uint64_t block_size, uint64_t alignment, memory_resource* upstream)
+		{
+			memory_resource::init(alignment<min_alignment() ? min_alignment() : alignment, upstream);
+			m_next_chunk_size = block_size;
+			m_block_size = block_size;
+			m_chunks = nullptr;
+			m_free_blocks = nullptr;
 		}
 
 		~pool_memory_resource_host()

@@ -21,7 +21,6 @@
   <ItemGroup>
     <ClCompile Include="base.cpp" />
     <ClCompile Include="basic_pass.cpp" />
-    <ClCompile Include="core.cpp" />
     <ClCompile Include="device_memory.cpp" />
     <ClCompile Include="entity.cpp" />
     <ClCompile Include="foundation.cpp" />
@@ -32,6 +31,7 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="engine.cpp" />
     <ClCompile Include="scene.cpp" />
+    <ClCompile Include="terrain_manager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="array.h" />
@@ -49,7 +49,6 @@
     <ClInclude Include="pool_memory_resource_host.h" />
     <ClInclude Include="base.h" />
     <ClInclude Include="basic_pass.h" />
-    <ClInclude Include="core.h" />
     <ClInclude Include="device_memory.h" />
     <ClInclude Include="foundation.h" />
     <ClInclude Include="entity.h" />
@@ -66,6 +65,7 @@
     <ClInclude Include="stack.h" />
     <ClInclude Include="structs.h" />
     <ClInclude Include="scene.h" />
+    <ClInclude Include="terrain_manager.h" />
     <ClInclude Include="vector.h" />
     <ClInclude Include="vk_memory_resource.h" />
     <ClInclude Include="vk_allocator.h" />

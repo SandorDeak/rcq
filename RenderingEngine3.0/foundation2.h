@@ -16,23 +16,34 @@
 
 #include "list.h"
 #include "stack.h"
+#include "array.h"
 #include "pool_memory_resource.h"
 
 std::atomic_bool a;
 
 namespace rcq
 {
+	const uint32_t SWAP_CHAIN_SIZE = 2;
+
 	enum RES_TYPE : uint32_t
 	{
 		RES_TYPE_MAT_OPAQUE,
-		RES_TYPE_MAT_EM,
+		//RES_TYPE_MAT_EM,
 		RES_TYPE_SKY,
 		RES_TYPE_TERRAIN,
 		RES_TYPE_WATER,
 		RES_TYPE_MESH,
 		RES_TYPE_TR,
-		RES_TYPE_MEMORY,
 		RES_TYPE_COUNT
+	};
+
+	enum REND_TYPE : uint32_t
+	{
+		REND_TYPE_OPAQUE_OBJECT,
+		REND_TYPE_SKY,
+		REND_TYPE_TERRAIN,
+		REND_TYPE_WATER,
+		REND_TYPE_COUNT
 	};
 
 	enum TEX_TYPE : uint32_t
@@ -71,6 +82,7 @@ namespace rcq
 	struct base_resource
 	{
 		static const uint32_t data_size=256;
+		static_assert(data_size >= MAX_RESOURCE_SIZE);
 
 		char data[data_size];
 		uint32_t res_type;
@@ -79,7 +91,8 @@ namespace rcq
 
 	struct base_resource_build_info
 	{
-		static const uint32_t data_size = 256;
+		static const uint32_t data_size = 128;
+		static_assert(data_size>=MAX_BUILD_INFO_SIZE);
 
 		char data[data_size];
 		uint32_t resource_type;
@@ -96,7 +109,7 @@ namespace rcq
 	{
 		struct build_info
 		{
-			char texfiles[TEX_TYPE_COUNT][128];
+			const char* texfiles[TEX_TYPE_COUNT];// [128];
 			glm::vec3 color;
 			float roughness;
 			float metal;
@@ -233,10 +246,6 @@ namespace rcq
 			uint64_t mip_tail_offset;
 			uint64_t dummy_page_offset;
 			vector<std::ifstream> files;
-			//glm::uvec2 page_size;
-			//uint32_t page_size_in_bytes;
-			/*uint32_t mip_tail_size;
-			uint32_t mip_tail_offset;*/
 		};
 
 		texture tex;
@@ -244,48 +253,13 @@ namespace rcq
 		VkDescriptorSet request_ds;
 		uint32_t dp_index;
 		glm::uvec2 level0_tile_size;
+		glm::uvec2 tile_count;
 
 		VkBuffer data_buffer;
 		uint64_t data_offset;
 
 		VkBuffer request_data_buffer;
 		uint64_t request_data_offset;
-
-
-
-
-
-		////////////////////////////
-		/*virtual_texture tex;
-		glm::uvec2 tile_count;
-		vector<glm::uvec2> tile_size_in_pages;
-		vector<std::ifstream> files;
-		uint32_t mip_level_count;
-
-		VkDescriptorSet ds;
-		VkDescriptorSet request_ds;
-
-		VkBuffer data_buffer;
-		uint64_t data_offset;
-
-		VkBuffer request_data_buffer;
-		uint64_t request_data_buffer_offset;
-		float* request_data_buffer_data;
-
-		VkBufferView requested_mip_levels_view;
-		VkBuffer requested_mip_levels_buffer;
-		float* requested_mip_levels_data;
-
-		VkBufferView current_mip_levels_view;
-		VkBuffer current_mip_levels_buffer;
-		VkDeviceMemory current_mip_levels_memory;
-		float* current_mip_levels_data;
-		
-		
-		pool_memory_resource page_pool;
-		vk_memory_resource m_mapped_memory_resource;*/
-
-		//VkImageView greatest_level_view;
 	};
 
 	template<>
@@ -330,6 +304,42 @@ namespace rcq
 		uint32_t dp_index;
 	};
 
+	template<uint32_t rend_type>
+	struct renderable;
+
+	template<>
+	struct renderable<REND_TYPE_OPAQUE_OBJECT>
+	{
+		VkDescriptorSet tr_ds;
+		VkDescriptorSet mat_opaque_ds;
+		uint32_t mesh_index_size;
+		VkBuffer mesh_vb;
+		VkBuffer mesh_ib;
+		VkBuffer mesh_veb;
+	};
+
+	template<>
+	struct renderable<REND_TYPE_WATER>
+	{
+		VkDescriptorSet ds;
+		VkDescriptorSet fft_ds;
+		glm::vec2 grid_size_in_meters;
+	};
+
+	template<>
+	struct renderable<REND_TYPE_SKY>
+	{
+		VkDescriptorSet ds;
+	};
+
+	template<>
+	struct renderable<REND_TYPE_TERRAIN>
+	{
+		VkDescriptorSet ds;
+		VkDescriptorSet request_ds;
+		array<VkDescriptorSet, 4> opaque_material_dss;
+	};
+
 
 	class dp_pool
 	{
@@ -341,7 +351,7 @@ namespace rcq
 
 	public:
 		dp_pool(uint32_t pool_sizes_count, uint32_t dp_capacity, VkDevice device, memory_resource* memory) :
-			m_pool_sizes(pool_sizes_count, memory),
+			m_pool_sizes(memory, pool_sizes_count),
 			m_dps(memory),
 			m_create_info{},
 			m_device(device)
@@ -373,16 +383,15 @@ namespace rcq
 			auto new_dp = m_dps.push_back();
 			new_dp->free_count = m_create_info.maxSets - 1;
 
-			if (vkCreateDescriptorPool(m_device, &m_create_info, m_vk_alloc, &new_dp->pool) != VK_SUCCESS)
-				throw std::runtime_error("failed to create descriptor pool!");
+			assert(vkCreateDescriptorPool(m_device, &m_create_info, m_vk_alloc, &new_dp->pool) == VK_SUCCESS);
 
 			return new_dp->pool;
 		}
 
 		VkDescriptorPool stop_using_dp(uint32_t dp_id)
 		{
-			++m_dps[dp_id]->free_count;
-			return m_dps[dp_id]->pool;
+			++m_dps[dp_id].free_count;
+			return m_dps[dp_id].pool;
 		}
 
 	private:
@@ -391,6 +400,22 @@ namespace rcq
 		vector<dp> m_dps;
 		vector<VkDescriptorPoolSize> m_pool_sizes;
 		VkDescriptorPoolCreateInfo m_create_info;	
+	};
+
+	struct render_settings
+	{
+		glm::mat4 view;
+		glm::mat4 proj;
+		glm::vec3 pos;
+		float near;
+		float far;
+
+		glm::vec3 light_dir;
+		glm::vec3 irradiance;
+		glm::vec3 ambient_irradiance;
+
+		glm::vec2 wind;
+		float time;
 	};
 
 	void read_file2(const char* filename, char* dst)
@@ -404,5 +429,34 @@ namespace rcq
 		file.read(dst, size);
 		file.close();
 	}
+
+	template<uint32_t res_type>
+	constexpr uint32_t max_resource_size(uint32_t val)
+	{
+		if constexpr (res_type == RES_TYPE_COUNT)
+			return val;
+		else
+		{
+			val = val < sizeof(resource<res_type>) ? sizeof(resource<res_type>) : val;
+			val = max_resource_size<res_type + 1>(val);
+			return val;
+		}
+	}
+
+	template<uint32_t res_type>
+	constexpr uint32_t max_build_info_size(uint32_t val)
+	{
+		if constexpr (res_type == RES_TYPE_COUNT)
+			return val;
+		else
+		{
+			val = val < sizeof(resource<res_type>::build_info) ? sizeof(resource<res_type>::build_info) : val;
+			val = max_build_info_size<res_type + 1>(val);
+			return val;
+		}
+	}
+
+	constexpr uint32_t MAX_RESOURCE_SIZE = max_resource_size<0>(0);
+	constexpr uint32_t MAX_BUILD_INFO_SIZE = max_build_info_size<0>(0);
 
 } //namespace rcq
