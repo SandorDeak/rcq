@@ -7,6 +7,7 @@ namespace rcq
 {
 	class pool_memory_resource : public device_memory_resource
 	{
+	public:
 		pool_memory_resource(uint64_t block_size, uint64_t block_alignment, device_memory_resource* upstream,
 			memory_resource* metadata_memory_resource) :
 			device_memory_resource(block_alignment, upstream->device(), upstream->handle(), upstream),
@@ -52,7 +53,7 @@ namespace rcq
 			}
 		}
 
-		void deallocate(uint64_t p)
+		void deallocate(uint64_t p) override
 		{
 			*m_free_blocks.push() = p;
 		}

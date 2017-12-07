@@ -223,25 +223,40 @@ namespace rcq
 		{
 			glm::vec2 tile_size_in_meter;
 			float mip_level_count;
-			/*uint32_t request_count;
-			uint32_t requests[max_request_count];*/
 		};
 
-		struct virtual_texture
+		struct texture
 		{
 			VkImage image;
 			VkImageView view;
 			VkSampler sampler;
 			uint64_t mip_tail_offset;
 			uint64_t dummy_page_offset;
-			glm::uvec2 page_size;
-			uint32_t page_size_in_bytes;
+			vector<std::ifstream> files;
+			//glm::uvec2 page_size;
+			//uint32_t page_size_in_bytes;
 			/*uint32_t mip_tail_size;
 			uint32_t mip_tail_offset;*/
-
 		};
 
-		virtual_texture tex;
+		texture tex;
+		VkDescriptorSet ds;
+		VkDescriptorSet request_ds;
+		uint32_t dp_index;
+		glm::uvec2 level0_tile_size;
+
+		VkBuffer data_buffer;
+		uint64_t data_offset;
+
+		VkBuffer request_data_buffer;
+		uint64_t request_data_offset;
+
+
+
+
+
+		////////////////////////////
+		/*virtual_texture tex;
 		glm::uvec2 tile_count;
 		vector<glm::uvec2> tile_size_in_pages;
 		vector<std::ifstream> files;
@@ -254,8 +269,8 @@ namespace rcq
 		uint64_t data_offset;
 
 		VkBuffer request_data_buffer;
-
-		pool_memory_resource page_pool;
+		uint64_t request_data_buffer_offset;
+		float* request_data_buffer_data;
 
 		VkBufferView requested_mip_levels_view;
 		VkBuffer requested_mip_levels_buffer;
@@ -265,6 +280,10 @@ namespace rcq
 		VkBuffer current_mip_levels_buffer;
 		VkDeviceMemory current_mip_levels_memory;
 		float* current_mip_levels_data;
+		
+		
+		pool_memory_resource page_pool;
+		vk_memory_resource m_mapped_memory_resource;*/
 
 		//VkImageView greatest_level_view;
 	};

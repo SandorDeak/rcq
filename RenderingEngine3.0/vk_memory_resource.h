@@ -9,10 +9,11 @@ namespace rcq
 	class vk_memory_resource : public device_memory_resource
 	{
 	public:
-		vk_memory_resource(VkDevice device, uint32_t memory_type_index, const vk_allocator* vk_alloc) :
+		vk_memory_resource(VkDevice device, uint32_t memory_type_index, bool map, const vk_allocator* vk_alloc) :
 			device_memory_resource(std::numeric_limits<VkDeviceSize>::max(), device, VK_NULL_HANDLE, nullptr),
 			m_vk_alloc(vk_alloc),
-			m_memory_type_index(memory_type_index)
+			m_memory_type_index(memory_type_index),
+			m_map(map)
 		{}
 
 		~vk_memory_resource()
@@ -42,10 +43,16 @@ namespace rcq
 			case VK_ERROR_TOO_MANY_OBJECTS:
 				throw std::runtime_error("vulkan allocation failed, too many objects!");
 				break;
-			case VK_SUCCESS:
-				return 0;
 			}
-			
+
+			uint64_t ret = 0;
+			if (m_map)
+			{
+				void* data;
+				vkMapMemory(m_device, m_handle, 0, size, 0, &data);
+				ret = reinterpret_cast<uint64_t>(data);
+			}
+			return ret;
 		}
 
 		void deallocate(uint64_t p = 0) override
@@ -56,6 +63,7 @@ namespace rcq
 
 	private:
 		uint32_t m_memory_type_index;
+		bool  m_map;
 		const vk_allocator* m_vk_alloc;
 	};
 

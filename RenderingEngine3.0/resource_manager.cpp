@@ -119,7 +119,8 @@ void resource_manager::begin_build_cb()
 	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT | VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
 	assert(vkBeginCommandBuffer(m_build_cb, &begin_info)==VK_SUCCESS);
 }
-void resource_manager::end_build_cb()
+void resource_manager::end_build_cb(const VkSemaphore* wait_semaphores, const VkPipelineStageFlags* wait_flags,
+	uint32_t wait_count)
 {
 	vkEndCommandBuffer(m_build_cb);
 
@@ -127,6 +128,9 @@ void resource_manager::end_build_cb()
 	submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submit.commandBufferCount = 1;
 	submit.pCommandBuffers = &m_build_cb;
+	submit.waitSemaphoreCount = wait_count;
+	submit.pWaitDstStageMask = wait_flags;
+	submit.pWaitSemaphores = wait_semaphores;
 
 	vkResetFences(m_base.device, 1, &m_build_f);
 	assert(vkQueueSubmit(m_base.transfer_queue, 1, &submit, m_build_f) == VK_SUCCESS);
@@ -1373,7 +1377,9 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 	auto t = reinterpret_cast<resource<RES_TYPE_TERRAIN>*>(res->data);
 	auto build = reinterpret_cast<const resource<RES_TYPE_TERRAIN>::build_info*>(build_info);
 	
-	t->files.resize(build->mip_level_count);
+	new(&t->tex.files) vector<std::ifstream>(m_memory_resource, build->mip_level_count);
+
+	t->level0_tile_size = build->level0_tile_size;
 
 	//open files
 	for (uint32_t i = 0; i < build->mip_level_count; ++i)
@@ -1384,12 +1390,10 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		itoa(i, num, 10);
 		strcat(filename, num);
 		strcat(filename, ".terr");
-		new(t->files[i]) std::ifstream(filename, std::ios::binary);
-		assert(t->files[i]->is_open());
+		new(t->tex.files[i]) std::ifstream(filename, std::ios::binary);
+		assert(t->tex.files[i]->is_open());
 	}
 
-	t->mip_level_count = build->mip_level_count;
-	t->tile_count = build->level0_image_size / build->level0_tile_size;
 
 	//create image
 	{
@@ -1413,150 +1417,105 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		assert(vkCreateImage(m_base.device, &image, m_vk_alloc, &t->tex.image) == VK_SUCCESS);
 	}
 
-	//create staging buffer
-	{
-		VkBufferCreateInfo buffer = {};
-		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		buffer.size = level0_tile_size.x*level0_tile_size.y * sizeof(glm::vec4);
-		buffer.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
-
-		if (vkCreateBuffer(m_base.device, &buffer, m_alloc, &t.staging_buffer) != VK_SUCCESS)
-			throw std::runtime_error("failed to create buffer");
-
-		VkMemoryRequirements mr;
-		vkGetBufferMemoryRequirements(m_base.device, t.staging_buffer, &mr);
-
-		VkMemoryAllocateInfo alloc = {};
-		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc.allocationSize = mr.size;
-		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-			VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-
-		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.staging_buffer_memory) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate memory!");
-		vkBindBufferMemory(m_base.device, t.staging_buffer, t.staging_buffer_memory, 0);
-
-		void* raw_data;
-		vkMapMemory(m_base.device, t.staging_buffer_memory, 0, buffer.size, 0, &raw_data);
-		t.staging_buffer_data = reinterpret_cast<char*>(raw_data);
-	}
-
-	//calculate page size and allocate dummy page and mip tail
+	VkSemaphore binding_finished_s;
+	//allocate and bind mip tail and dummy page memory
 	{
 		uint32_t mr_count;
-		vkGetImageSparseMemoryRequirements(m_base.device, t.tex.image, &mr_count, nullptr);
+		vkGetImageSparseMemoryRequirements(m_base.device, t->tex.image, &mr_count, nullptr);
 		assert(mr_count == 1);
 		VkSparseImageMemoryRequirements sparse_mr;
-		vkGetImageSparseMemoryRequirements(m_base.device, t.tex.image, &mr_count, &sparse_mr);
+		vkGetImageSparseMemoryRequirements(m_base.device, t->tex.image, &mr_count, &sparse_mr);
 
-		if (sparse_mr.formatProperties.flags & VK_SPARSE_IMAGE_FORMAT_NONSTANDARD_BLOCK_SIZE_BIT)
-			throw std::runtime_error("nonstandard block size support for sparse images!");
-
-		t.tile_size_in_pages.resize(mip_level_count);
-		t.tile_size_in_pages[0] = level0_tile_size / glm::uvec2(sparse_mr.formatProperties.imageGranularity.width,
-			sparse_mr.formatProperties.imageGranularity.height);
-		for (uint32_t i = 1; i < mip_level_count; ++i)
-			t.tile_size_in_pages[i] = t.tile_size_in_pages[i - 1] / 2u;
-
-		t.tex.page_size.x = sparse_mr.formatProperties.imageGranularity.width;
-		t.tex.page_size.y = sparse_mr.formatProperties.imageGranularity.height;
-		t.tex.page_size_in_bytes = t.tex.page_size.x*t.tex.page_size.y * sizeof(glm::vec4);
+		assert(sparse_mr.formatProperties.flags & VK_SPARSE_IMAGE_FORMAT_NONSTANDARD_BLOCK_SIZE_BIT == 0);
 
 		VkMemoryRequirements mr;
-		vkGetImageMemoryRequirements(m_base.device, t.tex.image, &mr);
-		t.tex.page_size_in_bytes = calc_offset(static_cast<size_t>(mr.alignment), t.tex.page_size_in_bytes);
-		t.tex.mip_tail_size = static_cast<size_t>(calc_offset(mr.alignment, sparse_mr.imageMipTailSize));
-		t.tex.mip_tail_offset = static_cast<size_t>(sparse_mr.imageMipTailOffset);
+		vkGetImageMemoryRequirements(m_base.device, t->tex.image, &mr);
 
-		size_t mem_size = t.tex.page_size_in_bytes + t.tex.mip_tail_size;
+		uint64_t dummy_page_size = sparse_mr.formatProperties.imageGranularity.width*sparse_mr.formatProperties.imageGranularity.height;
+		t->tex.mip_tail_offset = m_device_memory_res.allocate(sparse_mr.imageMipTailSize, mr.alignment);
+		t->tex.dummy_page_offset = m_device_memory_res.allocate(dummy_page_size, mr.alignment);
 
-		VkMemoryAllocateInfo alloc = {};
-		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc.allocationSize = mem_size;
-		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.tex.dummy_page_and_mip_tail) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate memory for dummy page and mip tail!");
-
-		//set pool
-		t.page_pool.set_alloc_info(m_base.device, m_alloc, alloc.memoryTypeIndex, 64, t.tex.page_size_in_bytes, false);
-	}
-
-	//bound dummy page, mip tail, and transition to shader read only optimal layout
-	{
 		//mip tail bind
 		VkSparseMemoryBind mip_tail = {};
-		mip_tail.memory = t.tex.dummy_page_and_mip_tail;
-		mip_tail.memoryOffset = t.tex.page_size_in_bytes;
-		mip_tail.resourceOffset = t.tex.mip_tail_offset;
-		mip_tail.size = t.tex.mip_tail_size;
+		mip_tail.memory = m_device_memory_res.handle();
+		mip_tail.memoryOffset = t->tex.mip_tail_offset;
+		mip_tail.resourceOffset = sparse_mr.imageMipTailOffset;
+		mip_tail.size = sparse_mr.imageMipTailSize;
 
 		VkSparseImageOpaqueMemoryBindInfo mip_tail_bind = {};
 		mip_tail_bind.bindCount = 1;
-		mip_tail_bind.image = t.tex.image;
+		mip_tail_bind.image = t->tex.image;
 		mip_tail_bind.pBinds = &mip_tail;
 
-		size_t pages_count = 0;
-		for (const auto& s : t.tile_size_in_pages)
-			pages_count += (s.x*s.y);
-		pages_count *= (t.tile_count.x*t.tile_count.y);
-		std::vector<VkSparseImageMemoryBind> page_binds(pages_count);
+
+		glm::vec2 tile_count = build->level0_image_size / build->level0_tile_size;
+		glm::uvec2 page_size(sparse_mr.formatProperties.imageGranularity.width,
+			sparse_mr.formatProperties.imageGranularity.height);
+		glm::vec2 page_count_in_level0_image = build->level0_image_size / page_size;
+
+		uint64_t page_count = page_count_in_level0_image.x*page_count_in_level0_image.y;
+
+		page_count *= static_cast<uint64_t>((1.f - powf(0.25f, static_cast<float>(build->mip_level_count))) / 0.75f);
+
+
+		vector<VkSparseImageMemoryBind> page_binds(m_memory_resource, page_count);
 
 		size_t page_index = 0;
-		for (uint32_t mip_level = 0; mip_level < mip_level_count; ++mip_level)
+		glm::uvec2 tile_size_in_pages = build->level0_tile_size / page_size;
+		for (uint32_t mip_level = 0; mip_level < build->mip_level_count; ++mip_level)
 		{
-			for (size_t i = 0; i < t.tile_count.x; ++i)
+			for (uint32_t i = 0; i < tile_count.x; ++i)
 			{
-				for (size_t j = 0; j < t.tile_count.y; ++j)
+				for (uint32_t j = 0; j < tile_count.y; ++j)
 				{
 					//at tile(i,j) in mip level mip_level
 					VkOffset3D tile_offset =
 					{
-						static_cast<int32_t>(i*t.tile_size_in_pages[mip_level].x*t.tex.page_size.x),
-						static_cast<int32_t>(j*t.tile_size_in_pages[mip_level].y*t.tex.page_size.y),
+						static_cast<int32_t>(i*tile_size_in_pages.x*page_size.x),
+						static_cast<int32_t>(j*tile_size_in_pages.y*page_size.y),
 						0
 					};
 
-					for (size_t u = 0; u < t.tile_size_in_pages[mip_level].x; ++u)
+					for (uint32_t u = 0; u < tile_size_in_pages.x; ++u)
 					{
-						for (size_t v = 0; v < t.tile_size_in_pages[mip_level].y; ++v)
+						for (uint32_t v = 0; v < tile_size_in_pages.y; ++v)
 						{
 							//at page (u,v)
 							VkOffset3D page_offset_in_tile =
 							{
-								static_cast<int32_t>(u*t.tex.page_size.x),
-								static_cast<int32_t>(v*t.tex.page_size.y),
+								static_cast<int32_t>(u*page_size.x),
+								static_cast<int32_t>(v*page_size.y),
 								0
 							};
-							page_binds[page_index].memory = t.tex.dummy_page_and_mip_tail;
-							page_binds[page_index].memoryOffset = 0;
-							page_binds[page_index].offset =
+							page_binds[page_index]->memory = m_device_memory_res.handle();
+							page_binds[page_index]->memoryOffset = t->tex.dummy_page_offset;
+							page_binds[page_index]->offset =
 							{
 								tile_offset.x + page_offset_in_tile.x,
 								tile_offset.y + page_offset_in_tile.y,
 								0
 							};
-							page_binds[page_index].extent =
+							page_binds[page_index]->extent =
 							{
-								t.tex.page_size.x,
-								t.tex.page_size.y,
+								page_size.x,
+								page_size.y,
 								1
 							};
-							page_binds[page_index].subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-							page_binds[page_index].subresource.arrayLayer = 0;
-							page_binds[page_index].subresource.mipLevel = mip_level;
+							page_binds[page_index]->subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+							page_binds[page_index]->subresource.arrayLayer = 0;
+							page_binds[page_index]->subresource.mipLevel = mip_level;
 
 							++page_index;
 						}
 					}
 				}
 			}
+			tile_size_in_pages /= 2;
 		}
 		VkSparseImageMemoryBindInfo image_bind;
 		image_bind.bindCount = page_binds.size();
 		image_bind.pBinds = page_binds.data();
-		image_bind.image = t.tex.image;
+		image_bind.image = t->tex.image;
 
 		VkBindSparseInfo bind_info = {};
 		bind_info.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
@@ -1567,58 +1526,130 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 
 		VkSemaphoreCreateInfo s = {};
 		s.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-		VkSemaphore binding_finished_s;
-		if (vkCreateSemaphore(m_base.device, &s, m_alloc, &binding_finished_s) != VK_SUCCESS)
-			throw std::runtime_error("failed to create semaphore!");
+		assert(vkCreateSemaphore(m_base.device, &s, m_vk_alloc, &binding_finished_s) == VK_SUCCESS);
 
 		bind_info.signalSemaphoreCount = 1;
 		bind_info.pSignalSemaphores = &binding_finished_s;
 
-		vkQueueBindSparse(m_base.graphics_queue, 1, &bind_info, VK_NULL_HANDLE);
+		vkQueueBindSparse(m_base.transfer_queue, 1, &bind_info, VK_NULL_HANDLE);
+	}
+
+	uint64_t data_staging_buffer_offset;
+	//create terrain data buffer
+	{
+		VkBufferCreateInfo buffer = {};
+		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		buffer.size = sizeof(resource<RES_TYPE_TERRAIN>::data);
+		buffer.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+		assert(vkCreateBuffer(m_base.device, &buffer, m_vk_alloc, &t->data_buffer) == VK_SUCCESS);
+
+		VkMemoryRequirements mr;
+		vkGetBufferMemoryRequirements(m_base.device, t->data_buffer, &mr);
+		t->data_offset = m_device_memory_res.allocate(mr.size, mr.alignment);
+		vkBindBufferMemory(m_base.device, t->data_buffer, m_device_memory_res.handle(), t->data_offset);
+
+		data_staging_buffer_offset = m_mappable_memory.allocate(sizeof(resource<RES_TYPE_TERRAIN>::data),
+			alignof(resource<RES_TYPE_TERRAIN>::data));
+
+		auto data = reinterpret_cast<resource<RES_TYPE_TERRAIN>::data*>(m_mappable_memory.map(data_staging_buffer_offset,
+			sizeof(resource<RES_TYPE_TERRAIN>::data)));
+
+		data->height_scale = build->size_in_meters.y;
+		data->mip_level_count = static_cast<float>(build->mip_level_count);
+		data->terrain_size_in_meters = { build->size_in_meters.x, build->size_in_meters.z };
+		data->tile_count = static_cast<glm::ivec2>(build->level0_image_size / build->level0_tile_size);
+		data->meter_per_tile_size_length = glm::vec2(build->size_in_meters.x, build->size_in_meters.z )/
+			static_cast<glm::vec2>(build->level0_image_size/build->level0_tile_size);
+
+		m_mappable_memory.unmap();
+	}
+
+	uint64_t request_data_staging_buffer_offset;
+	//create terrain request buffer
+	{
+		VkBufferCreateInfo buffer = {};
+		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+		buffer.size = sizeof(resource<RES_TYPE_TERRAIN>::request_data);
+		buffer.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+		assert(vkCreateBuffer(m_base.device, &buffer, m_vk_alloc, &t->request_data_buffer) == VK_SUCCESS);
+
+		VkMemoryRequirements mr;
+		vkGetBufferMemoryRequirements(m_base.device, t->request_data_buffer, &mr);
+		t->request_data_offset = m_device_memory_res.allocate(mr.size, mr.alignment);
+		vkBindBufferMemory(m_base.device, t->request_data_buffer, m_device_memory_res.handle(), t->request_data_offset);
+
+		request_data_staging_buffer_offset = m_mappable_memory.allocate(sizeof(resource<RES_TYPE_TERRAIN>::request_data),
+			alignof(resource<RES_TYPE_TERRAIN>::request_data));
+		auto data = reinterpret_cast<resource<RES_TYPE_TERRAIN>::request_data*>(m_mappable_memory.map(request_data_staging_buffer_offset,
+			sizeof(resource<RES_TYPE_TERRAIN>::request_data)));
+
+		data->mip_level_count = static_cast<float>(build->mip_level_count);
+		//data->request_count = 0;
+		data->tile_size_in_meter = glm::vec2(build->size_in_meters.x, build->size_in_meters.z)/
+			static_cast<glm::vec2>(build->level0_image_size / build->level0_tile_size);
+
+		m_mappable_memory.unmap();
+	}
+
+
+	//record cb
+	{
+		begin_build_cb();
 
 		//transition to general
-		VkImageMemoryBarrier b = {};
-		b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		b.image = t.tex.image;
-		b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		b.srcAccessMask = 0;
-		b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		b.subresourceRange.baseArrayLayer = 0;
-		b.subresourceRange.baseMipLevel = 0;
-		b.subresourceRange.layerCount = 1;
-		b.subresourceRange.levelCount = mip_level_count;
+		{
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = t->tex.image;
+			b.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+			b.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			b.srcAccessMask = 0;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 1;
+			b.subresourceRange.levelCount = build->mip_level_count;
 
-		VkCommandBuffer cb = begin_single_time_command(m_base.device, m_cp_build);
+			vkCmdPipelineBarrier(m_build_cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
 
-		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-			0, 0, nullptr, 0, nullptr, 1, &b);
-		vkEndCommandBuffer(cb);
+		//copy from data staging buffer
+		{
+			VkBufferCopy region;
+			region.dstOffset = 0;
+			region.size = sizeof(resource<RES_TYPE_TERRAIN>::data);
+			region.srcOffset = data_staging_buffer_offset;
 
-		VkFenceCreateInfo f = {};
-		f.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-		VkFence copy_finished_f;
-		if (vkCreateFence(m_base.device, &f, m_alloc, &copy_finished_f) != VK_SUCCESS)
-			throw std::runtime_error("failed to create fence!");
+			vkCmdCopyBuffer(m_build_cb, m_staging_buffer, t->data_buffer, 1, &region);
+		}
 
-		VkSubmitInfo submit = {};
-		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		submit.commandBufferCount = 1;
-		submit.pCommandBuffers = &cb;
-		VkPipelineStageFlags wait_stage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-		submit.waitSemaphoreCount = 1;
-		submit.pWaitDstStageMask = &wait_stage;
-		submit.pWaitSemaphores = &binding_finished_s;
-		if (vkQueueSubmit(m_base.graphics_queue, 1, &submit, copy_finished_f) != VK_SUCCESS)
-			throw std::runtime_error("failed to submit command buffer!");
-		vkWaitForFences(m_base.device, 1, &copy_finished_f, VK_TRUE, std::numeric_limits<uint64_t>::max());
+		//copy from request data staging buffer
+		{
+			VkBufferCopy region;
+			region.dstOffset = 0;
+			region.size = sizeof(resource<RES_TYPE_TERRAIN>::request_data);
+			region.srcOffset = request_data_staging_buffer_offset;
 
-		vkDestroySemaphore(m_base.device, binding_finished_s, m_alloc);
-		vkDestroyFence(m_base.device, copy_finished_f, m_alloc);
+			vkCmdCopyBuffer(m_build_cb, m_staging_buffer, t->request_data_buffer, 1, &region);
+		}
+
+		VkPipelineStageFlags wait_flag = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		end_build_cb(&binding_finished_s, &wait_flag, 1);
+
+		wait_for_build_fence();
+
+		vkDestroySemaphore(m_base.device, binding_finished_s, m_vk_alloc);
+
+		m_mappable_memory.deallocate(data_staging_buffer_offset);
+		m_mappable_memory.deallocate(request_data_staging_buffer_offset);
 	}
 
 	//create image view
@@ -1626,104 +1657,18 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		view.image = t.tex.image;
+		view.image = t->tex.image;
 		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
 		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		view.subresourceRange.baseArrayLayer = 0;
 		view.subresourceRange.layerCount = 1;
 		view.subresourceRange.baseMipLevel = 0;
-		view.subresourceRange.levelCount = mip_level_count;
+		view.subresourceRange.levelCount = build->mip_level_count;
 
-		if (vkCreateImageView(m_base.device, &view, m_alloc, &t.tex.view) != VK_SUCCESS)
-			throw std::runtime_error("failed to create image view!");
+		assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &t->tex.view) == VK_SUCCESS);
 	}
 
-	//create greatet level view
-	{
-		VkImageViewCreateInfo view = {};
-		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-		view.image = t.tex.image;
-		view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-		view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		view.subresourceRange.baseArrayLayer = 0;
-		view.subresourceRange.layerCount = 1;
-		view.subresourceRange.baseMipLevel = mip_level_count-1;
-		view.subresourceRange.levelCount = 1;
-
-		if (vkCreateImageView(m_base.device, &view, m_alloc, &t.greatest_level_view) != VK_SUCCESS)
-			throw std::runtime_error("failed to create image view!");
-	}
-
-	//create terrain data buffer
-	{
-		VkBufferCreateInfo buffer = {};
-		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer.sharingMode=VK_SHARING_MODE_EXCLUSIVE;
-		buffer.size = sizeof(terrain_data);
-		buffer.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-
-		if (vkCreateBuffer(m_base.device, &buffer, m_alloc, &t.data_buffer) != VK_SUCCESS)
-			throw std::runtime_error("failed to create buffer!");
-		
-		VkMemoryRequirements mr;
-		vkGetBufferMemoryRequirements(m_base.device, t.data_buffer, &mr);
-
-		VkMemoryAllocateInfo alloc = {};
-		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc.allocationSize = mr.size;
-		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		
-		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.data_buffer_memory) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate memory!");
-		vkBindBufferMemory(m_base.device, t.data_buffer, t.data_buffer_memory, 0);
-
-		void* raw_data;
-		vkMapMemory(m_base.device, t.data_buffer_memory, 0, sizeof(terrain_data), 0, &raw_data);
-		t.data = reinterpret_cast<terrain_data*>(raw_data);
-
-		t.data->height_scale = size_in_meters.y;
-		t.data->mip_level_count = static_cast<float>(mip_level_count);
-		t.data->terrain_size_in_meters = { size_in_meters.x, size_in_meters.z };
-		t.data->tile_count = static_cast<glm::ivec2>(level0_image_size / level0_tile_size);
-		t.data->meter_per_tile_size_length = t.data->terrain_size_in_meters / static_cast<glm::vec2>(t.data->tile_count);
-	}
-
-	//create terrain request buffer
-	{
-		VkBufferCreateInfo buffer = {};
-		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		buffer.size = sizeof(terrain_request_data);
-		buffer.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-
-		if (vkCreateBuffer(m_base.device, &buffer, m_alloc, &t.request_data_buffer) != VK_SUCCESS)
-			throw std::runtime_error("failed to create buffer!");
-
-		VkMemoryRequirements mr;
-		vkGetBufferMemoryRequirements(m_base.device, t.request_data_buffer, &mr);
-
-		VkMemoryAllocateInfo alloc = {};
-		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-		alloc.allocationSize = mr.size;
-		alloc.memoryTypeIndex = find_memory_type(m_base.physical_device, mr.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-			VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-		if (vkAllocateMemory(m_base.device, &alloc, m_alloc, &t.request_buffer_memory) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate memory!");
-		vkBindBufferMemory(m_base.device, t.request_data_buffer, t.request_buffer_memory, 0);
-
-		void* raw_data;
-		vkMapMemory(m_base.device, t.request_buffer_memory, 0, sizeof(terrain_request_data), 0, &raw_data);
-		t.request_data = reinterpret_cast<terrain_request_data*>(raw_data);
-
-		t.request_data->mip_level_count = static_cast<float>(mip_level_count);
-		t.request_data->request_count = 0;
-		t.request_data->tile_size_in_meter = { 64.f, 64.f };// t.data->meter_per_tile_size_length;
-	}
-
-	//create requested mip levels view
+	/*//create requested mip levels view
 	{
 		VkBufferCreateInfo buffer = {};
 		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -1805,7 +1750,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 
 		if (vkCreateBufferView(m_base.device, &view, m_alloc, &t.current_mip_levels_view) != VK_SUCCESS)
 			throw std::runtime_error("failed to create buffer view!");
-	}
+	}*/
 
 	//create sampler
 	{
@@ -1818,72 +1763,60 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		s.compareEnable = VK_FALSE;
 		s.magFilter = VK_FILTER_NEAREST;
 		s.minFilter = VK_FILTER_NEAREST;
-		s.maxLod = static_cast<float>(mip_level_count - 1u);
+		s.maxLod = static_cast<float>(build->mip_level_count - 1u);
 		s.minLod = 0.f;
 		s.mipLodBias = 0.f;
 		s.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 		s.unnormalizedCoordinates = VK_FALSE;
 
-		if (vkCreateSampler(m_base.device, &s, m_alloc, &t.tex.sampler) != VK_SUCCESS)
-			throw std::runtime_error("failed to create sampler");
+		assert(vkCreateSampler(m_base.device, &s, m_vk_alloc, &t->tex.sampler) == VK_SUCCESS);
 	}
 
 	//allocate dss
 	{
-		std::array<VkDescriptorSet, 2> dss;
+		VkDescriptorSet dss[2];
 
-		std::array<VkDescriptorSetLayout, 2> dsls =
+		VkDescriptorSetLayout dsls[2] =
 		{
-			m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN],
-			m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN_COMPUTE]
+			*m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN],
+			*m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN_COMPUTE]
 		};
 
 		VkDescriptorSetAllocateInfo alloc = {};
 		alloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		alloc.pSetLayouts = dsls.data();
+		alloc.pSetLayouts = dsls;
 		alloc.descriptorSetCount = 2;
+		alloc.descriptorPool = m_dp_pools[DSL_TYPE_TERRAIN]->use_dp(t->dp_index);
+		assert(vkAllocateDescriptorSets(m_base.device, &alloc, dss) == VK_SUCCESS);
 
-
-		pool_id p_id = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].get_available_pool_id();
-		if (p_id == m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools.size())
-		{
-			extend_descriptor_pool_pool<DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN>();
-		}
-		alloc.descriptorPool = m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools[p_id];
-		if (vkAllocateDescriptorSets(m_base.device, &alloc, dss.data()) != VK_SUCCESS)
-			throw std::runtime_error("failed to allocate material descriptor set!");
-
-		--m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].availability[p_id];
-		t.pool_index = p_id;
-
-		t.ds = dss[0];
-		t.request_ds = dss[1];
+		t->ds = dss[0];
+		t->request_ds = dss[1];
 	}
 
 	//update dss
 	{
 		VkDescriptorBufferInfo request_buffer = {};
-		request_buffer.buffer = t.request_data_buffer;
+		request_buffer.buffer = t->request_data_buffer;
 		request_buffer.offset = 0;
 		request_buffer.range = sizeof(terrain_request_data);
 
 		VkDescriptorBufferInfo data_buffer = {};
-		data_buffer.buffer = t.data_buffer;
+		data_buffer.buffer = t->data_buffer;
 		data_buffer.offset = 0;
 		data_buffer.range = sizeof(terrain_data);
 		
 		VkDescriptorImageInfo tex = {};
 		tex.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-		tex.imageView = t.tex.view;
-		tex.sampler = t.tex.sampler;
+		tex.imageView = t->tex.view;
+		tex.sampler = t->tex.sampler;
 
-		std::array<VkWriteDescriptorSet, 5> w = {};
+		VkWriteDescriptorSet w[3] = {};
 		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[0].descriptorCount = 1;
-		w[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		w[0].dstArrayElement = 0;
 		w[0].dstBinding = 0;
-		w[0].dstSet = t.request_ds;
+		w[0].dstSet = t->request_ds;
 		w[0].pBufferInfo = &request_buffer;
 
 		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1891,7 +1824,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		w[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		w[1].dstArrayElement = 0;
 		w[1].dstBinding = 0;
-		w[1].dstSet = t.ds;
+		w[1].dstSet = t->ds;
 		w[1].pBufferInfo = &data_buffer;
 
 		w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1899,10 +1832,10 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		w[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[2].dstArrayElement = 0;
 		w[2].dstBinding = 1;
-		w[2].dstSet = t.ds;
+		w[2].dstSet = t->ds;
 		w[2].pImageInfo = &tex;
 
-		w[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		/*w[3].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		w[3].descriptorCount = 1;
 		w[3].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
 		w[3].dstArrayElement = 0;
@@ -1916,52 +1849,41 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		w[4].dstArrayElement = 0;
 		w[4].dstBinding = 2;
 		w[4].dstSet = t.ds;
-		w[4].pTexelBufferView = &t.current_mip_levels_view;
+		w[4].pTexelBufferView = &t.current_mip_levels_view;*/
 
-		vkUpdateDescriptorSets(m_base.device, w.size(), w.data(), 0, nullptr);
+		vkUpdateDescriptorSets(m_base.device, 3, w, 0, nullptr);
 	}
-
-	return t;
 }
 
 
 
-
-void resource_manager::destroy(terrain&& t)
+template<>
+void resource_manager::destroy<RES_TYPE_TERRAIN>(base_resource* res)
 {
-	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools[t.pool_index], 1, &t.ds);
-	vkFreeDescriptorSets(m_base.device, m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].pools[t.pool_index], 1, &t.request_ds);
+	auto t = reinterpret_cast<resource<RES_TYPE_TERRAIN>*>(res->data);
 
-	++m_dpps[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].availability[t.pool_index];
+	VkDescriptorSet dss[2] = { t->ds, t->request_ds };
+	vkFreeDescriptorSets(m_base.device, m_dp_pools[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN]->stop_using_dp(t->dp_index), 2, dss);
 
-	vkDestroyImageView(m_base.device, t.greatest_level_view, m_alloc);
-	vkDestroyImageView(m_base.device, t.tex.view, m_alloc);
-	vkDestroyImage(m_base.device, t.tex.image, m_alloc);
-	vkDestroySampler(m_base.device, t.tex.sampler, m_alloc);
-	vkFreeMemory(m_base.device, t.tex.dummy_page_and_mip_tail, m_alloc);
+	vkDestroyImageView(m_base.device, t->tex.view, m_vk_alloc);
+	vkDestroyImage(m_base.device, t->tex.image, m_vk_alloc);
+	vkDestroySampler(m_base.device, t->tex.sampler, m_vk_alloc);
+	m_device_memory_res.deallocate(t->tex.dummy_page_offset);
+	m_device_memory_res.deallocate(t->tex.mip_tail_offset);
 
-	vkDestroyBuffer(m_base.device, t.staging_buffer, m_alloc);
-	vkFreeMemory(m_base.device, t.staging_buffer_memory, m_alloc);
+	vkDestroyBuffer(m_base.device, t->data_buffer, m_vk_alloc);
+	m_device_memory_res.deallocate(t->data_offset);
 
-	vkDestroyBuffer(m_base.device, t.data_buffer, m_alloc);
-	vkDestroyBuffer(m_base.device, t.request_data_buffer, m_alloc);
+	vkDestroyBuffer(m_base.device, t->request_data_buffer, m_vk_alloc);
+	m_device_memory_res.deallocate(t->request_data_offset);
 
-	vkFreeMemory(m_base.device, t.data_buffer_memory, m_alloc);
-	vkFreeMemory(m_base.device, t.request_buffer_memory, m_alloc);
-
-	vkDestroyBufferView(m_base.device, t.current_mip_levels_view, m_alloc);
+	/*vkDestroyBufferView(m_base.device, t.current_mip_levels_view, m_alloc);
 	vkDestroyBuffer(m_base.device, t.current_mip_levels_buffer, m_alloc);
 	vkFreeMemory(m_base.device, t.current_mip_levels_memory, m_alloc);
 
 	vkDestroyBufferView(m_base.device, t.requested_mip_levels_view, m_alloc);
 	vkDestroyBuffer(m_base.device, t.requested_mip_levels_buffer, m_alloc);
-	vkFreeMemory(m_base.device, t.requested_mip_levels_memory, m_alloc);
-
-	t.page_pool.free();
-
-	for (uint32_t i = 0; i < t.mip_level_count; ++i)
-		t.files[i].close();
-	delete[] t.files;
+	vkFreeMemory(m_base.device, t.requested_mip_levels_memory, m_alloc);*/
 }
 
 
@@ -2235,6 +2157,9 @@ template<>
 void resource_manager::destroy<RES_TYPE_WATER>(base_resource* res)
 {
 	auto w = reinterpret_cast<resource<RES_TYPE_WATER>*>(res->data);
+
+	VkDescriptorSet dss[2] = { w->ds, w->fft_ds };
+	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_WATER]->stop_using_dp(w->dp_index), 2, dss);
 
 	vkDestroyBuffer(m_base.device, w->fft_params_buffer, m_vk_alloc);
 	m_device_memory_res.deallocate(w->fft_params_offset);

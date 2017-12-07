@@ -237,7 +237,8 @@ namespace rcq
 		}
 
 		void begin_build_cb();
-		void end_build_cb();
+		void end_build_cb(const VkSemaphore* wait_semaphores=nullptr, const VkPipelineStageFlags* wait_flags=nullptr, 
+			uint32_t wait_count=0);
 		void wait_for_build_fence();
 		void create_dsls();
 		void create_dp_pools();
