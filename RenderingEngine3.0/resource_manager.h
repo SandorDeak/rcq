@@ -5,12 +5,12 @@
 #include "queue.h"
 #include "stack.h"
 #include "array.h"
-#include "pool_memory_resource_host.h"
-#include "monotonic_buffer_resource.h"
+#include "pool_host_memory.h"
+#include "monotonic_buffer_device_memory.h"
 #include "vk_allocator.h"
-#include "vk_memory_resource.h"
-#include "freelist_resource.h"
-#include "freelist_resource_host.h"
+#include "vk_memory.h"
+#include "freelist_device_memory.h"
+#include "freelist_host_memory.h"
 #include <atomic>
 #include <mutex>
 
@@ -25,7 +25,7 @@ namespace rcq
 
 		~resource_manager();
 
-		static void init(const base_info& info);
+		static void init(const base_info& info, size_t place);
 		static void destroy();
 		static resource_manager* instance() { return m_instance; }
 
@@ -92,15 +92,17 @@ namespace rcq
 
 		const base_info& m_base;
 
-		freelist_resource_host m_host_memory_resource;
-		pool_memory_resource_host m_resource_pool;
+		//memory resource
+		freelist_host_memory m_host_memory;
 		vk_allocator m_vk_alloc;
 
-		vk_memory_resource m_vk_mappable_memory;
-		monotonic_buffer_resource m_mappable_memory;
-		
-		freelist_resource m_device_memory_res;
+		pool_host_memory m_resource_pool;
 
+		vk_memory m_vk_mappable_memory;
+		monotonic_buffer_device_memory m_mappable_memory;
+		
+		vk_memory m_vk_device_memory;
+		freelist_device_memory m_device_memory;
 
 		//threads
 		std::thread m_build_thread;

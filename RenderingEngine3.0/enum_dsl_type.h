@@ -1,0 +1,21 @@
+#pragma once
+
+#include <stdint.h>
+
+namespace rcq
+{
+	enum DSL_TYPE : uint32_t
+	{
+		DSL_TYPE_MAT_OPAQUE,
+		DSL_TYPE_MAT_EM,
+		DSL_TYPE_SKY,
+		DSL_TYPE_TR,
+		DSL_LIGHT_OMNI,
+		DSL_TYPE_SKYBOX,
+		DSL_TYPE_TERRAIN,
+		DSL_TYPE_TERRAIN_COMPUTE,
+		DSL_TYPE_WATER_COMPUTE,
+		DSL_TYPE_WATER,
+		DSL_TYPE_COUNT
+	};
+}

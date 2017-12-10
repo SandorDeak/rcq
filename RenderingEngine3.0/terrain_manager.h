@@ -1,8 +1,9 @@
 #pragma once
 
 #include "foundation2.h"
-#include "vk_memory_resource.h"
-#include "freelist_resource_host.h"
+#include "vk_memory.h"
+#include "freelist_host_memory.h"
+#include "pool_device_memory.h"
 #include "queue.h"
 #include "vector.h"
 
@@ -14,7 +15,7 @@ namespace rcq
 
 		void poll_requests();
 		void poll_results();
-		void init(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count, VkCommandPool cp);
+		void init(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count, VkCommandPool cp, size_t place);
 		void destroy();
 
 		void set_terrain(resource<RES_TYPE_TERRAIN>* t)
@@ -28,13 +29,14 @@ namespace rcq
 		}
 
 	private:
-		terrain_manager(const base_info& base, memory_resource* host_memory_resource, device_memory_resource* device_memory_res);
+		terrain_manager(const base_info& base);
 		~terrain_manager();
 
 		static terrain_manager* m_instance;
 		void loop();
 		void decrease_min_mip_level(const glm::uvec2& tile_id);
 		void increase_min_mip_level(const glm::uvec2& tile_id);
+		void create_memory_resources_and_containers();
 
 		struct request_data
 		{
@@ -59,16 +61,18 @@ namespace rcq
 		char* m_pages_staging;
 
 		//memory resources
-		vk_memory_resource m_mappable_memory_resource;
-		pool_memory_resource m_page_pool;
-		freelist_resource_host m_host_memory_res;
+		freelist_host_memory m_host_memory_res;
 		vk_allocator m_vk_alloc;
 
-		queue<uint32_t> m_request_queue;
-		//std::mutex m_request_queue_mutex;
+		vk_memory m_mappable_memory_resource;
 
+		pool_device_memory m_page_pool;
+		
+
+		queue<uint32_t> m_request_queue;
 		queue<uint32_t> m_result_queue;
-		//std::mutex m_result_queue_mutex;
+
+
 		std::thread m_thread;
 		bool m_should_end;
 

@@ -2,17 +2,17 @@
 
 #include<stdexcept>
 #include <assert.h>
-#include "memory_resource.h"
+#include "host_memory.h"
 
 namespace rcq
 {
-	class monotonic_buffer_resource_host : public memory_resource
+	class monotonic_buffer_host_memory : public host_memory
 	{
 	public:
-		monotonic_buffer_resource_host() {}
+		monotonic_buffer_host_memory() {}
 
-		monotonic_buffer_resource_host(size_t first_chunks_size, size_t max_alignment, memory_resource* upstream) :
-			memory_resource(max_alignment < alignof(chunk) ? alignof(chunk) : max_alignment, upstream),
+		monotonic_buffer_host_memory(size_t first_chunks_size, size_t max_alignment, host_memory* upstream) :
+			host_memory(max_alignment < alignof(chunk) ? alignof(chunk) : max_alignment, upstream),
 			m_next_chunk_size(first_chunks_size)
 		{
 			assert(m_max_alignment <= m_upstream->max_alignment());
@@ -25,9 +25,9 @@ namespace rcq
 			m_begin += sizeof(chunk);
 		}
 
-		void init(size_t first_chunks_size, size_t max_alignment, memory_resource* upstream)
+		void init(size_t first_chunks_size, size_t max_alignment, host_memory* upstream)
 		{
-			memory_resource::init(max_alignment < alignof(chunk) ? alignof(chunk) : max_alignment, upstream);
+			host_memory::init(max_alignment < alignof(chunk) ? alignof(chunk) : max_alignment, upstream);
 			m_next_chunk_size = first_chunks_size;
 
 			assert(m_max_alignment <= m_upstream->max_alignment());
@@ -40,7 +40,7 @@ namespace rcq
 			m_begin += sizeof(chunk);
 		}
 
-		~monotonic_buffer_resource_host()
+		~monotonic_buffer_host_memory()
 		{
 			while (m_first_chunk != nullptr)
 			{
@@ -50,7 +50,7 @@ namespace rcq
 			}
 		}
 
-		uint64_t allocate(uint64_t size, uint64_t alignment) override
+		size_t allocate(size_t size, size_t alignment) override
 		{
 			assert(alignment <= m_max_alignment);
 
@@ -66,20 +66,20 @@ namespace rcq
 				m_last_chunk = m_last_chunk->next;
 				m_last_chunk->next = nullptr;
 				m_end = m_begin + m_next_chunk_size;
-				uint64_t ret = align(m_begin+sizeof(chunk), alignment);
+				size_t ret = align(m_begin+sizeof(chunk), alignment);
 				m_begin = ret+size;
 				m_next_chunk_size <<= 1;
 				return ret;
 			}
 			else
 			{
-				uint64_t ret = m_begin;
+				size_t ret = m_begin;
 				m_begin += size;
 				return ret;
 			}
 		}
 
-		void deallocate(uint64_t p) override {}
+		void deallocate(size_t p) override {}
 
 	private:
 		struct chunk
@@ -87,9 +87,9 @@ namespace rcq
 			chunk* next;
 		};
 
-		uint64_t m_next_chunk_size;
-		uint64_t m_end;
-		uint64_t m_begin;
+		size_t m_next_chunk_size;
+		size_t m_end;
+		size_t m_begin;
 		chunk* m_first_chunk;
 		chunk* m_last_chunk;
 	};

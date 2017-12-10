@@ -1,6 +1,6 @@
 #pragma once
 
-#include "memory_resource.h"
+#include "host_memory.h"
 #include "vector.h"
 #include <stdint.h>
 
@@ -18,14 +18,14 @@ namespace rcq
 	public:
 		slot_map() {}
 
-		slot_map(uint32_t chunk_size, memory_resource* memory) :
+		slot_map(size_t chunk_size, host_memory* memory) :
 			m_memory(memory),
 			m_chunks(memory),
 			m_size(0),
 			m_capacity(0)
 		{}
 
-		void init(uint32_t chunk_size, memory_resource* memory)
+		void init(uint32_t chunk_size, host_memory* memory)
 		{
 			m_memory = memory;
 			m_chunks.init(memory);
@@ -154,18 +154,18 @@ namespace rcq
 		};
 
 		vector<chunk> m_chunks;
-		memory_resource* m_memory;
-		uint32_t m_chunk_size;
-		uint32_t m_size;
-		uint32_t m_capacity;
+		host_memory* m_memory;
+		size_t m_chunk_size;
+		size_t m_size;
+		size_t m_capacity;
 		uint32_t m_next_slot;
 
 		void extend()
 		{
 
-			constexpr uint64_t alignment = alignof(T) < alignof(slot) ?  alignof(slot) : alignof(T);
+			constexpr size_t alignment = alignof(T) < alignof(slot) ?  alignof(slot) : alignof(T);
 
-			uint64_t new_chunk_pointer = m_memory->allocate(sizeof(T) + sizeof(slot*) + sizeof(slot))*chunk_size), alignment);
+			size_t new_chunk_pointer = m_memory->allocate(sizeof(T) + sizeof(slot*) + sizeof(slot))*chunk_size), alignment);
 
 			auto new_chunk = m_chunks.push_back();
 			new_chunk->data = reinterpret_cast<T*>(new_chunk_pointer);

@@ -13,6 +13,33 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="memory_resources">
+      <UniqueIdentifier>{b765f944-5b4f-472c-8c5e-1fe76cb99d01}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="memory_resources\host">
+      <UniqueIdentifier>{d068d0bc-8523-4ee5-89be-52fcbd129fbb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="memory_resources\device">
+      <UniqueIdentifier>{8b73f6ad-6a46-4fba-8098-5d4ed485a526}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="containers">
+      <UniqueIdentifier>{41563014-3f6e-43a5-bacb-bb13331e3c9b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="graphics_pipelines">
+      <UniqueIdentifier>{123a0078-992c-49ef-800a-c2a2af7b21e7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="compute_pipelines">
+      <UniqueIdentifier>{ec9112c9-d066-4cfc-baf4-ad177593074a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="render_passes">
+      <UniqueIdentifier>{e4b73206-7ed8-46e1-befb-e45311c9c957}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="enums">
+      <UniqueIdentifier>{e120d36c-f72b-4ca4-a60d-5ca37ac1c99a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="consts">
+      <UniqueIdentifier>{e787eee5-8732-4880-8cf4-0502a682da40}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -39,20 +66,41 @@
     <ClCompile Include="basic_pass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="device_memory.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="omni_light_shadow_pass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="gta5_pass.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="host_memory.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="terrain_manager.cpp">
       <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="utility.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="create_graphics_pipelines.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="create_render_passes.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="create_compute_pipelines.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="allocate_and_update_dss.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="create_descriptor_pool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="create_resources.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="create_framebuffers.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="create_samplers.cpp">
+      <Filter>Header Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -80,9 +128,6 @@
     <ClInclude Include="basic_pass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="device_memory.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="omni_light_shadow_pass.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -98,71 +143,242 @@
     <ClInclude Include="foundation2.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="slot_map.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="monotonic_buffer_resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="freelist_resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="memory_resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vector.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="list.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="stack.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="queue.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="host_memory.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="null_memory_resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="malloc_free_resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="freelist_resource_host.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="monotonic_buffer_resource_host.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="hash_table.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="iterator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="device_memory_resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vk_memory_resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vk_allocator.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="pool_memory_resource_host.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="array.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="pool_memory_resource.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="terrain_manager.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_memory.h">
+      <Filter>memory_resources\device</Filter>
+    </ClInclude>
+    <ClInclude Include="vk_allocator.h">
+      <Filter>memory_resources\host</Filter>
+    </ClInclude>
+    <ClInclude Include="vector.h">
+      <Filter>containers</Filter>
+    </ClInclude>
+    <ClInclude Include="stack.h">
+      <Filter>containers</Filter>
+    </ClInclude>
+    <ClInclude Include="slot_map.h">
+      <Filter>containers</Filter>
+    </ClInclude>
+    <ClInclude Include="pool_host_memory.h">
+      <Filter>memory_resources\host</Filter>
+    </ClInclude>
+    <ClInclude Include="pool_device_memory.h">
+      <Filter>memory_resources\device</Filter>
+    </ClInclude>
+    <ClInclude Include="monotonic_buffer_host_memory.h">
+      <Filter>memory_resources\host</Filter>
+    </ClInclude>
+    <ClInclude Include="monotonic_buffer_device_memory.h">
+      <Filter>memory_resources\device</Filter>
+    </ClInclude>
+    <ClInclude Include="host_memory.h">
+      <Filter>memory_resources\host</Filter>
+    </ClInclude>
+    <ClInclude Include="os_memory.h">
+      <Filter>memory_resources\host</Filter>
+    </ClInclude>
+    <ClInclude Include="freelist_host_memory.h">
+      <Filter>memory_resources\host</Filter>
+    </ClInclude>
+    <ClInclude Include="freelist_device_memory.h">
+      <Filter>memory_resources\device</Filter>
+    </ClInclude>
+    <ClInclude Include="array.h">
+      <Filter>containers</Filter>
+    </ClInclude>
+    <ClInclude Include="list.h">
+      <Filter>containers</Filter>
+    </ClInclude>
+    <ClInclude Include="device_memory.h">
+      <Filter>memory_resources\device</Filter>
+    </ClInclude>
+    <ClInclude Include="hash_table.h">
+      <Filter>containers</Filter>
+    </ClInclude>
+    <ClInclude Include="resources.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="renderables.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dp_pool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="iterator.h">
+      <Filter>containers</Filter>
+    </ClInclude>
+    <ClInclude Include="utility.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vertex.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="glm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="vulkan.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="cp_create_info.h">
+      <Filter>compute_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_create_info.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_create_info.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_environment_map_gen.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_dir_shadow_map_gen.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_preimage_assembler.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_gbuffer_assembler.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_refraction_image_gen.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_water_drawer.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_postprocessing.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_gp.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_cp.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_rp.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_dsl_type.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="const_swap_chain_image_extent.h">
+      <Filter>consts</Filter>
+    </ClInclude>
+    <ClInclude Include="const_dir_shadow_map_size.h">
+      <Filter>consts</Filter>
+    </ClInclude>
+    <ClInclude Include="const_environment_map_size.h">
+      <Filter>consts</Filter>
+    </ClInclude>
+    <ClInclude Include="const_frustum_split_count.h">
+      <Filter>consts</Filter>
+    </ClInclude>
+    <ClInclude Include="const_swap_chain_image_count.h">
+      <Filter>consts</Filter>
+    </ClInclude>
+    <ClInclude Include="const_max_alignment.h">
+      <Filter>consts</Filter>
+    </ClInclude>
+    <ClInclude Include="cp_bloom.h">
+      <Filter>compute_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="cp_terrain_tile_request.h">
+      <Filter>compute_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="cp_water_fft.h">
+      <Filter>compute_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_dir_shadow_map_gen.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_environment_map_gen_mat.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_environment_map_gen_sky.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_opaque_obj_drawer.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_image_assembler.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_postprocessing.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_refraction_map_gen.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_sky_drawer.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_ss_dir_shadow_map_blur.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_ss_dir_shadow_map_gen.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_ssao_blur.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_ssao_gen.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_ssr_ray_casting.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_sun_drawer.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_terrain_drawer.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="gp_water_drawer.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="rp_ssao_gen.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_res_data.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="res_data.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dp.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_res_image.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="gps.h">
+      <Filter>graphics_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="cps.h">
+      <Filter>compute_pipelines</Filter>
+    </ClInclude>
+    <ClInclude Include="rps.h">
+      <Filter>render_passes</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_res_type.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_tex_type.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_tex_type_flag.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_rend_type.h">
+      <Filter>enums</Filter>
+    </ClInclude>
+    <ClInclude Include="enum_sampler_type.h">
+      <Filter>enums</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

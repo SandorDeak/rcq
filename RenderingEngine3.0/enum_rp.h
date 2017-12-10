@@ -1,0 +1,19 @@
+#pragma once
+
+#include <stdint.h>
+
+namespace rcq
+{
+	enum RP : uint32_t
+	{
+		RP_ENVIRONMENT_MAP_GEN,
+		RP_DIR_SHADOW_MAP_GEN,
+		RP_GBUFFER_ASSEMBLER,
+		RP_SSAO_MAP_GEN,
+		RP_PREIMAGE_ASSEMBLER,
+		RP_REFRACTION_IMAGE_GEN,
+		RP_WATER_DRAWER,
+		RP_POSTPROCESSING,
+		RP_COUNT
+	};
+}

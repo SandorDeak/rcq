@@ -1,7 +1,7 @@
 #pragma once
 
 #include "foundation.h"
-#include "memory_resource.h"
+#include "host_memory.h"
 
 namespace rcq
 {
@@ -10,7 +10,7 @@ namespace rcq
 	public:
 		vk_allocator() {}
 
-		vk_allocator(memory_resource* memory) :
+		vk_allocator(host_memory* memory) :
 			m_memory(memory)
 		{
 			m_callbacks.pUserData = reinterpret_cast<void*>(this);
@@ -21,7 +21,7 @@ namespace rcq
 			m_callbacks.pfnInternalFree = &internal_free_notification_static;
 		}
 
-		void init(memory_resource* memory)
+		void init(host_memory* memory)
 		{
 			m_memory = memory;
 
@@ -39,16 +39,16 @@ namespace rcq
 		}
 	private:
 		VkAllocationCallbacks m_callbacks;
-		memory_resource* m_memory;
+		host_memory* m_memory;
 
 		void* alloc(size_t size, size_t alignment)
 		{
-			return reinterpret_cast<void*>(m_memory->allocate(static_cast<uint64_t>(size), static_cast<uint64_t>(alignment)));
+			return reinterpret_cast<void*>(m_memory->allocate(size, alignment));
 		}
 
 		void free(void* ptr)
 		{
-			m_memory->deallocate(reinterpret_cast<uint64_t>(ptr));
+			m_memory->deallocate(reinterpret_cast<size_t>(ptr));
 		}
 
 		void* realloc(void* original, size_t size, size_t alignment, VkSystemAllocationScope scope)

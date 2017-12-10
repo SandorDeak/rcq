@@ -1,35 +1,45 @@
 #pragma once
 
-#include "memory_resource.h"
-#include "malloc_free_resource.h"
-#include "freelist_resource_host.h"
-#include "freelist_resource.h"
-
 namespace rcq
 {
 	class host_memory
 	{
 	public:
-		host_memory(const host_memory&) = delete;
-		host_memory(host_memory&&) = delete;
-		~host_memory();
+		host_memory() {}
 
-		static void init();
-		static void destroy();
-		static host_memory* instance() { return m_instance; }
+		host_memory(size_t max_alignment, host_memory* upstream) :
+			m_upstream(upstream),
+			m_max_alignment(max_alignment)
+		{}
 
-		freelist_resource* resource() { return m_base_resource; }
-		malloc_free_resource* os_resource() { return &m_os_resource; }
+		virtual ~host_memory() {}
 
+		virtual size_t allocate(size_t size, size_t alignment) = 0;
+		virtual void deallocate(size_t p) = 0;
 
-	private:
-		host_memory();
+		static size_t align(size_t p, size_t alignment)
+		{
+			return (p + (alignment - 1)) & (~(alignment - 1));
+		}
 
-		static host_memory* m_instance;
+		size_t max_alignment()
+		{
+			return m_max_alignment;
+		}
 
-		malloc_free_resource m_os_resource;
-		//freelist_resource_host* m_base_resource;
-		freelist_resource<size_t>* m_base_resource;
+		host_memory* upstream() const
+		{
+			return m_upstream;
+		}
+
+	protected:
+		void init(size_t max_alignment, host_memory* upstream)
+		{
+			m_max_alignment = max_alignment;
+			m_upstream = upstream;
+		}
+
+		host_memory* m_upstream;
+		size_t m_max_alignment;
 	};
 }
-

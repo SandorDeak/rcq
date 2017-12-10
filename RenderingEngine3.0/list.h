@@ -1,6 +1,6 @@
 #pragma once
 
-#include "memory_resource.h"
+#include "host_memory.h"
 #include "iterator.h"
 
 namespace rcq
@@ -131,7 +131,7 @@ namespace rcq
 
 		list() {}
 
-		list(memory_resource* memory) :
+		list(host_memory* memory) :
 			m_memory(memory),
 			m_first_available_node(nullptr),
 			m_size(0)
@@ -140,7 +140,7 @@ namespace rcq
 			m_end.prev = &m_rend;
 		}
 
-		void init(memory_resource* memory)
+		void init(host_memory* memory)
 		{
 			m_memory = memory;
 		}
@@ -392,7 +392,7 @@ namespace rcq
 		basic_node m_end;
 		size_t m_size;
 		node* m_first_available_node;
-		memory_resource* m_memory;
+		host_memory* m_memory;
 
 		node* get_node()
 		{

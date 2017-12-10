@@ -1,6 +1,6 @@
 #pragma once
 
-#include "memory_resource.h"
+#include "host_memory.h"
 
 namespace rcq
 {
@@ -10,14 +10,14 @@ namespace rcq
 	public:
 		stack() {}
 
-		stack(memory_resource* memory) :
+		stack(host_memory* memory) :
 			m_memory(memory),
 			m_size(0),
 			m_top_node(nullptr),
 			m_first_available_node(nullptr)
 		{}
 
-		void init(memory_resource* memory)
+		void init(host_memory* memory)
 		{
 			m_memory = memory;
 			m_size = 0;
@@ -138,7 +138,7 @@ namespace rcq
 		node* m_top_node;
 		node* m_first_available_node;
 		size_t m_size;
-		memory_resource* m_memory;
+		host_memory* m_memory;
 
 		node* get_node()
 		{

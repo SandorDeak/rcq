@@ -1,67 +1,78 @@
 #pragma once
-#include "foundation.h"
-#include "freelist_resource.h"
-#include "vk_memory_resource.h"
-#include "vk_allocator.h"
 
-#include "vector.h"
+#include "vulkan.h"
 
 namespace rcq
 {
-	class device_memory
+	class device_memory 
 	{
 	public:
-		enum
+		device_memory() {}
+
+		device_memory(VkDeviceSize max_alignment, VkDevice device, const VkDeviceMemory* handle, device_memory* upstream) :
+			m_device(device),
+			m_handle(handle)
+		{}
+
+		virtual ~device_memory() {}
+
+		VkDeviceMemory handle() const
 		{
-			local,
-			mappable,
-			count
-		};
-
-		device_memory(const device_memory&) = delete;
-		device_memory(device_memory&&) = delete;
-		~device_memory();
-
-		static void init(const base_info& base, memory_resource* host_memory_resource);
-		static void destroy();
-		static device_memory* instance() { return m_instance; }
-
-		/*void acquire_resource()
-		{
-			bool exp=true;
-			while (!m_memory_res_available.compare_exchange_weak(exp, false, std::memory_order_acquire))
-				exp = true;
+			return *m_handle;
 		}
 
-		void release_resource()
+		const VkDeviceMemory* handle_ptr()
 		{
-			bool exp = false;
-			if (!m_memory_res_available.compare_exchange_weak(exp, true, std::memory_order_release))
-				throw std::runtime_error("synchronization error at device memory!");
-		}*/
-
-		freelist_resource* resource()
-		{
-			return m_memory_res;
+			return m_handle;
 		}
 
-		uint32_t find_memory_type(uint32_t type_filter, VkMemoryPropertyFlags properties);
+		VkDevice device() const
+		{
+			return m_device;
+		}
 
-	private:
-		freelist_resource* m_memory_res;
-		vk_memory_resource* m_vk_memory_res;
+		size_t map(VkDeviceSize p, VkDeviceSize size)
+		{
+			void* data;
+			vkMapMemory(m_device, *m_handle, p, size, 0, &data);
+			return reinterpret_cast<size_t>(data);
+		}
+		void unmap()
+		{
+			vkUnmapMemory(m_device, *m_handle);
+		}
 
-		device_memory(const base_info& base, memory_resource* host_memory_resource);
+		virtual VkDeviceSize allocate(VkDeviceSize size, VkDeviceSize alignment) = 0;
+		virtual void deallocate(VkDeviceSize p) = 0;
 
-		static device_memory* m_instance;
+		static VkDeviceSize align(VkDeviceSize p, VkDeviceSize alignment)
+		{
+			return (p + (alignment - 1)) & (~(alignment - 1));
+		}
 
-		const base_info& m_base;
-		   
-		static memory_resource*  m_host_memory_resource;
+		VkDeviceSize max_alignment()
+		{
+			return m_max_alignment;
+		}
 
-		vk_allocator m_vk_alloc;
+		device_memory* upstream() const
+		{
+			return m_upstream;
+		}
 
-		uint32_t m_mappable_memory_type_index;
+	protected:
 
+		void init(VkDeviceSize max_alignment, VkDevice device, const VkDeviceMemory* handle, device_memory* upstream)
+		{
+			m_device = device;
+			m_handle = handle;
+			m_max_alignment = max_alignment;
+			m_upstream = upstream;
+		}
+
+		device_memory* m_upstream;
+		VkDeviceSize m_max_alignment;
+		const VkDeviceMemory* m_handle;
+		VkDevice m_device;
 	};
 }

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "memory_resource.h"
+#include "host_memory.h"
 
 namespace rcq
 {
@@ -12,7 +12,7 @@ namespace rcq
 
 		vector() {}
 
-		vector(memory_resource* memory, uint32_t size = 0) :
+		vector(host_memory* memory, size_t size = 0) :
 			m_memory(memory),
 			m_size(size),
 			m_data(nullptr)
@@ -28,7 +28,7 @@ namespace rcq
 			}
 		}
 
-		void init(memory_resource* memory, uint32_t size = 0)
+		void init(memory_resource* memory, size_t size = 0)
 		{
 			m_memory = memory;
 			m_size = size;
@@ -185,17 +185,17 @@ namespace rcq
 				while (m_capacity < size)
 					m_capacity <<= 1;
 
-				m_memory->deallocate(reinterpret_cast<uint64_t>(m_data));
+				m_memory->deallocate(reinterpret_cast<size_t>(m_data));
 				m_memory->allocate(m_capacity * sizeof(T));
 				m_size = size;
 			}
 		}
 
 	private:
-		memory_resource* m_memory;
+		host_memory* m_memory;
 		T* m_data;
-		uint32_t m_size;
-		uint32_t m_capacity;
+		size_t m_size;
+		size_t m_capacity;
 
 		void release()
 		{

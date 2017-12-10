@@ -1,0 +1,195 @@
+#pragma once
+
+#include "rp_create_info.h"
+#include <array>
+
+namespace rcq
+{
+	template<>
+	struct rp_create_info<RP_GBUFFER_ASSEMBLER>
+	{
+		enum ATT
+		{
+			ATT_DEPTHSTENCIL,
+			ATT_POS_ROUGHNESS,
+			ATT_BASECOLOR_SSAO,
+			ATT_METALNESS_SSDS,
+			ATT_NORMAL_AO,
+			ATT_SS_DIR_SHADOW_MAP,
+			ATT_COUNT
+		};
+
+		enum SUBPASS
+		{
+			SUBPASS_GBUFFER_GEN,
+			SUBPASS_SS_DIR_SHADOW_MAP_GEN,
+			SUBPASS_COUNT
+		};
+
+		enum DEP
+		{
+			DEP_GBUFFER_GEN_SSDS_GEN,
+			DEP_COUNT
+		};
+
+		template<uint32_t subpass_type>
+		struct subpass;
+
+		template<>
+		struct subpass<SUBPASS_GBUFFER_GEN>
+		{
+			static constexpr std::array<VkAttachmentReference, 4> ref_colors =
+			{
+				ATT_POS_ROUGHNESS,
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+
+				ATT_BASECOLOR_SSAO,
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+
+				ATT_METALNESS_SSDS,
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+
+				ATT_NORMAL_AO,
+				VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+			};
+			static constexpr VkAttachmentReference ref_depth =
+			{
+				ATT_DEPTHSTENCIL,
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+			};
+		};
+		template<>
+		struct subpass<SUBPASS_SS_DIR_SHADOW_MAP_GEN>
+		{
+			static constexpr VkAttachmentReference ref_depth =
+			{
+				ATT_SS_DIR_SHADOW_MAP,
+				VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+			};
+			static constexpr std::array<VkAttachmentReference, 2> ref_inputs =
+			{
+				ATT_POS_ROUGHNESS,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				ATT_NORMAL_AO,
+				VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+			};
+		};
+
+		static constexpr std::array<VkAttachmentDescription, ATT_COUNT> atts =
+		{
+			//ATT_DEPTHSTENCIL
+			0,
+			VK_FORMAT_D32_SFLOAT_S8_UINT,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_CLEAR,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+
+			//ATT_POS_ROUGHNESS
+			0,
+			VK_FORMAT_R32G32B32A32_SFLOAT,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+
+			//ATT_BASECOLOR_SSAO
+			0,
+			VK_FORMAT_R32G32B32A32_SFLOAT,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+
+			//ATT_METALNESS_SSDS
+			0,
+			VK_FORMAT_R32G32B32A32_SFLOAT,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+
+			//ATT_NORMAL_AO
+			0,
+			VK_FORMAT_R32G32B32A32_SFLOAT,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+
+			//ATT_SS_DIR_SHADOW_MAP
+			0,
+			VK_FORMAT_D32_SFLOAT,
+			VK_SAMPLE_COUNT_1_BIT,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_STORE,
+			VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+			VK_ATTACHMENT_STORE_OP_DONT_CARE,
+			VK_IMAGE_LAYOUT_UNDEFINED,
+			VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
+		};
+
+		static constexpr std::array<VkSubpassDependency, DEP_COUNT> deps =
+		{
+			//DEP_GBUFFER_GEN_SSDS_GEN
+			SUBPASS_GBUFFER_GEN,
+			SUBPASS_SS_DIR_SHADOW_MAP_GEN,
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+			VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,
+			0
+		};
+		static constexpr std::array<VkSubpassDescription, SUBPASS_COUNT> subpasses =
+		{
+			0,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			0,
+			nullptr,
+			subpass<0>::ref_colors.size(),
+			subpass<0>::ref_colors.data(),
+			nullptr,
+			&subpass<0>::ref_depth,
+			0,
+			nullptr,
+
+			0,
+			VK_PIPELINE_BIND_POINT_GRAPHICS,
+			subpass<1>::ref_inputs.size(),
+			subpass<1>::ref_inputs.data(),
+			0,
+			nullptr,
+			nullptr,
+			&subpass<1>::ref_depth,
+			0,
+			nullptr
+		};
+		static constexpr VkRenderPassCreateInfo create_info =
+		{
+			VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+			nullptr,
+			0,
+			atts.size(),
+			atts.data(),
+			subpasses.size(),
+			subpasses.data(),
+			deps.size(),
+			deps.data()
+		};
+	};
+}

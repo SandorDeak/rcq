@@ -1,27 +1,26 @@
 #pragma once
 
-#include "memory_resource.h"
+#include "host_memory.h"
 #include <limits>
-#include <stdexcept>
 #include <assert.h>
 
 namespace rcq
 {
 
-	class freelist_resource_host : public memory_resource
+	class freelist_host_memory : public host_memory
 	{
 	public:
-		freelist_resource_host() {}
+		freelist_host_memory() {}
 
-		freelist_resource_host(uint64_t size, uint64_t max_alignment, memory_resource* upstream) :
-			memory_resource(max_alignment<alignof(block) ? alignof(block) : max_alignment, upstream)
+		freelist_host_memory(size_t size, size_t max_alignment, host_memory* upstream) :
+			host_memory(max_alignment<alignof(block) ? alignof(block) : max_alignment, upstream)
 		{
 			static_assert(sizeof(block) % alignof(block) == 0);
 
 			assert(m_max_alignment < m_upstream->max_alignment());
 			assert(size >= 3 * sizeof(block));
 
-			uint64_t begin = m_upstream->allocate(size, max_alignment);
+			size_t begin = m_upstream->allocate(size, max_alignment);
 			m_begin = reinterpret_cast<block*>(begin);
 			m_end = m_begin + 1;
 
@@ -43,14 +42,14 @@ namespace rcq
 			m_end->prev_free = b;
 		}
 
-		void init(uint64_t size, uint64_t max_alignment, memory_resource* upstream)
+		void init(size_t size, size_t max_alignment, host_memory* upstream)
 		{
-			memory_resource::init(max_alignment < alignof(block) ? alignof(block) : max_alignment, upstream);
+			host_memory::init(max_alignment < alignof(block) ? alignof(block) : max_alignment, upstream);
 
 			assert(m_max_alignment < m_upstream->max_alignment());
 			assert(size >= 3 * sizeof(block));
 
-			uint64_t begin = m_upstream->allocate(size, max_alignment);
+			size_t begin = m_upstream->allocate(size, max_alignment);
 			m_begin = reinterpret_cast<block*>(begin);
 			m_end = m_begin + 1;
 
@@ -72,12 +71,12 @@ namespace rcq
 			m_end->prev_free = b;
 		}
 
-		~freelist_resource_host()
+		~freelist_host_memory()
 		{
 			m_upstream->deallocate(m_begin->begin);
 		}
 
-		uint64_t allocate(uint64_t size, uint64_t alignment) override
+		size_t allocate(size_t size, size_t alignment) override
 		{
 
 			assert(alignment <= m_max_alignment);
@@ -86,16 +85,16 @@ namespace rcq
 			size = align(size, alignof(block));
 
 			block* choosen_block = nullptr;
-			uint64_t remaining = std::numeric_limits<size_t>::max();
-			uint64_t aligned_begin;
-			uint64_t aligned_end;
+			size_t remaining = std::numeric_limits<size_t>::max();
+			size_t aligned_begin;
+			size_t aligned_end;
 
 			block* b = m_begin->next_free;
 			while (b != m_end)
 			{
-				uint64_t temp_aligned_begin = align(b->begin + sizeof(block), alignment);
-				uint64_t temp_aligned_end = temp_aligned_begin + size;
-				uint64_t temp_remaining = b->end - temp_aligned_end;
+				size_t temp_aligned_begin = align(b->begin + sizeof(block), alignment);
+				size_t temp_aligned_end = temp_aligned_begin + size;
+				size_t temp_remaining = b->end - temp_aligned_end;
 				if (temp_aligned_end <= b->end && temp_remaining < remaining)
 				{
 					choosen_block = b;
@@ -108,8 +107,7 @@ namespace rcq
 				b = b->next_free;
 			}
 
-			if (choosen_block == nullptr)
-				throw std::runtime_error("out of memory!");
+			assert(choosen_block != nullptr);
 
 			if (reinterpret_cast<size_t>(choosen_block) + sizeof(block) != aligned_begin)
 			{
@@ -149,7 +147,7 @@ namespace rcq
 			return aligned_begin;
 		}
 
-		void deallocate(uint64_t p) override
+		void deallocate(size_t p) override
 		{
 			block* dealloc_block = reinterpret_cast<block*>(p - sizeof(block));
 
@@ -191,8 +189,8 @@ namespace rcq
 			block* next;
 			block* next_free;
 			block* prev_free;
-			uint64_t begin;
-			uint64_t end;
+			size_t begin;
+			size_t end;
 			bool free;
 
 		};

@@ -1,33 +1,33 @@
 #pragma once
 
-#include<stdexcept>
 #include <assert.h>
 
-#include "device_memory_resource.h"
+#include "device_memory.h"
+#include "host_memory.h"
 
 namespace rcq
 {
-	class freelist_resource : public device_memory_resource
+	class freelist_device_memory : public device_memory
 	{
 	public:
-		freelist_resource() {}
+		freelist_device_memory() {}
 
-		freelist_resource(uint64_t size, uint64_t alignment, device_memory_resource* upstream,
-			memory_resource* metadata_memory_resource) :
-			device_memory_resource(alignment, upstream->device(), upstream->handle(), upstream),
-			m_metadata_resource(metadata_memory_resource)
+		freelist_device_memory(VkDeviceSize size, VkDeviceSize alignment, device_memory* upstream,
+			host_memory* metadata_memory) :
+			device_memory(alignment, upstream->device(), upstream->handle_ptr(), upstream),
+			m_metadata_memory(metadata_memory)
 		{
 			static_assert(sizeof(block) % alignof(block) == 0);
 
 			assert(m_max_alignment <= m_upstream->max_alignment());
-			assert(alignof(block) <= m_metadata_resource->max_alignment());
+			assert(alignof(block) <= m_metadata_memory->max_alignment());
 
-			m_begin = reinterpret_cast<block*>(m_metadata_resource->allocate(2 * sizeof(block), alignof(block)));
+			m_begin = reinterpret_cast<block*>(m_metadata_memory->allocate(2 * sizeof(block), alignof(block)));
 			m_end = m_begin + 1;
 
 
-			uint64_t data = m_upstream->allocate(size, alignment);
-			block* b = reinterpret_cast<block*>(m_metadata_resource->allocate(2 * sizeof(block), alignof(block)));;
+			VkDeviceSize data = m_upstream->allocate(size, alignment);
+			block* b = reinterpret_cast<block*>(m_metadata_memory->allocate(2 * sizeof(block), alignof(block)));
 			b->begin = data;
 			b->end = data + size;
 			b->prev = m_begin;
@@ -49,21 +49,21 @@ namespace rcq
 			m_end->free = false;
 		}
 
-		void init(uint64_t size, uint64_t alignment, device_memory_resource* upstream,
-			memory_resource* metadata_memory_resource)
+		void init(VkDeviceSize size, VkDeviceSize alignment, device_memory* upstream,
+			host_memory* metadata_memory)
 		{
-			device_memory_resource::init(alignment, upstream->device(), upstream->handle(), upstream);
-			m_metadata_resource = metadata_memory_resource;
+			device_memory::init(alignment, upstream->device(), upstream->handle_ptr(), upstream);
+			m_metadata_memory = metadata_memory;
 
 			assert(m_max_alignment <= m_upstream->max_alignment());
-			assert(alignof(block) <= m_metadata_resource->max_alignment());
+			assert(alignof(block) <= m_metadata_memory->max_alignment());
 
-			m_begin = reinterpret_cast<block*>(m_metadata_resource->allocate(2 * sizeof(block), alignof(block)));
+			m_begin = reinterpret_cast<block*>(m_metadata_memory->allocate(2 * sizeof(block), alignof(block)));
 			m_end = m_begin + 1;
 
 
-			uint64_t data = m_upstream->allocate(size, alignment);
-			block* b = reinterpret_cast<block*>(m_metadata_resource->allocate(2 * sizeof(block), alignof(block)));;
+			VkDeviceSize data = m_upstream->allocate(size, alignment);
+			block* b = reinterpret_cast<block*>(m_metadata_memory->allocate(2 * sizeof(block), alignof(block)));;
 			b->begin = data;
 			b->end = data + size;
 			b->prev = m_begin;
@@ -86,25 +86,25 @@ namespace rcq
 		}
 
 
-		~freelist_resource()
+		~freelist_device_memory()
 		{
 			m_upstream->deallocate(m_begin->next->begin);
 			while (m_begin->next != m_end)
 			{
 				block* next = m_begin->next->next;
-				m_metadata_resource->deallocate(reinterpret_cast<size_t>(m_begin->next));
+				m_metadata_memory->deallocate(reinterpret_cast<size_t>(m_begin->next));
 				m_begin->next = next;
 			}
 			while (m_end->next != m_begin)
 			{
 				block* next = m_end->next->next;
-				m_metadata_resource->deallocate(reinterpret_cast<size_t>(m_end->next));
+				m_metadata_memory->deallocate(reinterpret_cast<size_t>(m_end->next));
 				m_end->next = next;
 			}
-			m_metadata_resource->deallocate(reinterpret_cast<size_t>(m_begin));
+			m_metadata_memory->deallocate(reinterpret_cast<size_t>(m_begin));
 		}
 
-		uint64_t allocate(uint64_t size, uint64_t alignment) override
+		VkDeviceSize allocate(VkDeviceSize size, VkDeviceSize alignment) override
 		{
 			assert(alignment <= m_max_alignment);
 
@@ -112,16 +112,16 @@ namespace rcq
 			size = align(size, alignof(block));
 
 			block* choosen_block = nullptr;
-			uint64_t remaining = std::numeric_limits<uint64_t>::max();
-			uint64_t aligned_begin;
-			uint64_t aligned_end;
+			VkDeviceSize remaining = std::numeric_limits<VkDeviceSize>::max();
+			VkDeviceSize aligned_begin;
+			VkDeviceSize aligned_end;
 
 			block* b = m_begin->next_free;
 			while (b != m_end)
 			{
-				uint64_t temp_aligned_begin = align(b->begin, alignment);
-				uint64_t temp_aligned_end = temp_aligned_begin + size;
-				uint64_t temp_remaining = b->end - temp_aligned_end;
+				VkDeviceSize temp_aligned_begin = align(b->begin, alignment);
+				VkDeviceSize temp_aligned_end = temp_aligned_begin + size;
+				VkDeviceSize temp_remaining = b->end - temp_aligned_end;
 				if (temp_aligned_end <= b->end && temp_remaining < remaining)
 				{
 					choosen_block = b;
@@ -134,8 +134,7 @@ namespace rcq
 				b = b->next_free;
 			}
 
-			if (choosen_block == nullptr)
-				throw std::runtime_error("out of memory!");
+			assert(choosen_block != nullptr);
 
 			choosen_block->free = false;
 			choosen_block->prev_free->next_free = choosen_block->next_free;
@@ -151,7 +150,7 @@ namespace rcq
 				block* new_block;
 				if (m_end->next == m_begin)
 				{
-					new_block = reinterpret_cast<block*>(m_metadata_resource->allocate(sizeof(block), alignof(block)));
+					new_block = reinterpret_cast<block*>(m_metadata_memory->allocate(sizeof(block), alignof(block)));
 				}
 				else
 				{
@@ -179,7 +178,7 @@ namespace rcq
 			return aligned_begin;
 		}
 
-		void deallocate(uint64_t p)
+		void deallocate(VkDeviceSize p)
 		{
 			block* dealloc_block=m_begin->next_res;
 			while (!(dealloc_block->begin <= p && p < dealloc_block->end))
@@ -231,8 +230,8 @@ namespace rcq
 	private:
 		struct block
 		{
-			uint64_t begin;
-			uint64_t end;
+			VkDeviceSize begin;
+			VkDeviceSize end;
 			block* prev;
 			block* next;
 			block* prev_free;
@@ -245,6 +244,6 @@ namespace rcq
 		block* m_begin;
 		block* m_end;
 
-		memory_resource* m_metadata_resource;
+		host_memory* m_metadata_memory;
 	};
 }

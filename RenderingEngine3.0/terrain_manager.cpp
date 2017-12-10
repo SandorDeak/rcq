@@ -1,4 +1,6 @@
 #include "terrain_manager.h"
+#include "host_memory.h"
+#include "device_memory.h"
 
 using namespace rcq;
 
@@ -10,6 +12,21 @@ terrain_manager::terrain_manager(const base_info& base, memory_resource* host_me
 
 terrain_manager::~terrain_manager()
 {
+}
+
+void terrain_manager::create_memory_resources_and_containers()
+{
+	m_host_memory_res.init(64 * 1024 * 1024, host_memory::instance()->resource()->max_alignment(), host_memory::instance()->resource());
+	m_vk_alloc.init(&m_host_memory_res);
+
+	m_page_pool.init(64 * 64 * sizeof(glm::vec4), 256, device_memory::instance()->resource(), &m_host_memory_res);
+	m_mappable_memory_resource.init(m_base.device, device_memory::instance()->find_memory_type(~0,
+		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT), false, &m_vk_alloc);
+
+	m_request_queue.init(&m_host_memory_res);
+	m_request_queue.init_buffer();
+	m_result_queue.init(&m_host_memory_res);
+	m_result_queue.init_buffer();
 }
 
 void terrain_manager::poll_requests()
@@ -162,7 +179,7 @@ void terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
 		{
 			auto& r = regions[page_index];
-			r.bufferOffset = page_index*m_page_size + m_pages_staging_offset;
+			r.bufferOffset = page_index*m_page_size+m_pages_staging_offset;
 			r.imageOffset = {
 				static_cast<int32_t>(tile_offset2D_in_file.x + i*page_size.x),
 				static_cast<int32_t>(tile_offset2D_in_file.y + j*page_size.y),
@@ -220,7 +237,8 @@ void terrain_manager::init(const glm::uvec2& tile_count, const glm::uvec2& tile_
 	m_tile_size = tile_size;
 	m_tile_size_in_pages = tile_size / 64u;
 
-	uint64_t size = sizeof(request_data) + 2 * 4 * tile_count.x*tile_count.y;
+	uint64_t size = sizeof(request_data) + 2 * 4 * tile_count.x*tile_count.y+
+		m_tile_size_in_pages.x*m_tile_size_in_pages.y*64*64*sizeof(glm::vec4);
 
 	uint64_t requested_mip_levels_offset;
 	uint64_t current_mip_levels_offset;
@@ -239,7 +257,7 @@ void terrain_manager::init(const glm::uvec2& tile_count, const glm::uvec2& tile_
 
 		VkMemoryRequirements mr;
 		vkGetBufferMemoryRequirements(m_base.device, m_mapped_buffer, &mr);
-		uint64_t alignment = mr.alignment < alignof(request_data) ? alignof(request_data) : mr.alignment;
+		uint64_t alignment = 256; // mr.alignment < alignof(request_data) ? alignof(request_data) : mr.alignment;
 		m_mapped_offset = m_mappable_memory_resource.allocate(mr.size, alignment);
 		requested_mip_levels_offset = m_mapped_offset + sizeof(request_data);
 		current_mip_levels_offset = requested_mip_levels_offset + 4 * tile_count.x*tile_count.y;
@@ -249,6 +267,8 @@ void terrain_manager::init(const glm::uvec2& tile_count, const glm::uvec2& tile_
 		m_request_data = reinterpret_cast<request_data*>(data);
 		m_requested_mip_levels = reinterpret_cast<float*>(data + sizeof(request_data));
 		m_current_mip_levels = reinterpret_cast<float*>(data + sizeof(request_data) + 4 * tile_count.x*tile_count.y);
+		m_pages_staging = data + sizeof(request_data) + 2 * 4 * tile_count.x*tile_count.y;
+		m_pages_staging_offset=m_mapped_offset+ sizeof(request_data) + 2 * 4 * tile_count.x*tile_count.y;
 		m_request_data->request_count = 0;
 	}
 

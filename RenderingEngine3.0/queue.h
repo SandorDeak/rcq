@@ -1,6 +1,6 @@
 #pragma once
 
-#include "memory_resource.h"
+#include "host_memory.h"
 
 namespace rcq
 {
@@ -16,12 +16,12 @@ namespace rcq
 
 		queue() {}
 
-		queue(memory_resource* memory) :
+		queue(host_memory* memory) :
 			m_memory(memory),
 			m_size(0)
 		{}
 
-		void init(memory_resource* memory)
+		void init(host_memory* memory)
 		{
 			m_memory = memory;
 			m_size = 0;
@@ -176,7 +176,6 @@ namespace rcq
 
 		node* m_first_free;
 
-		memory_resouce* m_memory;
-	};
-	
+		host_memory* m_memory;
+	};	
 } //namespace rcq

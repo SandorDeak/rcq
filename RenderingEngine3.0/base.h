@@ -18,6 +18,7 @@ namespace rcq
 		static base* instance() { return m_instance; }
 
 		const base_info& get_info() { return m_base; };
+
 	private:
 		base(const base_create_info& info);
 

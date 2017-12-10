@@ -1,15 +1,15 @@
 #pragma once
-#include "foundation.h"
+//#include "foundation.h"
 
-#include "foundation2.h"
+//#include "foundation2.h"
 #include "queue.h"
 #include "array.h"
 #include "vector.h"
-#include "vk_memory_resource.h"
+#include "vk_memory.h"
 #include "vk_allocator.h"
-#include "pool_memory_resource.h"
-#include "freelist_resource_host.h"
-#include "monotonic_buffer_resource.h"
+#include "pool_device_memory.h"
+#include "freelist_host_memory.h"
+#include "monotonic_buffer_device_memory.h"
 #include "slot_map.h"
 
 namespace rcq
@@ -21,7 +21,7 @@ namespace rcq
 		gta5_pass(gta5_pass&&) = delete;
 		~gta5_pass();
 
-		static void init(const base_info& info);
+		static void init(const base_info& info, size_t place);
 		static void destroy();
 		static gta5_pass* instance() { return m_instance; }
 
@@ -72,43 +72,8 @@ namespace rcq
 		}
 
 	private:
-		enum RES_DATA
-		{
-			RES_DATA_ENVIRONMENT_MAP_GEN_MAT,
-			RES_DATA_ENVIRONMENT_MAP_GEN_SKYBOX,
-			RES_DATA_GBUFFER_GEN,
-			RES_DATA_DIR_SHADOW_MAP_GEN,
-			RES_DATA_SS_DIR_SHADOW_MAP_GEN,
-			RES_DATA_IMAGE_ASSEMBLER,
-			RES_DATA_SKY_DRAWER,
-			RES_DATA_SUN_DRAWER,
-			RES_DATA_TERRAIN_DRAWER,
-			RES_DATA_TERRAIN_TILE_REQUEST,
-			RES_DATA_WATER_COMPUTE,
-			RES_DATA_WATER_DRAWER,
-			RES_DATA_REFRACTION_MAP_GEN,
-			RES_DATA_SSR_RAY_CASTING,
-			RES_DATA_COUNT
-		};
-		enum RES_IMAGE
-		{
-			RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL,
-			RES_IMAGE_ENVIRONMENT_MAP,
-			RES_IMAGE_GB_POS_ROUGHNESS,
-			RES_IMAGE_GB_BASECOLOR_SSAO,
-			RES_IMAGE_GB_METALNESS_SSDS,
-			RES_IMAGE_GB_NORMAL_AO,
-			RES_IMAGE_GB_DEPTH,
-			RES_IMAGE_DIR_SHADOW_MAP,
-			RES_IMAGE_SS_DIR_SHADOW_MAP,
-			RES_IMAGE_SSAO_MAP,
-			RES_IMAGE_PREIMAGE,
-			RES_IMAGE_PREV_IMAGE,
-			RES_IMAGE_REFRACTION_IMAGE,
-			RES_IMAGE_SSR_RAY_CASTING_COORDS,
-			RES_IMAGE_BLOOM_BLUR,
-			RES_IMAGE_COUNT
-		};
+		
+		
 
 
 		enum MEMORY
@@ -133,13 +98,6 @@ namespace rcq
 			MEMORY_COUNT
 		};
 
-		enum SAMPLER
-		{
-			SAMPLER_UNNORMALIZED_COORD,
-			SAMPLER_GENERAL,
-			SAMPLER_COUNT
-		};
-
 		enum SECONDARY_CB
 		{
 			SECONDARY_CB_MAT_EM,
@@ -150,59 +108,9 @@ namespace rcq
 			SECONDARY_CB_COUNT
 		};
 
-		static const uint32_t ENVIRONMENT_MAP_SIZE = 128;
-		static const uint32_t DIR_SHADOW_MAP_SIZE = 1024;
-		static const uint32_t FRUSTUM_SPLIT_COUNT = 4;
-
-		enum RENDER_PASS
-		{
-			RENDER_PASS_ENVIRONMENT_MAP_GEN,
-			RENDER_PASS_DIR_SHADOW_MAP_GEN,
-			RENDER_PASS_GBUFFER_ASSEMBLER,
-			RENDER_PASS_SSAO_MAP_GEN,
-			RENDER_PASS_PREIMAGE_ASSEMBLER,
-			RENDER_PASS_REFRACTION_IMAGE_GEN,
-			RENDER_PASS_WATER,
-			RENDER_PASS_POSTPROCESSING,
-			RENDER_PASS_COUNT
-		};
-
-		enum GP
-		{
-			GP_ENVIRONMENT_MAP_GEN_MAT,
-			GP_ENVIRONMENT_MAP_GEN_SKYBOX,
-
-			GP_DIR_SHADOW_MAP_GEN,
-
-			GP_GBUFFER_GEN,
-			GP_SS_DIR_SHADOW_MAP_GEN,
-			GP_SS_DIR_SHADOW_MAP_BLUR,
-			GP_SSAO_GEN,
-			GP_SSAO_BLUR,
-			GP_SSR_RAY_CASTING,
-			GP_IMAGE_ASSEMBLER,
-			GP_TERRAIN_DRAWER,
-			GP_SKY_DRAWER,
-			GP_SUN_DRAWER,
-
-			GP_REFRACTION_IMAGE_GEN,
-			GP_WATER_DRAWER,
-
-			GP_POSTPROCESSING,
-			GP_COUNT
-		};
-
-		enum CP
-		{
-			CP_TERRAIN_TILE_REQUEST,
-			CP_WATER_FFT,
-			CP_BLOOM_BLUR,
-			CP_COUNT
-		};
-
 		struct pipeline
 		{
-			VkPipeline gp;
+			VkPipeline ppl;
 			VkPipelineLayout pl;
 			VkDescriptorSet ds;
 			VkDescriptorSetLayout dsl;
@@ -231,133 +139,7 @@ namespace rcq
 			VkImageView view;
 		};
 
-		template<uint32_t res_data>
-		struct resource_data;
-
-		template<>
-		struct resource_data<RES_DATA_ENVIRONMENT_MAP_GEN_MAT>
-		{
-			glm::mat4 view;
-			glm::vec3 dir; //in worlds space
-			uint32_t padding0;
-			glm::vec3 irradiance;
-			uint32_t padding1;
-			glm::vec3 ambient_irradiance;
-			uint32_t padding2;
-		};
-		template<>
-		struct resource_data<RES_DATA_ENVIRONMENT_MAP_GEN_SKYBOX>
-		{
-			glm::mat4 view;
-		};
-		template<>
-		struct resource_data<RES_DATA_GBUFFER_GEN>
-		{
-			glm::mat4 proj_x_view;
-			glm::vec3 cam_pos;
-		};
-		template<>
-		struct resource_data<RES_DATA_DIR_SHADOW_MAP_GEN>
-		{
-			glm::mat4 projs[FRUSTUM_SPLIT_COUNT];
-		};
-		template<>
-		struct resource_data<RES_DATA_SS_DIR_SHADOW_MAP_GEN>
-		{
-			glm::mat4 projs[FRUSTUM_SPLIT_COUNT];
-			glm::mat4 view;
-			glm::vec3 light_dir;
-			float near;
-			float far;
-		};
-		template<>
-		struct resource_data<RES_DATA_IMAGE_ASSEMBLER>
-		{
-			glm::mat4 previous_proj_x_view;
-			glm::vec3 previous_view_pos;
-			uint32_t padding0;
-			glm::vec3 dir; //in view space
-			float height_bias;
-			glm::vec3 irradiance;
-			uint32_t padding1;
-			glm::vec3 ambient_irradiance;
-			uint32_t padding2;
-			glm::vec3 cam_pos;
-			uint32_t padding3;
-		};
-		template<>
-		struct resource_data<RES_DATA_SKY_DRAWER>
-		{
-			glm::mat4 proj_x_view_at_origin;
-			glm::vec3 light_dir;
-			float height;
-			glm::vec3 irradiance;
-			uint32_t padding0;
-		};
-		template<>
-		struct resource_data<RES_DATA_SUN_DRAWER>
-		{
-			glm::mat4 proj_x_view_at_origin;
-			glm::vec3 light_dir;
-			uint32_t padding0;
-			glm::vec3 helper_dir;
-			float height;
-			glm::vec3 irradiance;
-			uint32_t padding1;
-		};
-		template<>
-		struct resource_data<RES_DATA_TERRAIN_DRAWER>
-		{
-			glm::mat4 proj_x_view;
-			glm::vec3 view_pos;
-			uint32_t padding0;
-		};
-		template<>
-		struct resource_data<RES_DATA_TERRAIN_TILE_REQUEST>
-		{
-			glm::vec3 view_pos;
-			float near;
-			float far;
-			uint32_t padding0[3];
-		};
-		template<>
-		struct resource_data<RES_DATA_WATER_DRAWER>
-		{
-			glm::mat4 proj_x_view;
-			glm::mat4 mirrored_proj_x_view;
-			glm::vec3 view_pos;
-			float height_bias;
-			glm::vec3 light_dir;
-			uint32_t padding0;
-			glm::vec3 irradiance;
-			uint32_t padding1;
-			glm::vec3 ambient_irradiance;
-			uint32_t padding2;
-			glm::vec2 tile_offset;
-			glm::vec2 tile_size_in_meter;
-			glm::vec2 half_resolution;
-		};
-		template<>
-		struct resource_data<RES_DATA_REFRACTION_MAP_GEN>
-		{
-			glm::mat4 proj_x_view;
-			glm::vec3 view_pos_at_ground;
-			float far;
-		};
-		template<>
-		struct resource_data<RES_DATA_SSR_RAY_CASTING>
-		{
-			glm::mat4 proj_x_view;
-			glm::vec3 view_pos;
-			float ray_length;
-		};
-		template<>
-		struct resource_data<RES_DATA_WATER_COMPUTE>
-		{
-			glm::vec2 wind_dir;
-			float one_over_wind_speed_to_the_4;
-			float time;
-		};
+		
 
 		struct framebuffers
 		{
@@ -432,11 +214,11 @@ namespace rcq
 
 		void create_memory_resources_and_containers();
 		void create_render_passes();
-		void create_dsls_and_allocate_dss();
 		void create_graphics_pipelines();
 		void create_compute_pipelines();
-		void create_resources();
-		void update_descriptor_sets();
+		void create_buffers_and_images();
+		void allocate_and_update_dss();
+		void create_descriptor_pool();
 		void create_command_pool();
 		void create_samplers();
 		void create_framebuffers();
@@ -446,7 +228,7 @@ namespace rcq
 		std::array<glm::mat4, FRUSTUM_SPLIT_COUNT> calc_projs();
 		void create_sync_objects();
 
-		VkRenderPass m_passes[RENDER_PASS_COUNT];
+		VkRenderPass m_rps[RENDER_PASS_COUNT];
 		pipeline m_gps[GP_COUNT];
 		pipeline m_cps[CP_COUNT];
 
@@ -477,10 +259,14 @@ namespace rcq
 		VkSemaphore m_bloom_blur_ready_s;
 
 		//memory resources
-		freelist_resource_host m_host_memory_resource;
-		monotonic_buffer_resource m_device_memory_resource;
-		vk_memory_resource m_vk_mappable_memory_resource;
-		monotonic_buffer_resource m_mappable_memory_resource;
+		freelist_host_memory m_host_memory;
+
+		vk_memory m_vk_device_memory;
+		monotonic_buffer_device_memory m_device_memory;
+
+		vk_memory m_vk_mappable_memory;
+		monotonic_buffer_device_memory m_mappable_memory;
+
 		vk_allocator m_vk_alloc;
 
 
@@ -493,13 +279,46 @@ namespace rcq
 		glm::uvec2 m_water_tiles_count;
 		bool m_water_valid;
 
-
-
 		render_settings m_render_settings;
 
 		std::atomic_bool m_render_dispatched;
 
 		glm::mat4 m_previous_proj_x_view;
 		glm::vec3 m_previous_view_pos;
+
+		//helper functions
+		template<uint32_t gp_id>
+		void prepare_gp_create_info(VkGraphicsPipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout,
+			VkPipelineShaderStageCreateInfo* shaders, VkShaderModuleCreateInfo* shader_modules, uint32_t& shader_index,
+			VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
+			char* code, uint32_t code_index);
+
+		template<uint32_t... gp_ids>
+		void prepare_gp_create_infos(std::index_sequence<gp_ids...>, 
+			VkGraphicsPipelineCreateInfo* create_infos, VkPipelineLayoutCreateInfo* layouts,
+			VkPipelineShaderStageCreateInfo* shaders, VkShaderModuleCreateInfo* shader_modules, uint32_t& shader_index,
+			VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
+			char* code, uint32_t code_index);
+
+		template<uint32_t rp_type>
+		void create_render_pass_impl(VkRenderPass* rp);
+
+		template<uint32_t... rp_types>
+		void create_render_passes_impl(std::index_sequence<rp_types...>);
+
+		template<uint32_t cp_id>
+		void prepare_cp_create_info(VkComputePipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout, 
+			VkShaderModuleCreateInfo& shader_module,
+			VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
+			char* code, uint32_t code_index);
+
+		template<uint32_t... cp_ids>
+		void prepare_cp_create_infos(std::index_sequence<cp_ids...>,
+			VkComputePipelineCreateInfo* create_infos, VkPipelineLayoutCreateInfo* layouts,
+			VkShaderModuleCreateInfo* shader_modules,
+			VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
+			char* code, uint32_t code_index);
+
+
 	};
 }

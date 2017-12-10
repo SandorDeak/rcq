@@ -1,0 +1,18 @@
+#pragma once
+
+#include "gp_environment_map_gen_mat.h"
+#include "gp_dir_shadow_map_gen.h"
+#include "gp_environment_map_gen_sky.h"
+#include "gp_opaque_obj_drawer.h"
+#include "gp_image_assembler.h"
+#include "gp_postprocessing.h"
+#include "gp_refraction_map_gen.h"
+#include "gp_sky_drawer.h"
+#include "gp_ss_dir_shadow_map_blur.h"
+#include "gp_ss_dir_shadow_map_gen.h"
+#include "gp_ssao_blur.h"
+#include "gp_ssao_gen.h"
+#include "gp_ssr_ray_casting.h"
+#include "gp_sun_drawer.h"
+#include "gp_terrain_drawer.h"
+#include "gp_water_drawer.h"
