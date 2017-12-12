@@ -8,7 +8,7 @@ namespace rcq
 	template<>
 	struct cp_create_info<CP_WATER_FFT>
 	{
-		static constexpr const char* shader_filename = "shaders/gta5_pass/water_compute/comp.spv";
+		static constexpr const char* shader_filename = "shaders/engine/water_compute/comp.spv";
 		static constexpr std::array<DSL_TYPE, 1> dsl_types =
 		{
 			DSL_TYPE_WATER_COMPUTE

@@ -1,4 +1,4 @@
-#include "gta5_pass.h"
+#include "engine.h"
 
 #include "enum_gp.h"
 #include "enum_cp.h"
@@ -6,7 +6,7 @@
 
 using namespace rcq;
 
-void gta5_pass::allocate_and_update_dss()
+void engine::allocate_and_update_dss()
 {
 	///////////////////////////////////////////////
 	//allocate
@@ -130,7 +130,7 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo shadow_tex = {};
 		shadow_tex.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 		shadow_tex.imageView = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].view;
-		shadow_tex.sampler = m_samplers[SAMPLER_GENERAL];
+		shadow_tex.sampler = m_samplers[SAMPLER_TYPE_NORMALIZED_COORD];
 
 		VkDescriptorImageInfo pos = {};
 		pos.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -164,17 +164,17 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo pos;
 		pos.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		pos.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
-		pos.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		pos.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo shadow;
 		shadow.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 		shadow.imageView = m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].view;
-		shadow.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		shadow.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo normal;
 		normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		normal.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
-		normal.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		normal.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[0].dstSet = m_gps[GP_SS_DIR_SHADOW_MAP_BLUR].ds;
@@ -196,12 +196,12 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo pos;
 		pos.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		pos.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
-		pos.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		pos.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo normal;
 		normal.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		normal.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
-		normal.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		normal.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[0].dstSet = m_gps[GP_SSAO_GEN].ds;
@@ -219,7 +219,7 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo ssao;
 		ssao.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 		ssao.imageView = m_res_image[RES_IMAGE_SSAO_MAP].view;
-		ssao.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		ssao.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[0].dstSet = m_gps[GP_SSAO_BLUR].ds;
@@ -238,12 +238,12 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo normal_tex;
 		normal_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		normal_tex.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
-		normal_tex.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		normal_tex.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo pos_tex;
 		pos_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		pos_tex.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
-		pos_tex.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		pos_tex.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo ray_end_fragment_ids;
 		ray_end_fragment_ids.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -278,7 +278,7 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo preimage;
 		preimage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		preimage.imageView = m_res_image[RES_IMAGE_PREIMAGE].view;
-		preimage.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		preimage.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		w[0].dstSet = m_gps[GP_REFRACTION_IMAGE_GEN].ds;
@@ -296,7 +296,7 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo gb_pos_roughness;
 		gb_pos_roughness.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		gb_pos_roughness.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
-		gb_pos_roughness.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		gb_pos_roughness.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo gb_BASECOLOR_SSAO;
 		gb_BASECOLOR_SSAO.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -309,13 +309,13 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo gb_normal_ao;
 		gb_normal_ao.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		gb_normal_ao.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
-		gb_normal_ao.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		gb_normal_ao.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo em;
 		em.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		em.imageView = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].view;
 		//em.imageView = m_res_image[RES_IMAGE_DIR_SHADOW_MAP].view;
-		em.sampler = m_samplers[SAMPLER_GENERAL];
+		em.sampler = m_samplers[SAMPLER_TYPE_NORMALIZED_COORD];
 
 		VkDescriptorBufferInfo ub;
 		ub.buffer = m_res_data.buffer;
@@ -325,7 +325,7 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo prev_image;
 		prev_image.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		prev_image.imageView = m_res_image[RES_IMAGE_PREV_IMAGE].view;
-		prev_image.sampler = m_samplers[SAMPLER_GENERAL];
+		prev_image.sampler = m_samplers[SAMPLER_TYPE_NORMALIZED_COORD];
 
 		VkDescriptorImageInfo ssr_ray_casting_coords;
 		ssr_ray_casting_coords.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -433,17 +433,17 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo refr_tex;
 		refr_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		refr_tex.imageView = m_res_image[RES_IMAGE_REFRACTION_IMAGE].view;
-		refr_tex.sampler = m_samplers[SAMPLER_GENERAL];
+		refr_tex.sampler = m_samplers[SAMPLER_TYPE_NORMALIZED_COORD];
 
 		VkDescriptorImageInfo pos_tex;
 		pos_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		pos_tex.imageView = m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].view;
-		pos_tex.sampler = m_samplers[SAMPLER_GENERAL];
+		pos_tex.sampler = m_samplers[SAMPLER_TYPE_NORMALIZED_COORD];
 
 		VkDescriptorImageInfo normal_tex;
 		normal_tex.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		normal_tex.imageView = m_res_image[RES_IMAGE_GB_NORMAL_AO].view;
-		normal_tex.sampler = m_samplers[SAMPLER_GENERAL];
+		normal_tex.sampler = m_samplers[SAMPLER_TYPE_NORMALIZED_COORD];
 
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		w[0].dstSet = m_gps[GP_WATER_DRAWER].ds;
@@ -496,12 +496,12 @@ void gta5_pass::allocate_and_update_dss()
 		VkDescriptorImageInfo preimage = {};
 		preimage.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		preimage.imageView = m_res_image[RES_IMAGE_PREIMAGE].view;
-		preimage.sampler = m_samplers[SAMPLER_UNNORMALIZED_COORD];
+		preimage.sampler = m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD];
 
 		VkDescriptorImageInfo bloom_blur;
 		bloom_blur.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 		bloom_blur.imageView = m_res_image[RES_IMAGE_BLOOM_BLUR].view;
-		bloom_blur.sampler = m_samplers[SAMPLER_GENERAL];
+		bloom_blur.sampler = m_samplers[SAMPLER_TYPE_NORMALIZED_COORD];
 
 		w[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		w[0].dstSet = m_gps[GP_POSTPROCESSING].ds;

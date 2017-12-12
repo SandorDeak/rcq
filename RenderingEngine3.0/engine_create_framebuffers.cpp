@@ -1,4 +1,4 @@
-#include "gta5_pass.h"
+#include "engine.h"
 
 #include "rps.h"
 
@@ -6,10 +6,11 @@
 
 #include "const_environment_map_size.h"
 #include "const_dir_shadow_map_size.h"
+#include "const_swap_chain_image_extent.h"
 
 using namespace rcq;
 
-void gta5_pass::create_framebuffers()
+void engine::create_framebuffers()
 {
 	//environment map gen
 	{
@@ -28,7 +29,7 @@ void gta5_pass::create_framebuffers()
 		fb.layers = 6;
 		fb.renderPass = m_rps[RP_ENVIRONMENT_MAP_GEN];
 
-		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs.environment_map_gen) == VK_SUCCESS);
+		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs[FB_ENVIRONMENT_MAP_GEN]) == VK_SUCCESS);
 	}
 
 	//dir shadow map gen
@@ -47,7 +48,7 @@ void gta5_pass::create_framebuffers()
 		fb.layers = FRUSTUM_SPLIT_COUNT;
 		fb.renderPass = m_rps[RP_DIR_SHADOW_MAP_GEN];
 
-		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs.dir_shadow_map_gen) == VK_SUCCESS);
+		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs[FB_DIR_SHADOW_MAP_GEN]) == VK_SUCCESS);
 	}
 
 	//gbuffer assembler
@@ -66,12 +67,12 @@ void gta5_pass::create_framebuffers()
 		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		fb.attachmentCount = ATT::ATT_COUNT;
 		fb.pAttachments = atts;
-		fb.height = m_base.swap_chain_image_extent.height;
-		fb.width = m_base.swap_chain_image_extent.width;
+		fb.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+		fb.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 		fb.layers = 1;
 		fb.renderPass = m_rps[RP_GBUFFER_ASSEMBLER];
 
-		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs.gbuffer_assembler) == VK_SUCCESS);
+		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs[FB_GBUFFER_ASSEMBLER]) == VK_SUCCESS);
 	}
 
 	//ssao map gen
@@ -85,12 +86,12 @@ void gta5_pass::create_framebuffers()
 		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		fb.attachmentCount = ATT::ATT_COUNT;
 		fb.pAttachments = atts;
-		fb.height = m_base.swap_chain_image_extent.height;
-		fb.width = m_base.swap_chain_image_extent.width;
+		fb.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+		fb.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 		fb.layers = 1;
 		fb.renderPass = m_rps[RP_SSAO_MAP_GEN];
 
-		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs.ssao_map_gen) == VK_SUCCESS);
+		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs[FB_SSAO_MAP_GEN]) == VK_SUCCESS);
 	}
 
 	//preimage assembler
@@ -107,12 +108,12 @@ void gta5_pass::create_framebuffers()
 		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		fb.attachmentCount = ATT::ATT_COUNT;
 		fb.pAttachments = atts;
-		fb.height = m_base.swap_chain_image_extent.height;
-		fb.width = m_base.swap_chain_image_extent.width;
+		fb.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+		fb.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 		fb.layers = 1;
 		fb.renderPass = m_rps[RP_PREIMAGE_ASSEMBLER];
 
-		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs.preimage_assembler) == VK_SUCCESS);
+		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs[FB_PREIMAGE_ASSEMBLER]) == VK_SUCCESS);
 	}
 
 	//refraction map gen
@@ -127,12 +128,12 @@ void gta5_pass::create_framebuffers()
 		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		fb.attachmentCount = ATT::ATT_COUNT;
 		fb.pAttachments = atts;
-		fb.height = m_base.swap_chain_image_extent.height;
-		fb.width = m_base.swap_chain_image_extent.width;
+		fb.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+		fb.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 		fb.layers = 1;
 		fb.renderPass = m_rps[RP_REFRACTION_IMAGE_GEN];
 
-		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs.refraction_image_gen) == VK_SUCCESS);
+		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs[FB_REFRACTION_IMAGE_GEN]) == VK_SUCCESS);
 	}
 
 	//water drawer
@@ -147,12 +148,12 @@ void gta5_pass::create_framebuffers()
 		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		fb.attachmentCount = ATT::ATT_COUNT;
 		fb.pAttachments = atts;
-		fb.height = m_base.swap_chain_image_extent.height;
-		fb.width = m_base.swap_chain_image_extent.width;
+		fb.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+		fb.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 		fb.layers = 1;
 		fb.renderPass = m_rps[RP_WATER_DRAWER];
 
-		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs.water) == VK_SUCCESS);
+		assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs[FB_WATER_DRAWER]) == VK_SUCCESS);
 	}
 
 	//postprocessing
@@ -165,17 +166,17 @@ void gta5_pass::create_framebuffers()
 		fb.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
 		fb.attachmentCount = ATT::ATT_COUNT;
 		fb.pAttachments = atts;
-		fb.height = m_base.swap_chain_image_extent.height;
-		fb.width = m_base.swap_chain_image_extent.width;
+		fb.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+		fb.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 		fb.layers = 1;
 		fb.renderPass = m_rps[RP_POSTPROCESSING];
 
-		for (uint32_t i = 0; i<SWAP_CHAIN_SIZE; ++i)
+		for (uint32_t i = 0; i<SWAP_CHAIN_IMAGE_COUNT; ++i)
 		{
-			atts[ATT::ATT_SWAP_CHAIN_IMAGE] = m_base.swap_chain_image_views[i];
+			atts[ATT::ATT_SWAP_CHAIN_IMAGE] = m_base.swapchain_views[i];
 			atts[ATT::ATT_PREV_IMAGE] = m_res_image[RES_IMAGE_PREV_IMAGE].view;
 
-			assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_fbs.postprocessing[i]) == VK_SUCCESS);
+			assert(vkCreateFramebuffer(m_base.device, &fb, m_vk_alloc, &m_postprocessing_fbs[i]) == VK_SUCCESS);
 		}
 	}
 }

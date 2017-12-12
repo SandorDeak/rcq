@@ -1,4 +1,4 @@
-#include "gta5_pass.h"
+#include "engine.h"
 #include "utility.h"
 
 #include "cps.h"
@@ -6,7 +6,7 @@
 using namespace rcq;
 
 template<size_t cp_id>
-void gta5_pass::prepare_cp_create_info(VkComputePipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout,
+void engine::prepare_cp_create_info(VkComputePipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout,
 	VkShaderModuleCreateInfo& shader_module,
 	VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
 	char* code, uint32_t code_index)
@@ -46,7 +46,7 @@ void gta5_pass::prepare_cp_create_info(VkComputePipelineCreateInfo& create_info,
 }
 
 template<uint32_t... cp_ids>
-void gta5_pass::prepare_cp_create_infos(std::index_sequence<cp_ids...>,
+void engine::prepare_cp_create_infos(std::index_sequence<cp_ids...>,
 	VkComputePipelineCreateInfo* create_infos, VkPipelineLayoutCreateInfo* layouts,
 	VkShaderModuleCreateInfo* shader_modules,
 	VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
@@ -56,7 +56,7 @@ void gta5_pass::prepare_cp_create_infos(std::index_sequence<cp_ids...>,
 		dsls, dsl_index, code_index), 0), ... };
 }
 
-void gta5_pass::create_compute_pipelines()
+void engine::create_compute_pipelines()
 {
 	constexpr uint32_t CODE_SIZE = 64 * 1024;
 	constexpr uint32_t DSL_SIZE = 5 * CP_COUNT;

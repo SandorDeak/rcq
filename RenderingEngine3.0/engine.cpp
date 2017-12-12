@@ -1,106 +1,75 @@
 #include "engine.h"
-#include "base.h"
-#include "core.h"
-#include "resource_manager.h"
-//#include "basic_pass.h"
-//#include "omni_light_shadow_pass.h"
-#include "gta5_pass.h"
-#include "device_memory.h"
 
 using namespace rcq;
 
 engine* engine::m_instance = nullptr;
 
-
-engine::engine()
+engine::engine(const base_info& info) : m_base(info)
 {
-	base_create_info base_create = {};
-	base_create.device_extensions=
-	{
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME
-	};
-	base_create.enable_validation_layers = true;
-	base_create.height = 768;
-	base_create.width = 1360;
-	base_create.instance_extensions=
-	{
-		VK_EXT_DEBUG_REPORT_EXTENSION_NAME
-	};
-	base_create.validation_layers=
-	{
-		"VK_LAYER_LUNARG_standard_validation"
-	};
-	base_create.window_name = "RCQ Engine";
-	base_create.device_features.samplerAnisotropy = VK_TRUE;
-	base_create.device_features.geometryShader = VK_TRUE;
-	base_create.device_features.tessellationShader = VK_TRUE;
-	base_create.device_features.depthBounds = VK_TRUE;
-	base_create.device_features.sparseBinding = VK_TRUE;
-	base_create.device_features.fillModeNonSolid = VK_TRUE;
-	//base_info.device_features.sparseResidencyImage2D = VK_TRUE;
-
-	base::init(base_create);
-	const base_info& b = base::instance()->get_info();
-
-	
-	m_window_size.x = static_cast<float>(b.swap_chain_image_extent.width);
-	m_window_size.y = static_cast<float>(b.swap_chain_image_extent.height);
-	m_window = b.window;
-
-	device_memory::init(b);
-	resource_manager::init(b);
-	core::init();
-	gta5_pass::init(b, core::instance()->get_renderable_container());
-	/*basic_pass::init(m_base, core::instance()->get_renderable_container());
-	omni_light_shadow_pass::init(m_base, core::instance()->get_renderable_container());*/
+	create_memory_resources_and_containers();
+	create_buffers_and_images();
+	create_render_passes();
+	create_graphics_pipelines();
+	create_compute_pipelines();
+	create_samplers();
+	create_descriptor_pool();
+	allocate_and_update_dss();
+	create_framebuffers();
+	allocate_and_record_cbs();
+	create_sync_objects();
 }
+
 
 engine::~engine()
 {
-	core::destroy();
-	gta5_pass::destroy();
-	//basic_pass::destroy();
-	//omni_light_shadow_pass::destroy();
-	resource_manager::destroy();
-	device_memory::destroy();
-	base::destroy();
+	assert(m_opaque_objects.size() == 0);
+
+	vkQueueWaitIdle(m_base.graphics_queue);
+	vkQueueWaitIdle(m_base.compute_queue);
+	vkQueueWaitIdle(m_base.present_queue);
+
+	for (auto& s : m_semaphores)
+		vkDestroySemaphore(m_base.device, s, m_vk_alloc);
+	for (auto& s : m_present_ready_ss)
+		vkDestroySemaphore(m_base.device, s, m_vk_alloc);
+	for (auto& f : m_fences)
+		vkDestroyFence(m_base.device, f, m_vk_alloc);
+	for (auto& e : m_events)
+		vkDestroyEvent(m_base.device, e, m_vk_alloc);
+	for (auto& fb : m_fbs)
+		vkDestroyFramebuffer(m_base.device, fb, m_vk_alloc);
+	for(auto& fb : m_postprocessing_fbs)
+		vkDestroyFramebuffer(m_base.device, fb, m_vk_alloc);
+	for (auto& cp : m_cpools)
+		vkDestroyCommandPool(m_base.device, cp, m_vk_alloc);
+	for (auto& gp : m_gps)
+		vkDestroyPipeline(m_base.device, gp, m_vk_alloc);
+	for (auto& cp : m_cps)
+		vkDestroyPipeline(m_base.device, cp, m_vk_alloc);
+	for (auto& rp : m_rps)
+		vkDestroyRenderPass(m_base.device, rp, m_vk_alloc);
+	for (auto& s : m_samplers)
+		vkDestroySampler(m_base.device, s, m_vk_alloc);
+	for (auto& im : m_res_image)
+	{
+		vkDestroyImageView(m_base.device, im.view, m_vk_alloc);
+		vkDestroyImage(m_base.device, im.image, m_vk_alloc);
+	}
+	vkDestroyBuffer(m_base.device, m_res_data.staging_buffer, m_vk_alloc);
+	vkDestroyBuffer(m_base.device, m_res_data.buffer, m_vk_alloc);
+
+	vkDestroyDescriptorPool(m_base.device, m_dp, m_vk_alloc);
 }
 
-void engine::init()
+void engine::init(const base_info& info)
 {
-	if (m_instance != nullptr)
-	{
-		throw std::runtime_error("engie is already initialised!");
-	}
-	m_instance = new engine();
+	assert(m_instance == nullptr);
+	m_instance = new engine(info);
 }
 
 void engine::destroy()
 {
-	if (m_instance == nullptr)
-	{
-		throw std::runtime_error("cannot destroy engine, it doesn't exist!");
-	}
-
+	assert(m_instance != nullptr);
 	delete m_instance;
-}
-
-void engine::cmd_dispatch()
-{
-	if (m_build_p)
-	{
-		resource_manager::instance()->process_build_package(std::move(*m_build_p.get()));
-		m_build_p.release();
-	}
-	if (m_destroy_p)
-	{
-		if (!m_core_p)
-			m_core_p.reset(new core_package);
-		m_core_p->confirm_destroy.emplace();
-		m_destroy_p->destroy_confirmation.emplace(m_core_p->confirm_destroy->get_future());
-
-		resource_manager::instance()->push_destroy_package(std::move(m_destroy_p));
-	}
-	if (m_core_p)
-		core::instance()->push_package(std::move(m_core_p));
+	m_instance = nullptr;
 }

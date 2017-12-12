@@ -133,10 +133,9 @@ namespace rcq
 			VkImage image;
 			VkImageView view;
 			uint64_t offset;
-			VkSampler sampler;
 		};
 
-
+		VkSampler sampler;
 		VkDescriptorSet ds;
 		texture tex[3];
 		uint32_t dp_index;
@@ -220,11 +219,12 @@ namespace rcq
 			VkImage image;
 			VkImageView view;
 			VkDeviceSize offset;
-			VkSampler sampler;
 		};
 
 		VkDescriptorSet ds;
 		VkDescriptorSet fft_ds;
+
+		VkSampler sampler;
 
 		texture noise;
 		texture tex;

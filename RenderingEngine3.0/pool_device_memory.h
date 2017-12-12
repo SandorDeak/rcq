@@ -10,24 +10,24 @@ namespace rcq
 	public:
 		pool_device_memory() {}
 
-		pool_device_memory(uint64_t block_size, uint64_t block_alignment, device_memory* upstream,
-			host_memory* metadata_memory_resource) :
+		pool_device_memory(VkDeviceSize block_size, VkDeviceSize block_alignment, VkDeviceSize first_chunk_size,
+			device_memory* upstream, host_memory* metadata_memory_resource) :
 			device_memory(block_alignment, upstream->device(), upstream->handle_ptr(), upstream),
 			m_chunks(metadata_memory_resource),
 			m_free_blocks(metadata_memory_resource),
-			m_next_chunk_size(block_size)
+			m_next_chunk_size(block_size*first_chunk_size)
 		{
 			assert(block_size%block_alignment == 0);
 		}
 
-		void init(VkDeviceSize block_size, VkDeviceSize block_alignment, device_memory* upstream,
+		void init(VkDeviceSize block_size, VkDeviceSize block_alignment, VkDeviceSize first_chunk_size, device_memory* upstream,
 			host_memory* metadata_memory_resource)
 		{
 			device_memory::init(block_alignment, upstream->device(), upstream->handle_ptr(), upstream);
 
 			m_chunks.init(metadata_memory_resource);
 			m_free_blocks.init(metadata_memory_resource);
-			m_next_chunk_size = block_size;
+			m_next_chunk_size = block_size*first_chunk_size;
 
 			assert(block_size%block_alignment == 0);
 		}

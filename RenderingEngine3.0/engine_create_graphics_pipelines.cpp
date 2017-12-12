@@ -1,4 +1,4 @@
-#include "gta5_pass.h"
+#include "engine.h"
 #include "utility.h"
 #include "resource_manager.h"
 
@@ -7,7 +7,7 @@
 using namespace rcq;
 
 template<uint32_t gp_id>
-void gta5_pass::prepare_gp_create_info(VkGraphicsPipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout,
+void engine::prepare_gp_create_info(VkGraphicsPipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout,
 	VkPipelineShaderStageCreateInfo* shaders, VkShaderModuleCreateInfo* shader_modules, uint32_t& shader_index,
 	VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
 	char* code, uint32_t code_index)
@@ -59,7 +59,7 @@ void gta5_pass::prepare_gp_create_info(VkGraphicsPipelineCreateInfo& create_info
 }
 
 template<uint32_t... gp_ids>
-void gta5_pass::prepare_gp_create_infos(std::index_sequence<gp_ids...>, 
+void engine::prepare_gp_create_infos(std::index_sequence<gp_ids...>, 
 	VkGraphicsPipelineCreateInfo* create_infos, VkPipelineLayoutCreateInfo* layouts,
 	VkPipelineShaderStageCreateInfo* shaders, VkShaderModuleCreateInfo* shader_modules, uint32_t& shader_index,
 	VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
@@ -69,7 +69,7 @@ void gta5_pass::prepare_gp_create_infos(std::index_sequence<gp_ids...>,
 		dsls, dsl_index, code_index), 0), ... };
 }
 
-void gta5_pass::create_graphics_pipelines()
+void engine::create_graphics_pipelines()
 {
 	constexpr uint32_t  SHADER_COUNT = GP_COUNT * 5;
 	constexpr uint32_t DSL_COUNT = GP_COUNT * 5;

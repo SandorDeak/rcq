@@ -8,7 +8,7 @@ namespace rcq
 	template<>
 	struct cp_create_info<CP_BLOOM>
 	{
-		static constexpr const char* shader_filename = "shaders/gta5_pass/bloom_blur/comp.spv";
+		static constexpr const char* shader_filename = "shaders/engine/bloom_blur/comp.spv";
 		static constexpr std::array<DSL_TYPE, 0> dsl_types = {};
 		static constexpr std::array<VkPushConstantRange, 1> push_consts =
 		{

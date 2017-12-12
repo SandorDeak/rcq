@@ -1,13 +1,13 @@
-#include "gta5_pass.h"
+#include "engine.h"
 
 #include "const_dir_shadow_map_size.h"
 #include "const_environment_map_size.h"
 
-#include "enum_res_image.h"
+#include "const_swap_chain_image_extent.h"
 
 namespace rcq
 {
-	void gta5_pass::create_buffers_and_images()
+	void engine::create_buffers_and_images()
 	{
 		VkPhysicalDeviceProperties props;
 		vkGetPhysicalDeviceProperties(m_base.physical_device, &props);
@@ -140,8 +140,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.extent.depth = 1;
-			image.extent.height = m_base.swap_chain_image_extent.height;
-			image.extent.width = m_base.swap_chain_image_extent.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
 			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -181,8 +181,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.extent.depth = 1;
-			image.extent.height = m_base.swap_chain_image_extent.height;
-			image.extent.width = m_base.swap_chain_image_extent.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
 			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -222,8 +222,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.extent.depth = 1;
-			image.extent.height = m_base.swap_chain_image_extent.height;
-			image.extent.width = m_base.swap_chain_image_extent.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
 			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -263,8 +263,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.extent.depth = 1;
-			image.extent.height = m_base.swap_chain_image_extent.height;
-			image.extent.width = m_base.swap_chain_image_extent.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
 			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -304,8 +304,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.extent.depth = 1;
-			image.extent.height = m_base.swap_chain_image_extent.height;
-			image.extent.width = m_base.swap_chain_image_extent.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
 			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -345,8 +345,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.extent.depth = 1;
-			image.extent.height = m_base.swap_chain_image_extent.height;
-			image.extent.width = m_base.swap_chain_image_extent.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 			image.format = VK_FORMAT_D32_SFLOAT_S8_UINT;
 			image.imageType = VK_IMAGE_TYPE_2D;
 			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -426,8 +426,8 @@ namespace rcq
 			VkImageCreateInfo image = {};
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
-			image.extent.width = m_base.swap_chain_image_extent.width;
-			image.extent.height = m_base.swap_chain_image_extent.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
 			image.extent.depth = 1;
 			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
@@ -465,8 +465,8 @@ namespace rcq
 			VkImageCreateInfo image = {};
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
-			image.extent.width = m_base.swap_chain_image_extent.width;
-			image.extent.height = m_base.swap_chain_image_extent.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
 			image.extent.depth = 1;
 			image.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
@@ -505,8 +505,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.arrayLayers = 1;
-			image.extent.width = m_base.swap_chain_image_extent.width;
-			image.extent.height = m_base.swap_chain_image_extent.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
 			image.extent.depth = 1;
 			image.format = VK_FORMAT_R32_SINT;
 			image.imageType = VK_IMAGE_TYPE_2D;
@@ -545,8 +545,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.extent.depth = 1;
-			image.extent.height = m_base.swap_chain_image_extent.height;
-			image.extent.width = m_base.swap_chain_image_extent.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 			image.format = VK_FORMAT_D32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
 			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -586,8 +586,8 @@ namespace rcq
 			image.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			image.arrayLayers = 1;
 			image.extent.depth = 1;
-			image.extent.height = m_base.swap_chain_image_extent.height;
-			image.extent.width = m_base.swap_chain_image_extent.width;
+			image.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height;
+			image.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width;
 			image.format = VK_FORMAT_D32_SFLOAT;
 			image.imageType = VK_IMAGE_TYPE_2D;
 			image.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -626,8 +626,8 @@ namespace rcq
 			VkImageCreateInfo im = {};
 			im.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 			im.arrayLayers = 2;
-			im.extent.width = m_base.swap_chain_image_extent.width / BLOOM_IMAGE_SIZE_FACTOR;
-			im.extent.height = m_base.swap_chain_image_extent.height / BLOOM_IMAGE_SIZE_FACTOR;
+			im.extent.width = SWAP_CHAIN_IMAGE_EXTENT.width / BLOOM_IMAGE_SIZE_FACTOR;
+			im.extent.height = SWAP_CHAIN_IMAGE_EXTENT.height / BLOOM_IMAGE_SIZE_FACTOR;
 			im.extent.depth = 1;
 			im.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 			im.imageType = VK_IMAGE_TYPE_2D;

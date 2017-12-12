@@ -1,10 +1,10 @@
-#include "gta5_pass.h"
+#include "engine.h"
 
 #include "enum_sampler_type.h"
 
 using namespace rcq;
 
-void gta5_pass::create_samplers()
+void engine::create_samplers()
 {
 	//normalized coord
 	{
@@ -47,5 +47,3 @@ void gta5_pass::create_samplers()
 		assert(vkCreateSampler(m_base.device, &s, m_vk_alloc, &m_samplers[SAMPLER_TYPE_UNNORMALIZED_COORD]) == VK_SUCCESS);
 	}
 }
-
-//DO ALLOCATE AND RECORD COMMAND BUFFERS!!!!!!!!!!!!!

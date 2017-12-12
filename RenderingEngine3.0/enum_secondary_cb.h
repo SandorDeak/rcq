@@ -1,0 +1,16 @@
+#pragma once
+
+#include <stdint.h>
+
+namespace rcq
+{
+	enum SECONDARY_CB : uint32_t
+	{
+		SECONDARY_CB_MAT_EM,
+		SECONDARY_CB_SKYBOX_EM,
+		SECONDARY_CB_DIR_SHADOW_GEN,
+		SECONDARY_CB_MAT_OPAQUE,
+		SECONDARY_CB_TERRAIN_DRAWER,
+		SECONDARY_CB_COUNT
+	};
+}

@@ -2,6 +2,8 @@
 
 #include "host_memory.h"
 
+#include <atomic>
+
 namespace rcq
 {
 	template<typename T>

@@ -67,7 +67,7 @@ namespace rcq
 			m_size = 0;
 		}
 
-		memory_resource* memory_resource()
+		host_memory* memory_resource()
 		{
 			return m_memory;
 		}

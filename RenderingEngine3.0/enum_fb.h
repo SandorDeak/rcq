@@ -1,0 +1,18 @@
+#pragma once
+
+#include <stdint.h>
+
+namespace rcq
+{
+	enum FB : uint32_t
+	{
+		FB_ENVIRONMENT_MAP_GEN,
+		FB_DIR_SHADOW_MAP_GEN,
+		FB_GBUFFER_ASSEMBLER,
+		FB_SSAO_MAP_GEN,
+		FB_PREIMAGE_ASSEMBLER,
+		FB_REFRACTION_IMAGE_GEN,
+		FB_WATER_DRAWER,
+		FB_COUNT
+	};
+}

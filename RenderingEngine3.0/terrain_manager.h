@@ -1,11 +1,15 @@
 #pragma once
 
-#include "foundation2.h"
 #include "vk_memory.h"
+#include "vk_allocator.h"
 #include "freelist_host_memory.h"
 #include "pool_device_memory.h"
+
 #include "queue.h"
 #include "vector.h"
+
+#include "resources.h"
+#include "base_info.h"
 
 namespace rcq
 {
@@ -15,8 +19,11 @@ namespace rcq
 
 		void poll_requests();
 		void poll_results();
-		void init(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count, VkCommandPool cp, size_t place);
-		void destroy();
+		static void init(const base_info& base);
+		static void destroy();
+
+		void init_resources(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count, VkCommandPool cp);
+		void destroy_resources();
 
 		void set_terrain(resource<RES_TYPE_TERRAIN>* t)
 		{
@@ -29,10 +36,16 @@ namespace rcq
 		}
 
 	private:
+		//ctor, dtor, singleton pattern
 		terrain_manager(const base_info& base);
 		~terrain_manager();
-
+		terrain_manager(const terrain_manager&) = delete;
+		terrain_manager(terrain_manager&&) = delete;
+		terrain_manager& operator=(const terrain_manager&) = delete;
+		terrain_manager& operator=(terrain_manager&&) = delete;
 		static terrain_manager* m_instance;
+
+
 		void loop();
 		void decrease_min_mip_level(const glm::uvec2& tile_id);
 		void increase_min_mip_level(const glm::uvec2& tile_id);
@@ -61,11 +74,12 @@ namespace rcq
 		char* m_pages_staging;
 
 		//memory resources
-		freelist_host_memory m_host_memory_res;
+		freelist_host_memory m_host_memory;
 		vk_allocator m_vk_alloc;
 
-		vk_memory m_mappable_memory_resource;
+		vk_memory m_mappable_memory;
 
+		vk_memory m_vk_page_pool;
 		pool_device_memory m_page_pool;
 		
 

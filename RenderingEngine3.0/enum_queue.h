@@ -1,0 +1,14 @@
+#pragma once
+
+namespace rcq
+{
+	enum QUEUE
+	{
+		QUEUE_RENDER,
+		QUEUE_COMPUTE,
+		QUEUE_TERRAIN_LOADER,
+		QUEUE_RESOURCE_BUILD,
+		QUEUE_PRESENT,
+		QUEUE_COUNT
+	};
+}

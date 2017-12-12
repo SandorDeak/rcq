@@ -2,7 +2,6 @@
 
 #include "vk_allocator.h"
 #include "device_memory.h"
-#include "foundation2.h"
 
 namespace rcq
 {

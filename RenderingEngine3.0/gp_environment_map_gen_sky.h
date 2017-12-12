@@ -120,9 +120,9 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 3> shader_filenames =
 		{
-			"shaders/gta5_pass/environment_map_gen/environment_map_gen_skybox/vert.spv",
-			"shaders/gta5_pass/environment_map_gen/environment_map_gen_skybox/geom.spv",
-			"shaders/gta5_pass/environment_map_gen/environment_map_gen_skybox/frag.spv"
+			"shaders/engine/environment_map_gen/environment_map_gen_skybox/vert.spv",
+			"shaders/engine/environment_map_gen/environment_map_gen_skybox/geom.spv",
+			"shaders/engine/environment_map_gen/environment_map_gen_skybox/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 3> shader_flags =
 		{

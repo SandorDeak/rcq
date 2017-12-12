@@ -126,10 +126,10 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 4> shader_filenames =
 		{
-			"shaders/gta5_pass/water_drawer/vert.spv",
-			"shaders/gta5_pass/water_drawer/tesc.spv",
-			"shaders/gta5_pass/water_drawer/tese.spv",
-			"shaders/gta5_pass/water_drawer/frag.spv",
+			"shaders/engine/water_drawer/vert.spv",
+			"shaders/engine/water_drawer/tesc.spv",
+			"shaders/engine/water_drawer/tese.spv",
+			"shaders/engine/water_drawer/frag.spv",
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 4> shader_flags =
 		{

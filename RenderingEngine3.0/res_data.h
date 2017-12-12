@@ -4,6 +4,8 @@
 #include "const_frustum_split_count.h"
 #include "enum_res_data.h"
 
+#include <array>
+
 namespace rcq
 {
 	template<uint32_t res_data>
@@ -132,5 +134,65 @@ namespace rcq
 		glm::vec2 wind_dir;
 		float one_over_wind_speed_to_the_4;
 		float time;
+	};
+
+
+	struct res_data
+	{
+		size_t data[RES_DATA_COUNT];
+
+		VkDeviceSize buffer_offset;
+		VkBuffer buffer;
+		VkDeviceSize staging_buffer_offset;
+		VkBuffer staging_buffer;
+		size_t size;
+		std::array<size_t, RES_DATA_COUNT> offsets;
+
+		static constexpr std::array<size_t, RES_DATA_COUNT> get_sizes()
+		{
+			return get_sizes_impl(std::make_index_sequence<RES_DATA_COUNT>());
+		}
+
+		template<size_t... res_data>
+		static constexpr std::array<size_t, RES_DATA_COUNT> get_sizes_impl(std::index_sequence<res_data...>)
+		{
+			return { sizeof(ressource_data<res_data>), ... };
+		}
+
+		void calc_offset_and_size(size_t alignment)
+		{
+			constexpr auto res_data_sizes = res_data::get_sizes();
+			size = 0;
+			for (uint32_t i = 0; i < RES_DATA_COUNT; ++i)
+			{
+				offsets[i] = size;
+				size += align(alignment, res_data_sizes[i]);
+			}
+		}
+
+		size_t align(size_t alignment, size_t offset)
+		{
+			return (offset + alignment - 1) & (~(alignment - 1));
+		}
+
+
+		//template<size_t... indices>
+		void set_pointers(size_t base/*, std::index_sequence<indices...>*/)
+		{
+			for (uint32_t i = 0; i<RES_DATA_COUNT; ++i)
+			{
+				data[i] = base + offsets[i];
+			}
+			/*
+			auto l = { ([](auto&& p, char* val) {
+			p = reinterpret_cast<std::remove_reference_t<decltype(p)>>(val);
+			}(std::get<indices>(data), base + std::get<indices>(offsets))
+			, 0)... };*/
+		}
+		template<uint32_t res_data>
+		auto get()
+		{
+			return reinterpret_cast<resource_data<res_data>*>(data[res_data]);
+		}
 	};
 }

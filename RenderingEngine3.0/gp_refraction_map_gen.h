@@ -135,8 +135,8 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 2> shader_filenames =
 		{
-			"shaders/gta5_pass/refraction_map_gen/vert.spv",
-			"shaders/gta5_pass/refraction_map_gen/frag.spv"
+			"shaders/engine/refraction_map_gen/vert.spv",
+			"shaders/engine/refraction_map_gen/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 3> shader_flags =
 		{

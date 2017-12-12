@@ -1,8 +1,10 @@
 #pragma once
 
-#include <vulkan\vulkan.h>
+#include "vulkan.h"
 #include "host_memory.h"
 #include "vector.h"
+
+#include <assert.h>
 
 namespace rcq
 {
@@ -15,6 +17,8 @@ namespace rcq
 		};
 
 	public:
+		dp_pool() : m_create_info{}  {}
+
 		dp_pool(uint32_t pool_sizes_count, uint32_t dp_capacity, VkDevice device, host_memory* memory) :
 			m_pool_sizes(memory, pool_sizes_count),
 			m_dps(memory),
@@ -26,6 +30,29 @@ namespace rcq
 			m_create_info.pPoolSizes = m_pool_sizes.data();
 			m_create_info.poolSizeCount = pool_sizes_count;
 		}
+
+		~dp_pool()
+		{
+			for (auto& dp : m_dps)
+				vkDestroyDescriptorPool(m_device, dp.pool, m_vk_alloc);
+		}
+
+		void init(uint32_t pool_sizes_count, uint32_t dp_capacity, VkDevice device, host_memory* memory)
+		{
+			m_pool_sizes.init(memory, pool_sizes_count);
+			m_dps.init(memory);
+			m_device = device;
+		}
+
+		void reset()
+		{
+			for (auto& dp : m_dps)
+				vkDestroyDescriptorPool(m_device, dp.pool, m_vk_alloc);
+
+			m_dps.reset();
+			m_pool_sizes.reset();
+		}
+
 
 		VkDescriptorPoolSize* sizes()
 		{
