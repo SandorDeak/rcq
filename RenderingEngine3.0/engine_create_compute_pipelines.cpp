@@ -12,10 +12,10 @@ template<size_t cp_id>
 void engine::prepare_cp_create_info(VkComputePipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout,
 	VkShaderModuleCreateInfo& shader_module,
 	VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
-	char* code, uint32_t code_index)
+	char* code, uint32_t& code_index)
 {
 	//fill create info
-	create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 	create_info.basePipelineHandle = VK_NULL_HANDLE;
 	create_info.basePipelineIndex = -1;
 
@@ -38,7 +38,7 @@ void engine::prepare_cp_create_info(VkComputePipelineCreateInfo& create_info, Vk
 	//fill layout
 	layout.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	layout.pSetLayouts = &dsls[dsl_index];
-	layout.setLayoutCount = cp_create_info<cp_id>::dsl_types.size();
+	layout.setLayoutCount = cp_create_info<cp_id>::dsl_types.size()+1;
 	dsls[dsl_index++] = m_cps[cp_id].dsl;
 	for (auto dsl_type : cp_create_info<cp_id>::dsl_types)
 	{
@@ -53,7 +53,7 @@ void engine::prepare_cp_create_infos(std::index_sequence<cp_ids...>,
 	VkComputePipelineCreateInfo* create_infos, VkPipelineLayoutCreateInfo* layouts,
 	VkShaderModuleCreateInfo* shader_modules,
 	VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
-	char* code, uint32_t code_index)
+	char* code, uint32_t& code_index)
 {
 	auto l = { (prepare_cp_create_info<cp_ids>(create_infos[cp_ids], layouts[cp_ids], shader_modules[cp_ids],
 		dsls, dsl_index, code, code_index), 0)... };
@@ -64,8 +64,8 @@ void engine::create_compute_pipelines()
 	constexpr uint32_t CODE_SIZE = 64 * 1024;
 	constexpr uint32_t DSL_SIZE = 5 * CP_COUNT;
 
-	VkComputePipelineCreateInfo create_infos[CP_COUNT];
-	VkPipelineLayoutCreateInfo layouts[CP_COUNT];
+	VkComputePipelineCreateInfo create_infos[CP_COUNT] = {};
+	VkPipelineLayoutCreateInfo layouts[CP_COUNT] = {};
 	VkDescriptorSetLayout dsls[DSL_SIZE];
 	VkShaderModuleCreateInfo shader_modules[CP_COUNT] = {};
 	char code[CODE_SIZE];

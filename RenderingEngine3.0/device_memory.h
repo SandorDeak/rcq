@@ -11,7 +11,9 @@ namespace rcq
 
 		device_memory(VkDeviceSize max_alignment, VkDevice device, const VkDeviceMemory* handle, device_memory* upstream) :
 			m_device(device),
-			m_handle(handle)
+			m_handle(handle),
+			m_max_alignment(max_alignment),
+			m_upstream(upstream)
 		{}
 
 		virtual ~device_memory() {}

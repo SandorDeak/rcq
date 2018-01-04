@@ -88,8 +88,8 @@ namespace rcq
 			view.subresourceRange.layerCount = 6;
 			view.subresourceRange.levelCount = 1;
 
-			assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].view)
-				== VK_SUCCESS);
+			/*assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].view)
+				== VK_SUCCESS);*/
 		}
 
 		//environment map

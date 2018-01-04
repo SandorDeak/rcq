@@ -8,7 +8,7 @@ void resource_manager::build_loop()
 	{
 		if (m_build_queue.empty())
 		{
-			std::unique_lock<std::mutex> lock;
+			std::unique_lock<std::mutex> lock(m_build_queue_mutex);
 			while (m_build_queue.empty())
 				m_build_queue_cv.wait(lock);
 		}

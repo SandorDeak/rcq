@@ -99,8 +99,8 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 2> shader_filenames =
 		{
-			"shaders/engine/dir_shadow_map_gen/vert.spv",
-			"shaders/engine/dir_shadow_map_gen/geom.spv"
+			"shaders/dir_shadow_map_gen/vert.spv",
+			"shaders/dir_shadow_map_gen/geom.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 2> shader_flags =
 		{

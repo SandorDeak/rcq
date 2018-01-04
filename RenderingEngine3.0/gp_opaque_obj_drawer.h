@@ -156,8 +156,8 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 2> shader_filenames =
 		{
-			"shaders/engine/gbuffer_gen/vert.spv",
-			"shaders/engine/gbuffer_gen/frag.spv"
+			"shaders/gbuffer_gen/vert.spv",
+			"shaders/gbuffer_gen/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 2> shader_flags =
 		{

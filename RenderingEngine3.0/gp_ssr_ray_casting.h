@@ -97,9 +97,9 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 3> shader_filenames =
 		{
-			"shaders/engine/ssr_ray_casting/vert.spv",
-			"shaders/engine/ssr_ray_casting/geom.spv",
-			"shaders/engine/ssr_ray_casting/frag.spv"
+			"shaders/ssr_ray_casting/vert.spv",
+			"shaders/ssr_ray_casting/geom.spv",
+			"shaders/ssr_ray_casting/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 3> shader_flags =
 		{
@@ -119,19 +119,19 @@ namespace rcq
 				VK_SHADER_STAGE_GEOMETRY_BIT,
 				nullptr,
 
-				0,
+				1,
 				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				1,
 				VK_SHADER_STAGE_GEOMETRY_BIT,
 				nullptr,
 
-				0,
+				2,
 				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				1,
 				VK_SHADER_STAGE_GEOMETRY_BIT,
 				nullptr,
 
-				0,
+				3,
 				VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
 				1,
 				VK_SHADER_STAGE_FRAGMENT_BIT,

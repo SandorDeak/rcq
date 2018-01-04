@@ -7,10 +7,10 @@ engine* engine::m_instance = nullptr;
 engine::engine(const base_info& info) : m_base(info)
 {
 	create_memory_resources_and_containers();
-	create_buffers_and_images();
 	create_render_passes();
 	create_graphics_pipelines();
 	create_compute_pipelines();
+	create_buffers_and_images();
 	create_samplers();
 	create_descriptor_pool();
 	allocate_and_update_dss();

@@ -163,7 +163,7 @@ namespace rcq
 
 		bool empty()
 		{
-			return m_first == m_first_back;
+			return m_first.load() == m_first_back.load();
 		}
 
 	private:

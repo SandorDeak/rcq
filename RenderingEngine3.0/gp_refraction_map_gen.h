@@ -135,8 +135,8 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 2> shader_filenames =
 		{
-			"shaders/engine/refraction_map_gen/vert.spv",
-			"shaders/engine/refraction_map_gen/frag.spv"
+			"shaders/refraction_map_gen/vert.spv",
+			"shaders/refraction_map_gen/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 3> shader_flags =
 		{
@@ -155,7 +155,7 @@ namespace rcq
 				VK_SHADER_STAGE_VERTEX_BIT,
 				nullptr,
 
-				0,
+				1,
 				VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
 				1,
 				VK_SHADER_STAGE_FRAGMENT_BIT,

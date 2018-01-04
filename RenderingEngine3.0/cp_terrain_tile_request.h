@@ -8,7 +8,7 @@ namespace rcq
 	template<>
 	struct cp_create_info<CP_TERRAIN_TILE_REQUEST>
 	{
-		static constexpr const char* shader_filename = "shaders/engine/terrain_page_request/comp.spv";
+		static constexpr const char* shader_filename = "shaders/terrain_page_request/comp.spv";
 		static constexpr std::array<DSL_TYPE, 1> dsl_types =
 		{
 			DSL_TYPE_TERRAIN_COMPUTE

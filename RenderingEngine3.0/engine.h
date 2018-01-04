@@ -185,27 +185,27 @@ namespace rcq
 		void prepare_gp_create_info(VkGraphicsPipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout,
 			VkPipelineShaderStageCreateInfo* shaders, VkShaderModuleCreateInfo* shader_modules, uint32_t& shader_index,
 			VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
-			char* code, uint32_t code_index);
+			char* code, uint32_t& code_index);
 
 		template<uint32_t... gp_ids>
 		void prepare_gp_create_infos(std::index_sequence<gp_ids...>, 
 			VkGraphicsPipelineCreateInfo* create_infos, VkPipelineLayoutCreateInfo* layouts,
 			VkPipelineShaderStageCreateInfo* shaders, VkShaderModuleCreateInfo* shader_modules, uint32_t& shader_index,
 			VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
-			char* code, uint32_t code_index);
+			char* code, uint32_t& code_index);
 
 		template<uint32_t cp_id>
 		void prepare_cp_create_info(VkComputePipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout, 
 			VkShaderModuleCreateInfo& shader_module,
 			VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
-			char* code, uint32_t code_index);
+			char* code, uint32_t& code_index);
 
 		template<uint32_t... cp_ids>
 		void prepare_cp_create_infos(std::index_sequence<cp_ids...>,
 			VkComputePipelineCreateInfo* create_infos, VkPipelineLayoutCreateInfo* layouts,
 			VkShaderModuleCreateInfo* shader_modules,
 			VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
-			char* code, uint32_t code_index);
+			char* code, uint32_t& code_index);
 
 		template<uint32_t rp_type>
 		void create_render_pass_impl(VkRenderPass* rp);

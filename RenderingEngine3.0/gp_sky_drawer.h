@@ -119,9 +119,9 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 3> shader_filenames =
 		{
-			"shaders/engine/sky/vert.spv",
-			"shaders/engine/sky/geom.spv",
-			"shaders/engine/sky/frag.spv"
+			"shaders/sky/vert.spv",
+			"shaders/sky/geom.spv",
+			"shaders/sky/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 3> shader_flags =
 		{

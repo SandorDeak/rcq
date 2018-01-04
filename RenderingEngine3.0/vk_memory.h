@@ -26,6 +26,7 @@ namespace rcq
 
 			m_vk_alloc = vk_alloc;
 			m_memory_type_index = memory_type_index;
+			m_handle = &m_real_handle;
 		}
 
 		~vk_memory()

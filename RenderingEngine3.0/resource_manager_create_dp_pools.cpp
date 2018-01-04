@@ -27,7 +27,7 @@ void resource_manager::create_dp_pools()
 	//create water pool
 	{
 		auto& pool = m_dp_pools[DSL_TYPE_WATER];
-		pool.init(2, 1, m_base.device, &m_host_memory);
+		pool.init(3, 1, m_base.device, &m_host_memory);
 		pool.sizes()[0].descriptorCount = 1;
 		pool.sizes()[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		pool.sizes()[1].descriptorCount = 1;

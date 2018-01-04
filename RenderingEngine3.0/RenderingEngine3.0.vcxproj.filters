@@ -514,5 +514,8 @@
     <ClInclude Include="const_bloom_image_size_factor.h">
       <Filter>Header Files\consts</Filter>
     </ClInclude>
+    <ClInclude Include="enum_memory_type.h">
+      <Filter>Header Files\enums</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

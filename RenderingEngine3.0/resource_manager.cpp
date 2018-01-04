@@ -10,9 +10,9 @@ resource_manager::resource_manager(const base_info& info) : m_base(info)
 {
 	create_memory_resources_and_containers();
 	//create_samplers();
+	create_command_pool();
 	create_dsls();
 	create_dp_pools();
-	create_command_pool();
 
 	m_should_end_build = false;
 	m_should_end_destroy = false;

@@ -86,6 +86,7 @@
     <ClInclude Include="enum_fence.h" />
     <ClInclude Include="enum_gp.h" />
     <ClInclude Include="enum_cb.h" />
+    <ClInclude Include="enum_memory_type.h" />
     <ClInclude Include="enum_queue.h" />
     <ClInclude Include="enum_rend_type.h" />
     <ClInclude Include="enum_res_data.h" />

@@ -161,10 +161,10 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 4> shader_filenames =
 		{
-			"shaders/engine/terrain/vert.spv",
-			"shaders/engine/terrain/tesc.spv",
-			"shaders/engine/terrain/tese.spv",
-			"shaders/engine/terrain/frag.spv",
+			"shaders/terrain/vert.spv",
+			"shaders/terrain/tesc.spv",
+			"shaders/terrain/tese.spv",
+			"shaders/terrain/frag.spv",
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 4> shader_flags =
 		{

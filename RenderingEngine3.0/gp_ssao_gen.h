@@ -98,8 +98,8 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 2> shader_filenames =
 		{
-			"shaders/engine/ssao_gen/vert.spv",
-			"shaders/engine/ssao_gen/frag.spv"
+			"shaders/ssao_gen/vert.spv",
+			"shaders/ssao_gen/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 2> shader_flags =
 		{

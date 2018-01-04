@@ -27,7 +27,7 @@ namespace rcq_user
 
 	inline void init()
 	{
-		rcq::base_create_info base_create;
+		rcq::base_create_info base_create = {};
 
 		const char* device_extensions[]=
 		{

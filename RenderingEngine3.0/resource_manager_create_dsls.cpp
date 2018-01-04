@@ -22,12 +22,7 @@ void resource_manager::create_dsls()
 
 	//create material opaque dsl
 	{
-		VkDescriptorSetLayoutBinding tex = {};
-		tex.descriptorCount = 1;
-		tex.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-		tex.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-		VkDescriptorSetLayoutBinding bindings[TEX_TYPE_COUNT + 1];
+		VkDescriptorSetLayoutBinding bindings[TEX_TYPE_COUNT + 1] = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -41,7 +36,6 @@ void resource_manager::create_dsls()
 			bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 		}
 
-
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		dsl.bindingCount = TEX_TYPE_COUNT + 1;
@@ -52,7 +46,7 @@ void resource_manager::create_dsls()
 
 	//create sky dsl
 	{
-		VkDescriptorSetLayoutBinding bindings[3];
+		VkDescriptorSetLayoutBinding bindings[3] = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -78,7 +72,7 @@ void resource_manager::create_dsls()
 
 	//create terrain dsl
 	{
-		VkDescriptorSetLayoutBinding bindings[3];
+		VkDescriptorSetLayoutBinding bindings[3] = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -105,7 +99,7 @@ void resource_manager::create_dsls()
 
 	//create terrain compute dsl
 	{
-		VkDescriptorSetLayoutBinding bindings[2];
+		VkDescriptorSetLayoutBinding bindings[2] = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -126,7 +120,7 @@ void resource_manager::create_dsls()
 
 	//create water dsl
 	{
-		VkDescriptorSetLayoutBinding bindings[1];
+		VkDescriptorSetLayoutBinding bindings[1] = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -142,7 +136,7 @@ void resource_manager::create_dsls()
 
 	//create water compute
 	{
-		VkDescriptorSetLayoutBinding bindings[3];
+		VkDescriptorSetLayoutBinding bindings[3] = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;

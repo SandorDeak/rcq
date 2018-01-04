@@ -3,6 +3,8 @@
 #include "vulkan.h"
 #include "host_memory.h"
 
+#include <malloc.h>
+
 namespace rcq
 {
 	class vk_allocator
@@ -68,17 +70,20 @@ namespace rcq
 
 		static void* VKAPI_CALL alloc_static(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope alloc_scope)
 		{
-			return static_cast<vk_allocator*>(user_data)->alloc(size, alignment);
+			//return static_cast<vk_allocator*>(user_data)->alloc(size, alignment);
+			return _aligned_malloc(size, alignment);
 		}
 
 		static void VKAPI_CALL free_static(void* user_data, void* ptr)
 		{
-			static_cast<vk_allocator*>(user_data)->free(ptr);
+			//static_cast<vk_allocator*>(user_data)->free(ptr);
+			_aligned_free(ptr);
 		}
 
 		static void* VKAPI_CALL realloc_static(void* user_data, void* original, size_t size, size_t alignment, VkSystemAllocationScope alloc_scope)
 		{
-			return static_cast<vk_allocator*>(user_data)->realloc(original, size, alignment, alloc_scope);
+			//return static_cast<vk_allocator*>(user_data)->realloc(original, size, alignment, alloc_scope);
+			return _aligned_realloc(original, size, alignment);
 		}
 
 		static void VKAPI_CALL internal_alloc_notification_static(void* user_data, size_t size, VkInternalAllocationType type,

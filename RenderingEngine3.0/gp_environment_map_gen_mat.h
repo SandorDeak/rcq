@@ -121,9 +121,9 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 3> shader_filenames =
 		{
-			"shaders/engine/environment_map_gen/environment_map_gen_mat/vert.spv",
-			"shaders/engine/environment_map_gen/environment_map_gen_mat/geom.spv",
-			"shaders/engine/environment_map_gen/environment_map_gen_mat/frag.spv"
+			"shaders/environment_map_gen/environment_map_gen_mat/vert.spv",
+			"shaders/environment_map_gen/environment_map_gen_mat/geom.spv",
+			"shaders/environment_map_gen/environment_map_gen_mat/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 3> shader_flags =
 		{
@@ -131,10 +131,10 @@ namespace rcq
 			VK_SHADER_STAGE_GEOMETRY_BIT,
 			VK_SHADER_STAGE_FRAGMENT_BIT
 		};
-		static constexpr std::array<DSL_TYPE, 2> dsl_types = 
+		static constexpr std::array<DSL_TYPE, 1> dsl_types = 
 		{
 			DSL_TYPE_TR,
-			DSL_TYPE_MAT_EM
+			//DSL_TYPE_MAT_EM
 		};
 
 		struct dsl

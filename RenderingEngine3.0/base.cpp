@@ -21,10 +21,10 @@ base::base(const base_create_info& info) :
 	create_window();
 	create_instance();
 
-	/*if (info.enable_validation_layers)
+	if (info.enable_validation_layers)
 	{
 		setup_debug_callbacks();
-	}*/
+	}
 
 	create_surface();
 	pick_physical_device();
@@ -141,7 +141,7 @@ void base::create_instance()
 		create_info.ppEnabledLayerNames = nullptr;
 	}
 
-	assert(vkCreateInstance(&create_info, /*m_vk_alloc*/nullptr, &m_vk_instance) == VK_SUCCESS);
+	assert(vkCreateInstance(&create_info, m_vk_alloc, &m_vk_instance) == VK_SUCCESS);
 }
 
 void base::setup_debug_callbacks()
@@ -256,7 +256,7 @@ void base::create_logical_device()
 	queue_priorities[QUEUE_TERRAIN_LOADER] = 0.5f;
 	queue_priorities[QUEUE_PRESENT] = 1.f;
 
-	VkDeviceQueueCreateInfo queue;
+	VkDeviceQueueCreateInfo queue = {};
 	queue.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 	queue.queueFamilyIndex = m_queue_family_index;
 	queue.queueCount = QUEUE_COUNT;
@@ -285,8 +285,7 @@ void base::create_logical_device()
 }
 
 void base::create_swapchain()
-{
-	
+{	
 	//pick present mode
 	uint32_t present_mode_count;
 	vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, m_surface, &present_mode_count, nullptr);
@@ -294,17 +293,40 @@ void base::create_swapchain()
 	VkPresentModeKHR present_modes[VK_PRESENT_MODE_RANGE_SIZE_KHR];
 	vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, m_surface, &present_mode_count, present_modes);
 	VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-	for (auto mode : present_modes)
+	for (uint32_t i=0; i<present_mode_count; ++i)
 	{
-		if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
+		if (present_modes[i] == VK_PRESENT_MODE_MAILBOX_KHR)
 		{
-			present_mode = mode;
+			present_mode = present_modes[i];
 			break;
 		}
-		else if (mode == VK_PRESENT_MODE_IMMEDIATE_KHR)
-			present_mode = mode;
+		else if (present_modes[i] == VK_PRESENT_MODE_IMMEDIATE_KHR)
+			present_mode = present_modes[i];
 	}
 
+	//pick surface format
+	uint32_t surface_format_count;
+	vkGetPhysicalDeviceSurfaceFormatsKHR(m_physical_device, m_surface, &surface_format_count, nullptr);
+	VkSurfaceFormatKHR surface_formats[VK_FORMAT_RANGE_SIZE];
+	vkGetPhysicalDeviceSurfaceFormatsKHR(m_physical_device, m_surface, &surface_format_count, surface_formats);
+	VkSurfaceFormatKHR surface_format;
+	if (surface_format_count == 1 && surface_formats[0].format == VK_FORMAT_UNDEFINED)
+		surface_format={ VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR };
+	else
+	{
+		bool found = false;
+		for (uint32_t i=0; i<surface_format_count; ++i)
+		{
+			if (surface_formats[i].format == VK_FORMAT_B8G8R8A8_UNORM &&
+				surface_formats[i].colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+			{
+				surface_format = surface_formats[i];
+				found = true;
+				break;
+			}
+		}
+		assert(found);
+	}
 
 	//check if swapchain parameters are supported
 	VkSurfaceCapabilitiesKHR capabilities;
@@ -319,13 +341,14 @@ void base::create_swapchain()
 		capabilities.maxImageExtent.height >= SWAP_CHAIN_IMAGE_EXTENT.height);
 
 
+
 	//fill create info
 	VkSwapchainCreateInfoKHR sc = {};
 	sc.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	sc.surface = m_surface;
 	sc.minImageCount = SWAP_CHAIN_IMAGE_COUNT;
-	sc.imageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-	sc.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+	sc.imageFormat = surface_format.format;
+	sc.imageColorSpace = surface_format.colorSpace;
 	sc.imageExtent = SWAP_CHAIN_IMAGE_EXTENT;
 	sc.presentMode = present_mode;
 	sc.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;

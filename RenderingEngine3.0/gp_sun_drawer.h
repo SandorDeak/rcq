@@ -119,8 +119,8 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 2> shader_filenames =
 		{
-			"shaders/engine/sun/vert.spv",
-			"shaders/engine/sun/frag.spv"
+			"shaders/sun/vert.spv",
+			"shaders/sun/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 2> shader_flags =
 		{

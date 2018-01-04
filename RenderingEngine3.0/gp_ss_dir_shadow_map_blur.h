@@ -106,8 +106,8 @@ namespace rcq
 		};
 		static constexpr std::array<const char*, 2> shader_filenames =
 		{
-			"shaders/engine/ss_dir_shadow_map_blur/vert.spv",
-			"shaders/engine/ss_dir_shadow_map_blur/frag.spv"
+			"shaders/ss_dir_shadow_map_blur/vert.spv",
+			"shaders/ss_dir_shadow_map_blur/frag.spv"
 		};
 		static constexpr std::array<VkShaderStageFlagBits, 2> shader_flags =
 		{
