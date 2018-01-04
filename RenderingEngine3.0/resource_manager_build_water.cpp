@@ -2,6 +2,9 @@
 
 #include "utility.h"
 
+#include "const_water_grid_size.h"
+#include "const_pi.h" 
+
 using namespace rcq;
 
 template<>
@@ -25,7 +28,7 @@ void resource_manager::build<RES_TYPE_WATER>(base_resource* res, const char* bui
 		VkImageCreateInfo im = {};
 		im.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 		im.arrayLayers = 1;
-		im.extent = { GRID_SIZE, GRID_SIZE, 1 };
+		im.extent = { WATER_GRID_SIZE, WATER_GRID_SIZE, 1 };
 		im.format = VK_FORMAT_R32G32B32A32_SFLOAT;
 		im.imageType = VK_IMAGE_TYPE_2D;
 		im.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -76,7 +79,7 @@ void resource_manager::build<RES_TYPE_WATER>(base_resource* res, const char* bui
 		VkMemoryRequirements mr;
 		vkGetImageMemoryRequirements(m_base.device, w->tex.image, &mr);
 		w->tex.offset = m_device_memory.allocate(mr.size, mr.alignment);
-		vkBindImageMemory(m_base.device, w->tex.image, m_device_memory.handle, 0);
+		vkBindImageMemory(m_base.device, w->tex.image, m_device_memory.handle(), 0);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -95,7 +98,8 @@ void resource_manager::build<RES_TYPE_WATER>(base_resource* res, const char* bui
 
 	uint64_t params_staging_buffer_offset = m_mappable_memory.allocate(sizeof(resource<RES_TYPE_WATER>::fft_params_data), 1);
 
-	water::fft_params_data* params = reinterpret_cast<water::fft_params_data*>(m_mappable_memory.map(params_staging_buffer_offset,
+	resource<RES_TYPE_WATER>::fft_params_data* params = reinterpret_cast<resource<RES_TYPE_WATER>::fft_params_data*>
+		(m_mappable_memory.map(params_staging_buffer_offset,
 		sizeof(resource<RES_TYPE_WATER>::fft_params_data)));
 	params->base_frequency = build->base_frequency;
 	params->sqrtA = sqrtf(build->A);
@@ -107,7 +111,7 @@ void resource_manager::build<RES_TYPE_WATER>(base_resource* res, const char* bui
 		VkBufferCreateInfo b = {};
 		b.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		b.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		b.size = sizeof(water::fft_params_data);
+		b.size = sizeof(resource<RES_TYPE_WATER>::fft_params_data);
 		b.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 		assert(vkCreateBuffer(m_base.device, &b, m_vk_alloc, &w->fft_params_buffer) == VK_SUCCESS);

@@ -17,15 +17,15 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 
 	mesh.size = indices.size();
 
-	uint64_t vb_size = sizeof(vertex)*vertices.size();
-	uint64_t ib_size = sizeof(uint32_t)*indices.size();
-	uint64_t veb_size = build->calc_tb ? sizeof(vertex_ext)*vertices_ext.size() : 0;
+	size_t vb_size = sizeof(vertex)*vertices.size();
+	size_t ib_size = sizeof(uint32_t)*indices.size();
+	size_t veb_size = build->calc_tb ? sizeof(vertex_ext)*vertices_ext.size() : 0;
 
-	uint64_t sb_size = vb_size + ib_size + veb_size; //staging buffer size
+	size_t sb_size = vb_size + ib_size + veb_size; //staging buffer size
 
-	uint64_t vb_staging = m_mappable_memory.allocate(vb_size, 1);
-	uint64_t ib_staging = m_mappable_memory.allocate(ib_size, 1);
-	uint64_t veb_staging = build->calc_tb ? m_mappable_memory.allocate(veb_size, 1) : 0;
+	VkDeviceSize vb_staging = m_mappable_memory.allocate(vb_size, 1);
+	VkDeviceSize ib_staging = m_mappable_memory.allocate(ib_size, 1);
+	VkDeviceSize veb_staging = build->calc_tb ? m_mappable_memory.allocate(veb_size, 1) : 0;
 
 
 	//create vertex buffer
@@ -85,9 +85,9 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 	}
 
 	//allocate buffer memory
-	uint64_t vb_offset = m_device_memory.allocate(vb_size, vb_mr.alignment);
-	uint64_t ib_offset = m_device_memory.allocate(ib_size, ib_mr.alignment);
-	uint64_t veb_offset = build->calc_tb ? m_device_memory.allocate(veb_size, veb_mr.alignment) : 0;
+	VkDeviceSize vb_offset = m_device_memory.allocate(vb_size, vb_mr.alignment);
+	VkDeviceSize ib_offset = m_device_memory.allocate(ib_size, ib_mr.alignment);
+	VkDeviceSize veb_offset = build->calc_tb ? m_device_memory.allocate(veb_size, veb_mr.alignment) : 0;
 
 	/*VkDeviceSize ib_offset = calc_offset(ib_mr.alignment, vb_mr.size);
 	VkDeviceSize veb_offset = calc_offset(veb_mr.alignment, ib_offset + ib_mr.size);

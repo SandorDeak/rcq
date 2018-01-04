@@ -43,17 +43,18 @@ namespace rcq
 
 		void* alloc(size_t size, size_t alignment)
 		{
-			return reinterpret_cast<void*>(m_memory->allocate(size, alignment));
+			return reinterpret_cast<void*>(m_memory->allocate(size, alignment));  
 		}
 
 		void free(void* ptr)
 		{
-			m_memory->deallocate(reinterpret_cast<size_t>(ptr));
+			if (ptr!=nullptr)
+				m_memory->deallocate(reinterpret_cast<size_t>(ptr));
 		}
 
 		void* realloc(void* original, size_t size, size_t alignment, VkSystemAllocationScope scope)
 		{
-
+			//should be written!!!
 			return nullptr;
 		}
 
@@ -67,7 +68,6 @@ namespace rcq
 
 		static void* VKAPI_CALL alloc_static(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope alloc_scope)
 		{
-
 			return static_cast<vk_allocator*>(user_data)->alloc(size, alignment);
 		}
 

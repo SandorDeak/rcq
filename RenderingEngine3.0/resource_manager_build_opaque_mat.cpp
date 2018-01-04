@@ -31,7 +31,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 				throw std::runtime_error("failed to load texture image");
 			}
 
-			uint64_t im_size = width*height * 4;
+			size_t im_size = width*height * 4;
 
 			staging_buffer_offsets[i] = m_mappable_memory.allocate(im_size, 1);
 			void* staging_buffer_data = reinterpret_cast<void*>(m_mappable_memory.map(staging_buffer_offsets[i], im_size));
@@ -40,7 +40,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 			stbi_image_free(pixels);
 
 			uint32_t mip_level_count = 0;
-			uint32_t mip_level_size = std::max(width, height);
+			uint32_t mip_level_size = width < height ? height : width;
 			while (mip_level_size != 0)
 			{
 				mip_level_size >>= 1;
@@ -165,7 +165,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 			}
 
 			//transition all level layout to shader read only optimal
-			std::array<VkImageMemoryBarrier, 2> barriers = {};
+			VkImageMemoryBarrier barriers[2] = {};
 			for (uint32_t i = 0; i < 2; ++i)
 			{
 				barriers[i].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -189,7 +189,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 				0,
 				0, nullptr,
 				0, nullptr,
-				2, barriers.data()
+				2, barriers
 			);
 
 			//create image view
@@ -242,7 +242,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 		VkBufferCreateInfo buffer = {};
 		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-		buffer.size = sizeof(material_opaque_data);
+		buffer.size = sizeof(resource<RES_TYPE_MAT_OPAQUE>::data);
 		buffer.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		assert(vkCreateBuffer(m_base.device, &buffer, m_vk_alloc, &mat.data_buffer) == VK_SUCCESS);
 	}
@@ -298,10 +298,10 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 		VkDescriptorBufferInfo buffer_info = {};
 		buffer_info.buffer = mat.data_buffer;
 		buffer_info.offset = 0;
-		buffer_info.range = sizeof(material_opaque_data);
+		buffer_info.range = sizeof(resource<RES_TYPE_MAT_OPAQUE>::data);
 
-		std::array<VkDescriptorImageInfo, TEX_TYPE_COUNT> tex_info;
-		std::array<VkWriteDescriptorSet, TEX_TYPE_COUNT + 1> write = {};
+		VkDescriptorImageInfo tex_info[TEX_TYPE_COUNT];
+		VkWriteDescriptorSet write[TEX_TYPE_COUNT + 1] = {};
 
 		write[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 		write[0].descriptorCount = 1;
@@ -336,7 +336,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 			flag = flag << 1;
 		}
 
-		vkUpdateDescriptorSets(m_base.device, write_index, write.data(), 0, nullptr);
+		vkUpdateDescriptorSets(m_base.device, write_index, write, 0, nullptr);
 	}
 
 	wait_for_build_fence();

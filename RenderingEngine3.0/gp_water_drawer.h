@@ -35,7 +35,7 @@ namespace rcq
 			0,
 			4
 		};
-		static constexpr VkPipelineRasterizationStateCreateInfo VkPipelineRasterizationStateCreateInfo =
+		static constexpr VkPipelineRasterizationStateCreateInfo rasterizer =
 		{
 			VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 			nullptr,

@@ -28,7 +28,7 @@ namespace rcq
 			}
 		}
 
-		void init(memory_resource* memory, size_t size = 0)
+		void init(host_memory* memory, size_t size = 0)
 		{
 			m_memory = memory;
 			m_size = size;
@@ -186,7 +186,7 @@ namespace rcq
 					m_capacity <<= 1;
 
 				m_memory->deallocate(reinterpret_cast<size_t>(m_data));
-				m_memory->allocate(m_capacity * sizeof(T));
+				m_memory->allocate(m_capacity * sizeof(T), alignof(T));
 				m_size = size;
 			}
 		}

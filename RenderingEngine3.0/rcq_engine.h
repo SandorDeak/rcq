@@ -25,9 +25,6 @@ namespace rcq_user
 		terrain = rcq::REND_TYPE_TERRAIN
 	};
 
-	template<resource res>
-	using build_info = rcq::resource<static_cast<uint32_t>(res)>::build_info;
-
 	inline void init()
 	{
 		rcq::base_create_info base_create;
@@ -79,6 +76,9 @@ namespace rcq_user
 
 	struct resource_handle;
 	struct renderable_handle;
+
+	template<resource res>
+	struct build_info : public rcq::resource<static_cast<uint32_t>(res)>::build_info {};
 
 	struct resource_handle 
 	{ 

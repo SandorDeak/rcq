@@ -3,7 +3,7 @@
 using namespace rcq;
 
 template<>
-void resource_manager::build<RESOURCE_TYPE_TR>(base_resource* res, const char* build_info)
+void resource_manager::build<RES_TYPE_TR>(base_resource* res, const char* build_info)
 {
 
 	auto& tr = *reinterpret_cast<resource<RES_TYPE_TR>*>(res->data);
@@ -69,7 +69,7 @@ void resource_manager::build<RESOURCE_TYPE_TR>(base_resource* res, const char* b
 	VkDescriptorBufferInfo buffer_info;
 	buffer_info.buffer = tr.data_buffer;
 	buffer_info.offset = 0;
-	buffer_info.range = sizeof(transform_data);
+	buffer_info.range = sizeof(resource<RES_TYPE_TR>::data);
 
 	VkWriteDescriptorSet write = {};
 	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;

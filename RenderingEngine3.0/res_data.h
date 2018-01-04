@@ -1,7 +1,9 @@
 #pragma once
 
 #include "glm.h"
+
 #include "const_frustum_split_count.h"
+
 #include "enum_res_data.h"
 
 #include <array>
@@ -148,20 +150,16 @@ namespace rcq
 		size_t size;
 		std::array<size_t, RES_DATA_COUNT> offsets;
 
-		static constexpr std::array<size_t, RES_DATA_COUNT> get_sizes()
-		{
-			return get_sizes_impl(std::make_index_sequence<RES_DATA_COUNT>());
-		}
-
 		template<size_t... res_data>
-		static constexpr std::array<size_t, RES_DATA_COUNT> get_sizes_impl(std::index_sequence<res_data...>)
+		static constexpr auto get_sizes(std::index_sequence<res_data...>)
 		{
-			return { sizeof(ressource_data<res_data>), ... };
+			return std::array<size_t, sizeof...(res_data)>{ sizeof(resource_data<res_data>) ... };
 		}
 
 		void calc_offset_and_size(size_t alignment)
 		{
-			constexpr auto res_data_sizes = res_data::get_sizes();
+			constexpr auto res_data_sizes = get_sizes(std::make_index_sequence<RES_DATA_COUNT>());
+
 			size = 0;
 			for (uint32_t i = 0; i < RES_DATA_COUNT; ++i)
 			{
@@ -170,7 +168,7 @@ namespace rcq
 			}
 		}
 
-		size_t align(size_t alignment, size_t offset)
+		static size_t align(size_t alignment, size_t offset)
 		{
 			return (offset + alignment - 1) & (~(alignment - 1));
 		}

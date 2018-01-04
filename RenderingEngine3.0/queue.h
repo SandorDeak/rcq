@@ -19,14 +19,12 @@ namespace rcq
 		queue() {}
 
 		queue(host_memory* memory) :
-			m_memory(memory),
-			m_size(0)
+			m_memory(memory)
 		{}
 
 		void init(host_memory* memory)
 		{
 			m_memory = memory;
-			m_size = 0;
 		}
 
 		queue(const queue& other) = delete;
@@ -36,7 +34,6 @@ namespace rcq
 			m_first(other.m_first),
 			m_first_back(other.m_first_back),
 			m_first_free(other.m_first_free),
-			m_size(other.m_size)
 		{
 			other.m_size.store(0, std::memory_order_relaxed);
 			other.m_first.store(nullptr, std::memory_order_relaxed);
@@ -93,16 +90,13 @@ namespace rcq
 		void init_buffer()
 		{
 			m_first = reinterpret_cast<node*>(m_memory->allocate(sizeof(node), alignof(node)));
-			m_first->next = m_first;
-			m_first_back = m_first;
-			m_first_free = m_first;
+			m_first.load()->next = m_first.load();
+			m_first_back.store(m_first.load());
+			m_first_free = m_first.load();
 		}
 
 		void reset()
 		{
-			m_size = 0;
-			m_size_back = 0;
-
 			node* first = m_first.load(std::memory_order_acquire);
 			if (first != nullptr)
 			{
@@ -154,17 +148,17 @@ namespace rcq
 
 		void commit()
 		{
-			m_first_back.store(m_first_free, std::memory_order_relaxed;
+			m_first_back.store(m_first_free, std::memory_order_relaxed);
 		}
 
 		T* front()
 		{
-			return &m_first->data;
+			return &m_first.load()->data;
 		}
 
 		void pop()
 		{
-			m_first = m_first->next;
+			m_first.store(m_first.load()->next);
 		}
 
 		bool empty()

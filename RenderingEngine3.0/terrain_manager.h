@@ -11,6 +11,8 @@
 #include "resources.h"
 #include "base_info.h"
 
+#include <thread>
+
 namespace rcq
 {
 	class terrain_manager
@@ -56,7 +58,7 @@ namespace rcq
 			static const uint32_t max_request_count = 256;
 			uint32_t requests[max_request_count];
 			uint32_t request_count;
-			uint32_t padding;
+			uint32_t padding[3];
 		};
 
 		const base_info& m_base;

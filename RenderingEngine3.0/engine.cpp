@@ -24,9 +24,9 @@ engine::~engine()
 {
 	assert(m_opaque_objects.size() == 0);
 
-	vkQueueWaitIdle(m_base.graphics_queue);
-	vkQueueWaitIdle(m_base.compute_queue);
-	vkQueueWaitIdle(m_base.present_queue);
+	vkQueueWaitIdle(m_base.queues[QUEUE_RENDER]);
+	vkQueueWaitIdle(m_base.queues[QUEUE_COMPUTE]);
+	vkQueueWaitIdle(m_base.queues[QUEUE_PRESENT]);
 
 	for (auto& s : m_semaphores)
 		vkDestroySemaphore(m_base.device, s, m_vk_alloc);
@@ -43,9 +43,17 @@ engine::~engine()
 	for (auto& cp : m_cpools)
 		vkDestroyCommandPool(m_base.device, cp, m_vk_alloc);
 	for (auto& gp : m_gps)
-		vkDestroyPipeline(m_base.device, gp, m_vk_alloc);
+	{
+		vkDestroyPipeline(m_base.device, gp.ppl, m_vk_alloc);
+		vkDestroyPipelineLayout(m_base.device, gp.pl, m_vk_alloc);
+		vkDestroyDescriptorSetLayout(m_base.device, gp.dsl, m_vk_alloc);
+	}
 	for (auto& cp : m_cps)
-		vkDestroyPipeline(m_base.device, cp, m_vk_alloc);
+	{
+		vkDestroyPipeline(m_base.device, cp.ppl, m_vk_alloc);
+		vkDestroyPipelineLayout(m_base.device, cp.pl, m_vk_alloc);
+		vkDestroyDescriptorSetLayout(m_base.device, cp.dsl, m_vk_alloc);
+	}
 	for (auto& rp : m_rps)
 		vkDestroyRenderPass(m_base.device, rp, m_vk_alloc);
 	for (auto& s : m_samplers)

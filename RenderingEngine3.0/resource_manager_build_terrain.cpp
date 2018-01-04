@@ -1,5 +1,8 @@
 #include "resource_manager.h"
 
+#include <fstream>
+#include <assert.h>
+
 using namespace rcq;
 
 template<>
@@ -17,10 +20,10 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 	{
 		char filename[128];
 		char num[2];
-		strcpy(filename, build->filename);
-		itoa(i, num, 10);
-		strcat(filename, num);
-		strcat(filename, ".terr");
+		strcpy_s(filename, build->filename);
+		_itoa_s(i, num, 10);
+		strcat_s(filename, num);
+		strcat_s(filename, ".terr");
 		new(&t->tex.files[i]) std::ifstream(filename, std::ios::binary);
 		assert(t->tex.files[i].is_open());
 	}
@@ -56,7 +59,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		VkSparseImageMemoryRequirements sparse_mr;
 		vkGetImageSparseMemoryRequirements(m_base.device, t->tex.image, &mr_count, &sparse_mr);
 
-		assert(sparse_mr.formatProperties.flags & VK_SPARSE_IMAGE_FORMAT_NONSTANDARD_BLOCK_SIZE_BIT == 0);
+		assert((sparse_mr.formatProperties.flags & VK_SPARSE_IMAGE_FORMAT_NONSTANDARD_BLOCK_SIZE_BIT) == 0);
 
 		VkMemoryRequirements mr;
 		vkGetImageMemoryRequirements(m_base.device, t->tex.image, &mr);
@@ -81,16 +84,16 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		glm::vec2 tile_count = build->level0_image_size / build->level0_tile_size;
 		glm::uvec2 page_size(sparse_mr.formatProperties.imageGranularity.width,
 			sparse_mr.formatProperties.imageGranularity.height);
-		glm::vec2 page_count_in_level0_image = build->level0_image_size / page_size;
+		glm::uvec2 page_count_in_level0_image = build->level0_image_size / page_size;
 
-		uint64_t page_count = page_count_in_level0_image.x*page_count_in_level0_image.y;
+		uint32_t page_count = page_count_in_level0_image.x*page_count_in_level0_image.y;
 
-		page_count *= static_cast<uint64_t>((1.f - powf(0.25f, static_cast<float>(build->mip_level_count))) / 0.75f);
+		page_count *= static_cast<uint32_t>((1.f - powf(0.25f, static_cast<float>(build->mip_level_count))) / 0.75f);
 
 
 		vector<VkSparseImageMemoryBind> page_binds(&m_host_memory, page_count);
 
-		uint64_t page_index = 0;
+		uint32_t page_index = 0;
 		glm::uvec2 tile_size_in_pages = build->level0_tile_size / page_size;
 		for (uint32_t mip_level = 0; mip_level < build->mip_level_count; ++mip_level)
 		{
@@ -162,10 +165,10 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		bind_info.signalSemaphoreCount = 1;
 		bind_info.pSignalSemaphores = &binding_finished_s;
 
-		vkQueueBindSparse(m_base.transfer_queue, 1, &bind_info, VK_NULL_HANDLE);
+		vkQueueBindSparse(m_base.queues[QUEUE_RESOURCE_BUILD], 1, &bind_info, VK_NULL_HANDLE);
 	}
 
-	uint64_t data_staging_buffer_offset;
+	VkDeviceSize data_staging_buffer_offset;
 	//create terrain data buffer
 	{
 		VkBufferCreateInfo buffer = {};
@@ -325,8 +328,8 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 
 		VkDescriptorSetLayout dsls[2] =
 		{
-			m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN],
-			m_dsls[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN_COMPUTE]
+			m_dsls[DSL_TYPE_TERRAIN],
+			m_dsls[DSL_TYPE_TERRAIN_COMPUTE]
 		};
 
 		VkDescriptorSetAllocateInfo alloc = {};
@@ -345,12 +348,12 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		VkDescriptorBufferInfo request_buffer = {};
 		request_buffer.buffer = t->request_data_buffer;
 		request_buffer.offset = 0;
-		request_buffer.range = sizeof(terrain_request_data);
+		request_buffer.range = sizeof(resource<RES_TYPE_TERRAIN>::request_data);
 
 		VkDescriptorBufferInfo data_buffer = {};
 		data_buffer.buffer = t->data_buffer;
 		data_buffer.offset = 0;
-		data_buffer.range = sizeof(terrain_data);
+		data_buffer.range = sizeof(resource<RES_TYPE_TERRAIN>::data);
 
 		VkDescriptorImageInfo tex = {};
 		tex.imageLayout = VK_IMAGE_LAYOUT_GENERAL;

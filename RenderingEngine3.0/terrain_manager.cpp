@@ -4,6 +4,10 @@
 #include "utility.h"
 
 #include "const_max_alignment.h"
+#include "const_max_tile_count.h"
+
+#include <iostream>
+#include <fstream>
 
 
 using namespace rcq;
@@ -136,7 +140,7 @@ void terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 		{
 			pages[page_index] = m_page_pool.allocate(m_page_size, 1);
 
-			uint64_t page_offset_in_bytes = tile_offset_in_bytes
+			size_t page_offset_in_bytes = tile_offset_in_bytes
 				+ (file_size.x*page_size.y*j + i*page_size.x) * sizeof(glm::vec4);
 
 			for (uint32_t k = 0; k < page_size.y; ++k)

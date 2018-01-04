@@ -2,6 +2,29 @@
 
 using namespace rcq;
 
+template<typename T>
+constexpr T componentwise_max(const T& v, const T& w)
+{
+	T ret = {};
+	for (int i = 0; i < v.length(); ++i)
+	{
+		ret[i] = v[i] < w[i] ? w[i] : v[i];
+	}
+	return ret;
+}
+
+template<typename T>
+constexpr T componentwise_min(const T& v, const T& w)
+{
+	T ret = {};
+	for (int i = 0; i < v.length(); ++i)
+	{
+		ret[i] = v[i] < w[i] ? v[i] : w[i];
+	}
+	return ret;
+}
+
+
 void engine::calc_projs()
 {
 	glm::vec3 light_dir = static_cast<glm::mat3>(m_render_settings.view)*m_render_settings.light_dir;

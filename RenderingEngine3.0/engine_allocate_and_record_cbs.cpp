@@ -7,6 +7,7 @@
 
 #include "const_swap_chain_image_count.h"
 #include "const_swap_chain_image_extent.h"
+#include "const_bloom_image_size_factor.h"
 
 using namespace rcq;
 

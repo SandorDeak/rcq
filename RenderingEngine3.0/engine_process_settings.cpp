@@ -2,7 +2,22 @@
 
 #include "enum_res_data.h"
 
+#include "const_swap_chain_image_extent.h"
+
 using namespace rcq;
+
+inline glm::vec3 get_orthonormal(const glm::vec3& v)
+{
+	if (fabsf(v.x) > 0.001f || fabsf(v.y) > 0.001f)
+	{
+		return glm::normalize(glm::vec3(-v.y, v.x, 0.f));
+	}
+	else
+	{
+		return glm::normalize(glm::vec3(-v.z, 0.f, v.x));
+	}
+}
+
 
 void engine::process_render_settings()
 {
@@ -107,8 +122,8 @@ void engine::process_render_settings()
 	{
 		auto data = m_res_data.get<RES_DATA_WATER_DRAWER>();
 		data->proj_x_view = m_render_settings.proj*m_render_settings.view;
-		data->half_resolution.x = static_cast<float>(m_base.swap_chain_image_extent.width) / 2.f;
-		data->half_resolution.y = static_cast<float>(m_base.swap_chain_image_extent.height) / 2.f;
+		data->half_resolution.x = static_cast<float>(SWAP_CHAIN_IMAGE_EXTENT.width) / 2.f;
+		data->half_resolution.y = static_cast<float>(SWAP_CHAIN_IMAGE_EXTENT.height) / 2.f;
 		data->light_dir = m_render_settings.light_dir;
 		data->view_pos = m_render_settings.pos;
 		data->tile_size_in_meter = m_water.grid_size_in_meters;

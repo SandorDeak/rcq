@@ -5,7 +5,7 @@
 using namespace rcq;
 
 template<>
-void resource_manager::build<RESOURCE_TYPE_SKY>(base_resource* res, const char* build_info)
+void resource_manager::build<RES_TYPE_SKY>(base_resource* res, const char* build_info)
 {
 	resource<RES_TYPE_SKY>* s = reinterpret_cast<resource<RES_TYPE_SKY>*>(res->data);
 	const auto build = reinterpret_cast<const resource<RES_TYPE_SKY>::build_info*>(build_info);
@@ -24,8 +24,8 @@ void resource_manager::build<RESOURCE_TYPE_SKY>(base_resource* res, const char* 
 
 		//load image from file to staging buffer;
 		char filename[256];
-		strcpy(filename, build->filename);
-		strcat(filename, postfix[i]);
+		strcpy_s(filename, build->filename);
+		strcat_s(filename, postfix[i]);
 
 		uint64_t size = i == 2 ? transmittance_im_size : sky_im_size;
 

@@ -16,10 +16,10 @@ void engine::prepare_gp_create_info(VkGraphicsPipelineCreateInfo& create_info, V
 	create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
 	create_info.basePipelineHandle = VK_NULL_HANDLE;
 	create_info.basePipelineIndex = -1;
-	create_info.renderPass = m_passes[gp_create_info<gp_id>::render_pass];
+	create_info.renderPass = m_rps[gp_create_info<gp_id>::render_pass];
 	create_info.pStages = &shaders[shader_index];
 	create_info.stageCount = gp_create_info<gp_id>::shader_filenames.size();
-	create_info.pInputAssemblyState = &gp_create_info<gp_id>::assembly;
+	create_info.pInputAssemblyState = &gp_create_info<gp_id>::input_assembly;
 	create_info.pMultisampleState = &gp_create_info<gp_id>::multisample;
 	create_info.pRasterizationState = &gp_create_info<gp_id>::rasterizer;
 	create_info.pVertexInputState = &gp_create_info<gp_id>::vertex_input;
@@ -30,14 +30,14 @@ void engine::prepare_gp_create_info(VkGraphicsPipelineCreateInfo& create_info, V
 	for (uint32_t i = 0; i < gp_create_info<gp_id>::shader_filenames.size(); ++i)
 	{
 		uint32_t size;
-		utility::read_file(shader_filenames[i], &code[code_index], size);
+		utility::read_file(gp_create_info<gp_id>::shader_filenames[i], &code[code_index], size);
 		shader_modules[shader_index].sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		shader_modules[shader_index].codeSize = size;
 		shader_modules[shader_index].pCode = reinterpret_cast<uint32_t*>(&code[code_index]);
 
 		shaders[shader_index].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 		shaders[shader_index].pName = "main";
-		shaders[shader_index].stage = shader_flags[i];
+		shaders[shader_index].stage = gp_create_info<gp_id>::shader_flags[i];
 
 		code_index += size;
 		++shader_index;
@@ -66,7 +66,7 @@ void engine::prepare_gp_create_infos(std::index_sequence<gp_ids...>,
 	char* code, uint32_t code_index)
 {
 	auto l = { (prepare_gp_create_info<gp_ids>(create_infos[gp_ids], layouts[gp_ids], shaders, shader_modules, shader_index,
-		dsls, dsl_index, code_index), 0), ... };
+		dsls, dsl_index, code, code_index), 0)... };
 }
 
 void engine::create_graphics_pipelines()

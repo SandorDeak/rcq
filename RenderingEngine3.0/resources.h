@@ -12,30 +12,8 @@
 
 namespace rcq
 {
-	struct base_resource
-	{
-		static const uint32_t data_size = 256;
-		static_assert(data_size >= MAX_RESOURCE_SIZE);
-
-		char data[data_size];
-		uint32_t res_type;
-		std::atomic_bool ready_bit;
-	};
-
-	struct base_resource_build_info
-	{
-		static const uint32_t data_size = 128;
-		static_assert(data_size >= MAX_BUILD_INFO_SIZE);
-
-		char data[data_size];
-		uint32_t resource_type;
-		base_resource* base_res;
-	};
-
-
-	template<size_t res_type>
+	template<uint32_t res_type>
 	struct resource;
-
 
 	template<>
 	struct resource<RES_TYPE_MAT_OPAQUE>
@@ -90,7 +68,7 @@ namespace rcq
 		VkDeviceSize vb_offset;
 		VkDeviceSize ib_offset;
 		VkDeviceSize veb_offset;
-		VkDeviceSize size;
+		uint32_t size;
 	};
 
 	template<>
@@ -237,6 +215,7 @@ namespace rcq
 		uint32_t dp_index;
 	};
 
+
 	template<uint32_t res_type>
 	constexpr uint32_t max_resource_size(uint32_t val)
 	{
@@ -265,4 +244,24 @@ namespace rcq
 
 	constexpr uint32_t MAX_RESOURCE_SIZE = max_resource_size<0>(0);
 	constexpr uint32_t MAX_BUILD_INFO_SIZE = max_build_info_size<0>(0);
+
+	struct base_resource
+	{
+		static const uint32_t data_size = 256;
+		static_assert(data_size >= MAX_RESOURCE_SIZE);
+
+		char data[data_size];
+		uint32_t res_type;
+		std::atomic_bool ready_bit;
+	};
+
+	struct base_resource_build_info
+	{
+		static const uint32_t data_size = 128;
+		static_assert(data_size >= MAX_BUILD_INFO_SIZE);
+
+		char data[data_size];
+		uint32_t resource_type;
+		base_resource* base_res;
+	};
 }

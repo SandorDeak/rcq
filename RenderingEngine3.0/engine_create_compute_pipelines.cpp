@@ -1,4 +1,7 @@
 #include "engine.h"
+
+#include "resource_manager.h"
+
 #include "utility.h"
 
 #include "cps.h"
@@ -21,12 +24,12 @@ void engine::prepare_cp_create_info(VkComputePipelineCreateInfo& create_info, Vk
 	utility::read_file(cp_create_info<cp_id>::shader_filename, &code[code_index], size);
 	shader_module.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 	shader_module.codeSize = size;
-	create_info.stage.pCode = reinterpret_cast<uint32_t*>(&code[code_index]);
+	shader_module.pCode = reinterpret_cast<uint32_t*>(&code[code_index]);
 	code_index += size;
 
 	create_info.stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
 	create_info.stage.pName = "main";
-	create_info.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	create_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
 
 	//create dsl
 	assert(vkCreateDescriptorSetLayout(m_base.device, &cp_create_info<cp_id>::dsl::create_info, m_vk_alloc, &m_cps[cp_id].dsl)
@@ -37,7 +40,7 @@ void engine::prepare_cp_create_info(VkComputePipelineCreateInfo& create_info, Vk
 	layout.pSetLayouts = &dsls[dsl_index];
 	layout.setLayoutCount = cp_create_info<cp_id>::dsl_types.size();
 	dsls[dsl_index++] = m_cps[cp_id].dsl;
-	for (auto dsl_type : gp_create_info<cp_id>::dsl_types)
+	for (auto dsl_type : cp_create_info<cp_id>::dsl_types)
 	{
 		dsls[dsl_index++] = resource_manager::instance()->get_dsl(dsl_type);
 	}
@@ -52,8 +55,8 @@ void engine::prepare_cp_create_infos(std::index_sequence<cp_ids...>,
 	VkDescriptorSetLayout* dsls, uint32_t& dsl_index,
 	char* code, uint32_t code_index)
 {
-	auto l = { (prepare_cp_create_info<cp_ids>(create_infos[cp_ids], layouts[cp_ids], shader_modules,
-		dsls, dsl_index, code_index), 0), ... };
+	auto l = { (prepare_cp_create_info<cp_ids>(create_infos[cp_ids], layouts[cp_ids], shader_modules[cp_ids],
+		dsls, dsl_index, code, code_index), 0)... };
 }
 
 void engine::create_compute_pipelines()

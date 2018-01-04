@@ -21,16 +21,16 @@ base::base(const base_create_info& info) :
 	create_window();
 	create_instance();
 
-	if (info.enable_validation_layers)
+	/*if (info.enable_validation_layers)
 	{
 		setup_debug_callbacks();
-	}
+	}*/
 
 	create_surface();
 	pick_physical_device();
 	create_logical_device();
-	create_swap_chain();
-	create_swap_cain_image_views();
+	create_swapchain();
+	create_swapchain_views();
 	fill_base_info();
 }
 
@@ -71,19 +71,20 @@ void base::create_window()
 	m_window = glfwCreateWindow(SWAP_CHAIN_IMAGE_EXTENT.width, SWAP_CHAIN_IMAGE_EXTENT.height, m_info.window_name, nullptr, nullptr);
 }
 
-bool base::check_valiadation_layer_support()
+bool base::check_validation_layer_support()
 {
 	uint32_t layer_count;
 	vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
-	std::vector<VkLayerProperties> available_layers(layer_count);
-	vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
+	VkLayerProperties available_layers[16];
+	assert(layer_count <= 16);
+	vkEnumerateInstanceLayerProperties(&layer_count, available_layers);
 
-	for (const char* layer_name : m_info.validation_layers)
+	for (uint32_t i=0; i<m_info.validation_layer_count; ++i)
 	{
 		bool found = false;
-		for (const auto& layer_properties : available_layers)
+		for (uint32_t j=0; j<layer_count; ++j)
 		{
-			if (strcmp(layer_name, layer_properties.layerName) == 0)
+			if (strcmp(m_info.validation_layers[i], available_layers[j].layerName) == 0)
 			{
 				found = true;
 				break;
@@ -99,12 +100,12 @@ bool base::check_valiadation_layer_support()
 
 void base::create_instance()
 {
-	assert(!m_info.enable_validation_layers || check_valiadation_layer_support());
+	assert(!m_info.enable_validation_layers || check_validation_layer_support());
 
 	VkApplicationInfo app_info = {};
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	app_info.pApplicationName = "rcq rendering engine";
-	app_info.apiVersion = VK_MAKE_VERSION(1, 0, 0);
+	app_info.apiVersion = VK_API_VERSION_1_0;
 	app_info.pEngineName = "rcq";
 	app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0);
 	app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
@@ -126,7 +127,7 @@ void base::create_instance()
 	for (uint32_t i = 0; i < m_info.instance_extensions_count; ++i)
 		required_extensions[i + glfw_extension_count] = m_info.instance_extensions[i];
 
-	create_info.enabledExtensionCount = require;
+	create_info.enabledExtensionCount = required_extension_count;
 	create_info.ppEnabledExtensionNames = required_extensions;
 
 	if (m_info.enable_validation_layers)
@@ -140,7 +141,7 @@ void base::create_instance()
 		create_info.ppEnabledLayerNames = nullptr;
 	}
 
-	assert(vkCreateInstance(&create_info, m_vk_alloc, &m_vk_instance) == VK_SUCCESS);
+	assert(vkCreateInstance(&create_info, /*m_vk_alloc*/nullptr, &m_vk_instance) == VK_SUCCESS);
 }
 
 void base::setup_debug_callbacks()
@@ -188,17 +189,19 @@ void base::pick_physical_device()
 	vkEnumeratePhysicalDevices(m_vk_instance, &device_count, nullptr);
 	assert(device_count != 0);
 
-	vkEnumeratePhysicalDevices(m_vk_instance, 1, &m_physical_device);
+	device_count = 1;
+	vkEnumeratePhysicalDevices(m_vk_instance, &device_count, &m_physical_device);
 
-	m_queue_family_index = find_queue_family_index(m_physical_device);
+	m_queue_family_index = find_queue_family_index();
 }
 
 uint32_t base::find_queue_family_index()
 {
 	uint32_t queue_family_count = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(m_device, &queue_family_count, nullptr);
-	std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
-	vkGetPhysicalDeviceQueueFamilyProperties(m_device, &queue_family_count, queue_families.data());
+	vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &queue_family_count, nullptr);
+	VkQueueFamilyProperties queue_families[16];
+	assert(queue_family_count <= 16);
+	vkGetPhysicalDeviceQueueFamilyProperties(m_physical_device, &queue_family_count, queue_families);
 
 	int i = 0;
 	for (const auto& family : queue_families)
@@ -217,7 +220,7 @@ uint32_t base::find_queue_family_index()
 		}
 
 		VkBool32 present_support = false;
-		vkGetPhysicalDeviceSurfaceSupportKHR(m_device, i, m_surface, &present_support);
+		vkGetPhysicalDeviceSurfaceSupportKHR(m_physical_device, i, m_surface, &present_support);
 
 		if (present_support)
 			return i;
@@ -225,6 +228,7 @@ uint32_t base::find_queue_family_index()
 		++i;
 	}
 	assert(false);
+	return ~0;
 }
 
 void base::create_logical_device()
@@ -288,9 +292,9 @@ void base::create_swapchain()
 	vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, m_surface, &present_mode_count, nullptr);
 	assert(present_mode_count != 0);
 	VkPresentModeKHR present_modes[VK_PRESENT_MODE_RANGE_SIZE_KHR];
-	vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &present_mode_count, present_modes);
+	vkGetPhysicalDeviceSurfacePresentModesKHR(m_physical_device, m_surface, &present_mode_count, present_modes);
 	VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-	for (auto modes : present_modes)
+	for (auto mode : present_modes)
 	{
 		if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
 		{
@@ -304,7 +308,7 @@ void base::create_swapchain()
 
 	//check if swapchain parameters are supported
 	VkSurfaceCapabilitiesKHR capabilities;
-	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &capabilities);
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physical_device, m_surface, &capabilities);
 	assert(capabilities.minImageCount <= SWAP_CHAIN_IMAGE_COUNT);
 	if (capabilities.maxImageCount != 0)
 		assert(capabilities.maxImageCount >= SWAP_CHAIN_IMAGE_COUNT);
@@ -348,19 +352,19 @@ void base::create_swapchain()
 	sc.clipped = VK_TRUE;
 	sc.oldSwapchain = VK_NULL_HANDLE;
 
-	assert(vkCreateSwapchainKHR(m_device, &create_info, m_vk_alloc, &m_swapchain) == VK_SUCCESS);
+	assert(vkCreateSwapchainKHR(m_device, &sc, m_vk_alloc, &m_swapchain) == VK_SUCCESS);
 
 	uint32_t image_count;
 	vkGetSwapchainImagesKHR(m_device, m_swapchain, &image_count, nullptr);
 	assert(image_count == SWAP_CHAIN_IMAGE_COUNT);
-	vkGetSwapchainImagesKHR(m_device, m_swap_chain, &image_count, m_swapchain_images);
+	vkGetSwapchainImagesKHR(m_device, m_swapchain, &image_count, m_swapchain_images);
 }
 
 void base::create_swapchain_views()
 {
 	VkImageViewCreateInfo view = {};
 	view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	view.format = m_swap_chin_image_format;
+	view.format = VK_FORMAT_B8G8R8A8_UNORM;
 	view.viewType = VK_IMAGE_VIEW_TYPE_2D;
 
 	view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -372,7 +376,7 @@ void base::create_swapchain_views()
 	for (uint32_t i = 0; i < SWAP_CHAIN_IMAGE_COUNT; ++i)
 	{
 		view.image = m_swapchain_images[i];
-		assert(vkCreateImageView(m_device, &view, m_alloc, m_swapchain_views+i) == VK_SUCCESS);
+		assert(vkCreateImageView(m_device, &view, m_vk_alloc, m_swapchain_views+i) == VK_SUCCESS);
 	}
 }
 
@@ -382,8 +386,9 @@ void base::fill_base_info()
 	m_base_info.physical_device = m_physical_device;
 	m_base_info.queue_family_index = m_queue_family_index;
 	m_base_info.swapchain = m_swapchain;
-	m_base_info.swapchain_views = m_swapchain_views;
 	m_base_info.window = m_window;
+	for(uint32_t i=0; i<SWAP_CHAIN_IMAGE_COUNT; ++i)
+		m_base_info.swapchain_views[i] = m_swapchain_views[i];
 	for (uint32_t i = 0; i < QUEUE_COUNT; ++i)
 		m_base_info.queues[i] = m_queues[i];
 }

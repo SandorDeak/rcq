@@ -2,8 +2,8 @@
 
 #include "const_dir_shadow_map_size.h"
 #include "const_environment_map_size.h"
-
 #include "const_swap_chain_image_extent.h"
+#include "const_bloom_image_size_factor.h"
 
 namespace rcq
 {
@@ -11,7 +11,7 @@ namespace rcq
 	{
 		VkPhysicalDeviceProperties props;
 		vkGetPhysicalDeviceProperties(m_base.physical_device, &props);
-		uint64_t ub_alignment = props.limits.minUniformBufferOffsetAlignment;
+		size_t ub_alignment = static_cast<size_t>(props.limits.minUniformBufferOffsetAlignment);
 		m_res_data.calc_offset_and_size(ub_alignment);
 
 		size_t size = m_res_data.size;

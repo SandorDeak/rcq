@@ -74,6 +74,7 @@ namespace rcq
 		void create_swapchain();
 		void create_swapchain_views();
 		void fill_base_info();
+		bool check_validation_layer_support();
 
 
 

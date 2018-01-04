@@ -19,6 +19,7 @@ uint32_t utility::find_memory_type(VkPhysicalDevice device, uint32_t type_filter
 	}
 
 	assert(false);
+	return ~0;
 }
 
 void utility::read_file(const char* filename, char* dst, uint32_t& size)

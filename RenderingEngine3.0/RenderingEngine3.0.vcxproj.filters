@@ -499,5 +499,20 @@
     <ClInclude Include="enum_queue.h">
       <Filter>Header Files\enums</Filter>
     </ClInclude>
+    <ClInclude Include="const_max_tile_count.h">
+      <Filter>Header Files\consts</Filter>
+    </ClInclude>
+    <ClInclude Include="render_settings.h">
+      <Filter>Header Files\structs</Filter>
+    </ClInclude>
+    <ClInclude Include="const_water_grid_size.h">
+      <Filter>Header Files\consts</Filter>
+    </ClInclude>
+    <ClInclude Include="const_pi.h">
+      <Filter>Header Files\consts</Filter>
+    </ClInclude>
+    <ClInclude Include="const_bloom_image_size_factor.h">
+      <Filter>Header Files\consts</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

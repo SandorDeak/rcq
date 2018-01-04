@@ -24,5 +24,5 @@ namespace rcq
 
 	};
 
-	os_memory OS_MEMORY;
+	static os_memory OS_MEMORY;
 }

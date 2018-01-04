@@ -86,7 +86,7 @@ void resource_manager::destroy<RES_TYPE_TERRAIN>(base_resource* res)
 	auto t = reinterpret_cast<resource<RES_TYPE_TERRAIN>*>(res->data);
 
 	VkDescriptorSet dss[2] = { t->ds, t->request_ds };
-	vkFreeDescriptorSets(m_base.device, m_dp_pools[DESCRIPTOR_SET_LAYOUT_TYPE_TERRAIN].stop_using_dp(t->dp_index), 2, dss);
+	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_TERRAIN].stop_using_dp(t->dp_index), 2, dss);
 
 	vkDestroyImageView(m_base.device, t->tex.view, m_vk_alloc);
 	vkDestroyImage(m_base.device, t->tex.image, m_vk_alloc);

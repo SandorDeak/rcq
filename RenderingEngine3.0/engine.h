@@ -4,6 +4,7 @@
 #include "vk_allocator.h"
 #include "freelist_host_memory.h"
 #include "monotonic_buffer_device_memory.h"
+
 #include "slot_map.h"
 
 #include "renderables.h"
@@ -12,6 +13,7 @@
 #include "resources.h"
 #include "pipeline.h"
 #include "base_info.h"
+#include "render_settings.h"
 
 #include "const_frustum_split_count.h"
 #include "const_swap_chain_image_count.h"

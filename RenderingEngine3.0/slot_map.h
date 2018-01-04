@@ -37,7 +37,7 @@ namespace rcq
 			m_chunks(std::move(other.m_chunks)),
 			m_size(other.m_size),
 			m_capacity(other.m_capacity),
-			m_next_slot=other.m_next_slot
+			m_next_slot(other.m_next_slot)
 		{
 			other.m_size = 0;
 			other.m_capacity = 0;
@@ -92,7 +92,7 @@ namespace rcq
 			if (real_slot->generation != s.generation)
 				return false;
 
-			T* deleted = get_data(real_id->index);
+			T* deleted = get_data(real_slot->index);
 			++real_slot->generation;
 			--m_size;
 
@@ -146,6 +146,10 @@ namespace rcq
 			}
 		}
 	private:
+		static constexpr uint32_t chunk_size_bit_count = 8;
+		static constexpr uint32_t chunk_size = 256;
+		static constexpr uint32_t chunk_index_mask = chunk_size - 1;
+
 		struct chunk
 		{
 			T* data;
@@ -165,7 +169,7 @@ namespace rcq
 
 			constexpr size_t alignment = alignof(T) < alignof(slot) ?  alignof(slot) : alignof(T);
 
-			size_t new_chunk_pointer = m_memory->allocate(sizeof(T) + sizeof(slot*) + sizeof(slot))*chunk_size), alignment);
+			size_t new_chunk_pointer = m_memory->allocate(sizeof(T) + sizeof(slot*) + sizeof(slot)*chunk_size, alignment);
 
 			auto new_chunk = m_chunks.push_back();
 			new_chunk->data = reinterpret_cast<T*>(new_chunk_pointer);
@@ -174,7 +178,7 @@ namespace rcq
 
 			m_next_slot = m_size;
 
-			slot* id = new_chunk.slots;
+			slot* id = new_chunk->slots;
 
 			uint32_t i = m_capacity + 1;
 			m_capacity += chunk_size;

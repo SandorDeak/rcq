@@ -3,6 +3,8 @@
 #include "vk_allocator.h"
 #include "device_memory.h"
 
+#include <assert.h>
+
 namespace rcq
 {
 	class vk_memory : public device_memory
@@ -11,7 +13,7 @@ namespace rcq
 		vk_memory() {}
 
 		vk_memory(VkDevice device, uint32_t memory_type_index, const vk_allocator* vk_alloc) :
-			device_memory(std::numeric_limits<VkDeviceSize>::max(), device, nullptr, nullptr),
+			device_memory(VkDeviceSize(1)<<(sizeof(VkDeviceSize)*8-1), device, nullptr, nullptr),
 			m_vk_alloc(vk_alloc),
 			m_memory_type_index(memory_type_index)
 		{
@@ -20,7 +22,7 @@ namespace rcq
 
 		void init(VkDevice device, uint32_t memory_type_index, const vk_allocator* vk_alloc)
 		{
-			device_memory::init(std::numeric_limits<VkDeviceSize>::max(), device, VK_NULL_HANDLE, nullptr);
+			device_memory::init(VkDeviceSize(1) << (sizeof(VkDeviceSize) * 8 - 1), device, nullptr, nullptr);
 
 			m_vk_alloc = vk_alloc;
 			m_memory_type_index = memory_type_index;

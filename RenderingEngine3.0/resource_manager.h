@@ -28,13 +28,13 @@ namespace rcq
 		static resource_manager* instance() { return m_instance; }
 
 		template<uint32_t res_type>
-		void build_resource(base_resource** base_res, resource<res_type>::build_info** build_info)
+		void build_resource(base_resource** base_res, typename resource<res_type>::build_info** build_info)
 		{
 			*base_res = reinterpret_cast<base_resource*>(m_resource_pool.allocate(sizeof(base_resource), alignof(base_resource)));
 			base_resource_build_info* raw_build_info = m_build_queue.create_back();
 			raw_build_info->resource_type = res_type;
 			raw_build_info->base_res = *base_res;
-			*build_info = reinterpret_cast<resource<res_type>::build_info*>(raw_build_info->data);
+			*build_info = reinterpret_cast<typename resource<res_type>::build_info*>(raw_build_info->data);
 			(*base_res)->res_type = res_type;
 			(*base_res)->ready_bit = false;
 		}

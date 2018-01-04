@@ -13,7 +13,7 @@ void engine::create_render_pass_impl(VkRenderPass* rp)
 template<uint32_t... rp_types>
 void engine::create_render_passes_impl(std::index_sequence<rp_types...>)
 {
-	auto l = { (create_render_pass_impl<rp_types>(m_rps + rp_types), 0), ... };
+	auto l = { (create_render_pass_impl<rp_types>(m_rps + rp_types), 0)... };
 }
 
 void engine::create_render_passes()

@@ -6,9 +6,6 @@ using namespace rcq;
 
 resource_manager* resource_manager::m_instance = nullptr;
 
-void load_mesh(const std::string& file_name, std::vector<vertex>& vertices, std::vector<uint32_t>& indices,
-	bool make_vertex_ext, std::vector<vertex_ext>& vertices_ext);
-
 resource_manager::resource_manager(const base_info& info) : m_base(info)
 {
 	create_memory_resources_and_containers();
@@ -227,7 +224,7 @@ void resource_manager::create_command_pool()
 {
 	VkCommandPoolCreateInfo cp = {};
 	cp.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	cp.queueFamilyIndex = m_base.queue_families.graphics_family;
+	cp.queueFamilyIndex = m_base.queue_family_index;
 	cp.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
 
 	assert(vkCreateCommandPool(m_base.device, &cp, m_vk_alloc, &m_build_cp) == VK_SUCCESS);

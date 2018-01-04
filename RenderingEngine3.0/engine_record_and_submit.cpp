@@ -7,6 +7,7 @@
 
 #include "const_dir_shadow_map_size.h"
 #include "const_swap_chain_image_extent.h"
+#include "const_bloom_image_size_factor.h"
 
 using namespace rcq;
 
@@ -144,12 +145,13 @@ void engine::record_and_submit()
 			vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_OPAQUE_OBJ_DRAWER].pl,
 				0, 1, &m_gps[GP_OPAQUE_OBJ_DRAWER].ds, 0, nullptr);
 
-			m_opaque_objects.for_each([cb, pl = m_gps[GP_OPAQUE_OBJ_DRAWER].pl](auto&& obj)
+			VkPipelineLayout pl = m_gps[GP_OPAQUE_OBJ_DRAWER].pl;
+			m_opaque_objects.for_each([cb, pl](auto&& obj)
 			{
 				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pl,
 					1, 1, &obj.tr_ds, 0, nullptr);
 				vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pl,
-					2, 1, &obj.opaque_material_ds, 0, nullptr);
+					2, 1, &obj.mat_opaque_ds, 0, nullptr);
 				std::array<VkBuffer, 2> vertex_buffers = { obj.mesh_vb, obj.mesh_veb };
 				if (vertex_buffers[1] == VK_NULL_HANDLE)
 					vertex_buffers[1] = obj.mesh_vb;

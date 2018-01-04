@@ -15,7 +15,7 @@ namespace rcq
 	{
 		VkDescriptorSet tr_ds;
 		VkDescriptorSet mat_opaque_ds;
-		VkDeviceSize mesh_index_size;
+		uint32_t mesh_index_size;
 		VkBuffer mesh_vb;
 		VkBuffer mesh_ib;
 		VkBuffer mesh_veb;
