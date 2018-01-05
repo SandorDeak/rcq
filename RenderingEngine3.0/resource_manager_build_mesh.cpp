@@ -85,9 +85,9 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 	}
 
 	//allocate buffer memory
-	VkDeviceSize vb_offset = m_device_memory.allocate(vb_size, vb_mr.alignment);
-	VkDeviceSize ib_offset = m_device_memory.allocate(ib_size, ib_mr.alignment);
-	VkDeviceSize veb_offset = build->calc_tb ? m_device_memory.allocate(veb_size, veb_mr.alignment) : 0;
+	VkDeviceSize vb_offset = m_dl0_memory.allocate(vb_size, vb_mr.alignment);
+	VkDeviceSize ib_offset = m_dl0_memory.allocate(ib_size, ib_mr.alignment);
+	VkDeviceSize veb_offset = build->calc_tb ? m_dl0_memory.allocate(veb_size, veb_mr.alignment) : 0;
 
 	/*VkDeviceSize ib_offset = calc_offset(ib_mr.alignment, vb_mr.size);
 	VkDeviceSize veb_offset = calc_offset(veb_mr.alignment, ib_offset + ib_mr.size);
@@ -105,10 +105,10 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 	}*/
 
 	//bind buffers to memory
-	vkBindBufferMemory(m_base.device, mesh.vb, m_device_memory.handle(), vb_offset);
-	vkBindBufferMemory(m_base.device, mesh.ib, m_device_memory.handle(), ib_offset);
+	vkBindBufferMemory(m_base.device, mesh.vb, m_dl0_memory.handle(), vb_offset);
+	vkBindBufferMemory(m_base.device, mesh.ib, m_dl0_memory.handle(), ib_offset);
 	if (build->calc_tb)
-		vkBindBufferMemory(m_base.device, mesh.veb, m_device_memory.handle(), veb_offset);
+		vkBindBufferMemory(m_base.device, mesh.veb, m_dl0_memory.handle(), veb_offset);
 
 	//fill staging buffer
 

@@ -35,11 +35,15 @@ namespace rcq
 			m_next = *m_chunks.last();
 		}
 
-		~monotonic_buffer_device_memory()
+		void reset()
 		{
 			for (size_t i = 0; i < m_chunks.size(); ++i)
 				m_upstream->deallocate(m_chunks[i]);
+			m_chunks.reset();
 		}
+
+		~monotonic_buffer_device_memory()
+		{}
 
 		VkDeviceMemory allocate(VkDeviceMemory size, VkDeviceMemory alignment) override
 		{

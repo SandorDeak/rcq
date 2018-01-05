@@ -22,11 +22,11 @@ engine::engine(const base_info& info) : m_base(info)
 
 engine::~engine()
 {
-	assert(m_opaque_objects.size() == 0);
-
 	vkQueueWaitIdle(m_base.queues[QUEUE_RENDER]);
 	vkQueueWaitIdle(m_base.queues[QUEUE_COMPUTE]);
 	vkQueueWaitIdle(m_base.queues[QUEUE_PRESENT]);
+
+	assert(m_opaque_objects.size() == 0);
 
 	for (auto& s : m_semaphores)
 		vkDestroySemaphore(m_base.device, s, m_vk_alloc);
@@ -67,6 +67,12 @@ engine::~engine()
 	vkDestroyBuffer(m_base.device, m_res_data.buffer, m_vk_alloc);
 
 	vkDestroyDescriptorPool(m_base.device, m_dp, m_vk_alloc);
+
+	//m_opaque_objects.reset();
+	m_mappable_memory.reset();
+	m_dl1_memory.reset();
+	m_dl0_memory.reset();
+	m_host_memory.reset();
 }
 
 void engine::init(const base_info& info)

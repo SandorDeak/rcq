@@ -8,5 +8,6 @@ namespace rcq
 	{
 		VkImage image;
 		VkImageView view;
+		monotonic_buffer_device_memory* memory;
 	};
 }

@@ -14,6 +14,7 @@
 #include "freelist_host_memory.h"
 
 #include "enum_dsl_type.h"
+#include "enum_memory_type.h"
 
 #include <mutex>
 
@@ -106,8 +107,10 @@ namespace rcq
 		pool_host_memory m_resource_pool;
 		vk_memory m_vk_mappable_memory;
 		monotonic_buffer_device_memory m_mappable_memory;	
-		vk_memory m_vk_device_memory;
-		freelist_device_memory m_device_memory;
+		vk_memory m_vk_dl0_memory;
+		freelist_device_memory m_dl0_memory;
+		vk_memory m_vk_dl1_memory;
+		freelist_device_memory m_dl1_memory;
 
 		//threads
 		std::thread m_build_thread;
@@ -147,5 +150,14 @@ namespace rcq
 		void end_build_cb(const VkSemaphore* wait_semaphores=nullptr, const VkPipelineStageFlags* wait_flags=nullptr, 
 			uint32_t wait_count=0);
 		void wait_for_build_fence();
+
+		freelist_device_memory* find_device_local_memory(uint32_t mem_type_index)
+		{
+			if (((1 << MEMORY_TYPE_DL0) & mem_type_index) != 0)
+				return &m_dl0_memory;
+			if (((1 << MEMORY_TYPE_DL1) & mem_type_index) != 0)
+				return &m_dl1_memory;
+			assert(false);
+		}
 	};
 }

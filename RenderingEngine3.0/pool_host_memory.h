@@ -31,7 +31,7 @@ namespace rcq
 			m_free_blocks = nullptr;
 		}
 
-		~pool_host_memory()
+		void reset()
 		{
 			while (m_chunks != nullptr)
 			{
@@ -40,6 +40,9 @@ namespace rcq
 				m_chunks = next;
 			}
 		}
+
+		~pool_host_memory()
+		{}
 
 		size_t allocate(size_t size, size_t alignment) override
 		{

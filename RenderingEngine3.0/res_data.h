@@ -145,6 +145,7 @@ namespace rcq
 
 		VkDeviceSize buffer_offset;
 		VkBuffer buffer;
+		monotonic_buffer_device_memory* buffer_memory;
 		VkDeviceSize staging_buffer_offset;
 		VkBuffer staging_buffer;
 		size_t size;

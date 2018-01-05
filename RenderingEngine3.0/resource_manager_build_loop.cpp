@@ -9,8 +9,11 @@ void resource_manager::build_loop()
 		if (m_build_queue.empty())
 		{
 			std::unique_lock<std::mutex> lock(m_build_queue_mutex);
-			while (m_build_queue.empty())
+			while (m_build_queue.empty() && !m_should_end_build)
 				m_build_queue_cv.wait(lock);
+
+			if (m_should_end_build)
+				continue;
 		}
 
 		base_resource_build_info* info = m_build_queue.front();

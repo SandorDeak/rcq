@@ -46,8 +46,9 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetBufferMemoryRequirements(m_base.device, m_res_data.buffer, &mr);
-			m_res_data.buffer_offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindBufferMemory(m_base.device, m_res_data.buffer, m_device_memory.handle(), m_res_data.buffer_offset);
+			m_res_data.buffer_memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_data.buffer_offset = m_res_data.buffer_memory->allocate(mr.size, mr.alignment);
+			vkBindBufferMemory(m_base.device, m_res_data.buffer, m_res_data.buffer_memory->handle(), m_res_data.buffer_offset);
 		}
 
 		//environment map depthstencil
@@ -73,8 +74,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -88,8 +91,8 @@ namespace rcq
 			view.subresourceRange.layerCount = 6;
 			view.subresourceRange.levelCount = 1;
 
-			/*assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].view)
-				== VK_SUCCESS);*/
+			assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &m_res_image[RES_IMAGE_ENVIRONMENT_MAP_GEN_DEPTHSTENCIL].view)
+				== VK_SUCCESS);
 		}
 
 		//environment map
@@ -115,8 +118,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_ENVIRONMENT_MAP].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -156,8 +161,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_POS_ROUGHNESS].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -197,8 +204,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_BASECOLOR_SSAO].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -238,8 +247,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_GB_METALNESS_SSDS].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_METALNESS_SSDS].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -279,8 +290,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_NORMAL_AO].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_NORMAL_AO].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_GB_NORMAL_AO].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_NORMAL_AO].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -321,14 +334,16 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_PREIMAGE].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_PREIMAGE].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_PREIMAGE].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_PREIMAGE].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
 			view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
 			view.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-			view.image = m_res_image[RES_IMAGE_PREV_IMAGE].image;
+			view.image = m_res_image[RES_IMAGE_PREIMAGE].image;
 			view.viewType = VK_IMAGE_VIEW_TYPE_2D;
 			view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 			view.subresourceRange.baseArrayLayer = 0;
@@ -336,7 +351,7 @@ namespace rcq
 			view.subresourceRange.layerCount = 1;
 			view.subresourceRange.levelCount = 1;
 
-			assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &m_res_image[RES_IMAGE_PREV_IMAGE].view) == VK_SUCCESS);
+			assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &m_res_image[RES_IMAGE_PREIMAGE].view) == VK_SUCCESS);
 		}
 
 		//gbuffer depth
@@ -361,8 +376,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_GB_DEPTH].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_DEPTH].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_GB_DEPTH].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_GB_DEPTH].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -402,8 +419,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_DIR_SHADOW_MAP].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_DIR_SHADOW_MAP].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -442,8 +461,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_PREV_IMAGE].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_PREV_IMAGE].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_PREV_IMAGE].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_PREV_IMAGE].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -481,8 +502,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_REFRACTION_IMAGE].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_REFRACTION_IMAGE].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_REFRACTION_IMAGE].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_REFRACTION_IMAGE].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -521,8 +544,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SSR_RAY_CASTING_COORDS].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -561,8 +586,10 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].memory = memory;
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SS_DIR_SHADOW_MAP].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -598,12 +625,13 @@ namespace rcq
 			image.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 
 			assert(vkCreateImage(m_base.device, &image, m_vk_alloc, &m_res_image[RES_IMAGE_SSAO_MAP].image)
-				!= VK_SUCCESS);
+				== VK_SUCCESS);
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_SSAO_MAP].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SSAO_MAP].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_SSAO_MAP].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};
@@ -642,8 +670,9 @@ namespace rcq
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, m_res_image[RES_IMAGE_BLOOM_BLUR].image, &mr);
-			uint64_t offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_BLOOM_BLUR].image, m_device_memory.handle(),
+			auto memory = find_device_local_memory(mr.memoryTypeBits);
+			uint64_t offset = memory->allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, m_res_image[RES_IMAGE_BLOOM_BLUR].image, memory->handle(),
 				offset);
 
 			VkImageViewCreateInfo view = {};

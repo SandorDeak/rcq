@@ -9,8 +9,11 @@ void resource_manager::destroy_loop()
 		if (m_destroy_queue.empty())
 		{
 			std::unique_lock<std::mutex> lock(m_destroy_queue_mutex);
-			while (m_destroy_queue.empty())
+			while (m_destroy_queue.empty() && !m_should_end_destroy)
 				m_destroy_queue_cv.wait(lock);
+
+			if (m_should_end_destroy)
+				continue;
 		}
 
 		base_resource* base_res = *m_destroy_queue.front();

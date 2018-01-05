@@ -71,10 +71,13 @@ namespace rcq
 			m_end->prev_free = b;
 		}
 
-		~freelist_host_memory()
+		void reset()
 		{
-			m_upstream->deallocate(m_begin->begin);
+			m_upstream->deallocate(reinterpret_cast<size_t>(m_begin));
 		}
+
+		~freelist_host_memory()
+		{}
 
 		size_t allocate(size_t size, size_t alignment) override
 		{

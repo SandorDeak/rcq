@@ -40,7 +40,7 @@ namespace rcq
 			m_begin += sizeof(chunk);
 		}
 
-		~monotonic_buffer_host_memory()
+		void reset()
 		{
 			while (m_first_chunk != nullptr)
 			{
@@ -49,6 +49,9 @@ namespace rcq
 				m_first_chunk = next;
 			}
 		}
+
+		~monotonic_buffer_host_memory()
+		{}
 
 		size_t allocate(size_t size, size_t alignment) override
 		{

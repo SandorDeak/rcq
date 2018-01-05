@@ -65,12 +65,12 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		vkGetImageMemoryRequirements(m_base.device, t->tex.image, &mr);
 
 		uint64_t dummy_page_size = sparse_mr.formatProperties.imageGranularity.width*sparse_mr.formatProperties.imageGranularity.height;
-		t->tex.mip_tail_offset = m_device_memory.allocate(sparse_mr.imageMipTailSize, mr.alignment);
-		t->tex.dummy_page_offset = m_device_memory.allocate(dummy_page_size, mr.alignment);
+		t->tex.mip_tail_offset = m_dl1_memory.allocate(sparse_mr.imageMipTailSize, mr.alignment);
+		t->tex.dummy_page_offset = m_dl1_memory.allocate(dummy_page_size, mr.alignment);
 
 		//mip tail bind
 		VkSparseMemoryBind mip_tail = {};
-		mip_tail.memory = m_device_memory.handle();
+		mip_tail.memory = m_dl1_memory.handle();
 		mip_tail.memoryOffset = t->tex.mip_tail_offset;
 		mip_tail.resourceOffset = sparse_mr.imageMipTailOffset;
 		mip_tail.size = sparse_mr.imageMipTailSize;
@@ -120,7 +120,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 								static_cast<int32_t>(v*page_size.y),
 								0
 							};
-							page_binds[page_index].memory = m_device_memory.handle();
+							page_binds[page_index].memory = m_dl1_memory.handle();
 							page_binds[page_index].memoryOffset = t->tex.dummy_page_offset;
 							page_binds[page_index].offset =
 							{
@@ -181,8 +181,8 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 
 		VkMemoryRequirements mr;
 		vkGetBufferMemoryRequirements(m_base.device, t->data_buffer, &mr);
-		t->data_offset = m_device_memory.allocate(mr.size, mr.alignment);
-		vkBindBufferMemory(m_base.device, t->data_buffer, m_device_memory.handle(), t->data_offset);
+		t->data_offset = m_dl0_memory.allocate(mr.size, mr.alignment);
+		vkBindBufferMemory(m_base.device, t->data_buffer, m_dl0_memory.handle(), t->data_offset);
 
 		data_staging_buffer_offset = m_mappable_memory.allocate(sizeof(resource<RES_TYPE_TERRAIN>::data),
 			alignof(resource<RES_TYPE_TERRAIN>::data));
@@ -213,8 +213,8 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 
 		VkMemoryRequirements mr;
 		vkGetBufferMemoryRequirements(m_base.device, t->request_data_buffer, &mr);
-		t->request_data_offset = m_device_memory.allocate(mr.size, mr.alignment);
-		vkBindBufferMemory(m_base.device, t->request_data_buffer, m_device_memory.handle(), t->request_data_offset);
+		t->request_data_offset = m_dl0_memory.allocate(mr.size, mr.alignment);
+		vkBindBufferMemory(m_base.device, t->request_data_buffer, m_dl0_memory.handle(), t->request_data_offset);
 
 		request_data_staging_buffer_offset = m_mappable_memory.allocate(sizeof(resource<RES_TYPE_TERRAIN>::request_data),
 			alignof(resource<RES_TYPE_TERRAIN>::request_data));

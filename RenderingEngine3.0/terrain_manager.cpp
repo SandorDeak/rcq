@@ -9,6 +9,8 @@
 #include <iostream>
 #include <fstream>
 
+#include "enum_memory_type.h"
+
 
 using namespace rcq;
 
@@ -42,11 +44,9 @@ void terrain_manager::create_memory_resources_and_containers()
 	m_host_memory.init(64 * 1024 * 1024, MAX_ALIGNMENT, &OS_MEMORY);
 	m_vk_alloc.init(&m_host_memory);
 
-	m_vk_page_pool.init(m_base.device, utility::find_memory_type(m_base.physical_device, ~0, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT),
-		&m_vk_alloc);
+	m_vk_page_pool.init(m_base.device, MEMORY_TYPE_DL1, &m_vk_alloc);
 	m_page_pool.init(64 * 64 * sizeof(glm::vec4), 256, PAGE_POOL_SIZE, &m_vk_page_pool, &m_host_memory);
-	m_mappable_memory.init(m_base.device, utility::find_memory_type(m_base.physical_device, ~0,
-		VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT), &m_vk_alloc);
+	m_mappable_memory.init(m_base.device, MEMORY_TYPE_HVC, &m_vk_alloc);
 
 	m_request_queue.init(&m_host_memory);
 	m_request_queue.init_buffer();
@@ -257,6 +257,8 @@ void terrain_manager::increase_min_mip_level(const glm::uvec2& tile_id)
 void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uvec2& tile_size,
 	uint32_t mip_level_count, VkCommandPool cp)
 {
+	create_memory_resources_and_containers();
+
 	m_tile_count = tile_count;
 	m_tile_size = tile_size;
 	m_tile_size_in_pages = tile_size / 64u;
@@ -360,4 +362,9 @@ void terrain_manager::destroy_resources()
 	vkDestroyFence(m_base.device, m_copy_finished_f, m_vk_alloc);
 	vkDestroySemaphore(m_base.device, m_binding_finished_s, m_vk_alloc);
 	vkFreeCommandBuffers(m_base.device, m_cp, 1, &m_cb);
+
+	m_result_queue.reset();
+	m_request_queue.reset();
+	m_page_pool.reset();
+	m_host_memory.reset();
 }

@@ -32,7 +32,7 @@ namespace rcq
 			assert(block_size%block_alignment == 0);
 		}
 
-		~pool_device_memory()
+		void reset()
 		{
 			while (!m_chunks.empty())
 			{
@@ -40,6 +40,9 @@ namespace rcq
 				m_chunks.pop();
 			}
 		}
+
+		~pool_device_memory()
+		{}
 
 		VkDeviceSize allocate(VkDeviceSize size, VkDeviceSize alignment) override
 		{

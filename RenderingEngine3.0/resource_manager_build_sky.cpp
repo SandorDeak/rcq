@@ -59,8 +59,8 @@ void resource_manager::build<RES_TYPE_SKY>(base_resource* res, const char* build
 
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, s->tex[i].image, &mr);
-			s->tex[i].offset = m_device_memory.allocate(mr.size, mr.alignment);
-			vkBindImageMemory(m_base.device, s->tex[i].image, m_device_memory.handle(), s->tex[i].offset);
+			s->tex[i].offset = m_dl1_memory.allocate(mr.size, mr.alignment);
+			vkBindImageMemory(m_base.device, s->tex[i].image, m_dl1_memory.handle(), s->tex[i].offset);
 
 			VkImageViewCreateInfo view = {};
 			view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;

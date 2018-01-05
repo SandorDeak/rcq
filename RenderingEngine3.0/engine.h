@@ -30,6 +30,7 @@
 #include "enum_event.h"
 #include "enum_cb.h"
 #include "enum_cpool.h"
+#include "enum_memory_type.h"
 
 
 namespace rcq
@@ -46,6 +47,11 @@ namespace rcq
 			calc_projs();
 			process_render_settings();
 			record_and_submit();
+		}
+
+		void set_render_settings(const render_settings& rs)
+		{
+			m_render_settings = rs;
 		}
 
 		void add_opaque_object(base_resource* mesh, base_resource* opaque_material, base_resource* transform, slot* s)
@@ -157,8 +163,10 @@ namespace rcq
 
 		//memory resources
 		freelist_host_memory m_host_memory;
-		vk_memory m_vk_device_memory;
-		monotonic_buffer_device_memory m_device_memory;
+		vk_memory m_vk_dl0_memory;
+		monotonic_buffer_device_memory m_dl0_memory;
+		vk_memory m_vk_dl1_memory;
+		monotonic_buffer_device_memory m_dl1_memory;
 		vk_memory m_vk_mappable_memory;
 		monotonic_buffer_device_memory m_mappable_memory;
 		vk_allocator m_vk_alloc;
@@ -180,7 +188,7 @@ namespace rcq
 		glm::mat4 m_dir_shadow_projs[FRUSTUM_SPLIT_COUNT];
 
 
-		//helper functions for creating pipelines and render passes
+		//helper functions for creating pipelines render passes and resources
 		template<uint32_t gp_id>
 		void prepare_gp_create_info(VkGraphicsPipelineCreateInfo& create_info, VkPipelineLayoutCreateInfo& layout,
 			VkPipelineShaderStageCreateInfo* shaders, VkShaderModuleCreateInfo* shader_modules, uint32_t& shader_index,
@@ -212,6 +220,16 @@ namespace rcq
 
 		template<uint32_t... rp_types>
 		void create_render_passes_impl(std::index_sequence<rp_types...>);
+
+		monotonic_buffer_device_memory* find_device_local_memory(uint32_t mem_type_index)
+		{
+			if (((1 << MEMORY_TYPE_DL0) & mem_type_index) != 0)
+				return &m_dl0_memory;
+			if (((1 << MEMORY_TYPE_DL1) & mem_type_index) != 0)
+				return &m_dl1_memory;
+			assert(false);
+			return nullptr;
+		}
 	};
 }
 

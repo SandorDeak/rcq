@@ -8,7 +8,7 @@
 
 namespace rcq::utility
 {
-	uint32_t find_memory_type(VkPhysicalDevice device, uint32_t type_filter, VkMemoryPropertyFlags properties);
+	//uint32_t find_memory_type(VkPhysicalDevice device, uint32_t type_filter, VkMemoryPropertyFlags properties);
 
 	void read_file(const char* filename, char* dst, uint32_t& size);
 

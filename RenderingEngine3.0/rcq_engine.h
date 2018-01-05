@@ -5,6 +5,8 @@
 #include "engine.h"
 #include "terrain_manager.h"
 
+#include "enum_tex_type_flag.h"
+
 namespace rcq_user
 {
 	enum class resource : uint32_t
@@ -24,6 +26,28 @@ namespace rcq_user
 		sky = rcq::REND_TYPE_SKY,
 		terrain = rcq::REND_TYPE_TERRAIN
 	};
+
+	enum tex_flag : uint32_t
+	{
+		metal=rcq::TEX_TYPE_FLAG_METAL,
+		color=rcq::TEX_TYPE_FLAG_COLOR,
+		roughness=rcq::TEX_TYPE_FLAG_ROUGHNESS,
+		ao=rcq::TEX_TYPE_FLAG_AO,
+		height=rcq::TEX_TYPE_FLAG_HEIGHT,
+		normal=rcq::TEX_TYPE_FLAG_NORMAL
+	};
+
+	enum tex_type : uint32_t
+	{
+		metal = rcq::TEX_TYPE_METAL,
+		color = rcq::TEX_TYPE_COLOR,
+		roughness = rcq::TEX_TYPE_ROUGHNESS,
+		ao = rcq::TEX_TYPE_AO,
+		height = rcq::TEX_TYPE_HEIGHT,
+		normal = rcq::TEX_TYPE_NORMAL
+	};
+
+	typedef rcq::render_settings render_settings;
 
 	inline void init()
 	{
@@ -103,6 +127,11 @@ namespace rcq_user
 
 		friend void destroy_opaque_object(renderable_handle);
 	};
+
+	void set_render_settings(const render_settings& rs)
+	{
+		rcq::engine::instance()->set_render_settings(rs);
+	}
 	
 	template<resource res>
 	inline void build_resource(resource_handle* handle, build_info<res>** build_info)

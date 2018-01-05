@@ -30,10 +30,23 @@ resource_manager::resource_manager(const base_info& info) : m_base(info)
 
 resource_manager::~resource_manager()
 {
+	bool should_notify;
 	m_should_end_build.store(true);
+	{
+		std::unique_lock<std::mutex> lock(m_build_queue_mutex);
+		should_notify = m_build_queue.empty();
+	}
+	if (should_notify)
+		m_build_queue_cv.notify_one();
 	m_build_thread.join();
 
 	m_should_end_destroy.store(true);
+	{
+		std::unique_lock<std::mutex> lock(m_destroy_queue_mutex);
+		should_notify = m_destroy_queue.empty();
+	}
+	if (should_notify)
+		m_destroy_queue_cv.notify_one();
 	m_destroy_thread.join();
 
 	vkDestroyCommandPool(m_base.device, m_build_cp, m_vk_alloc);
@@ -48,7 +61,11 @@ resource_manager::~resource_manager()
 	m_build_queue.reset();
 	m_destroy_queue.reset();
 	
+	m_dl1_memory.reset();
+	m_dl0_memory.reset();
 
+	m_mappable_memory.reset();
+	m_host_memory.reset();
 
 	/*m_should_end_build = true;
 	m_build_thread.join();
@@ -79,10 +96,6 @@ resource_manager::~resource_manager()
 	//checking that resources was destroyed properly
 	check_resource_leak(std::make_index_sequence<RESOURCE_TYPE_COUNT>());*/
 }
-
-
-
-
 
 void resource_manager::init(const base_info& info)
 {

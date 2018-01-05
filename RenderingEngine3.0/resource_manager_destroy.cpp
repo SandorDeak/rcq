@@ -8,15 +8,15 @@ void resource_manager::destroy<RES_TYPE_MESH>(base_resource* res)
 	auto m = reinterpret_cast<resource<RES_TYPE_MESH>*>(res->data);
 
 	vkDestroyBuffer(m_base.device, m->vb, m_vk_alloc);
-	m_device_memory.deallocate(m->vb_offset);
+	m_dl0_memory.deallocate(m->vb_offset);
 
 	vkDestroyBuffer(m_base.device, m->ib, m_vk_alloc);
-	m_device_memory.deallocate(m->ib_offset);
+	m_dl0_memory.deallocate(m->ib_offset);
 
 	if (m->veb_offset != 0)
 	{
 		vkDestroyBuffer(m_base.device, m->veb, m_vk_alloc);
-		m_device_memory.deallocate(m->veb);
+		m_dl0_memory.deallocate(m->veb);
 	}
 
 	m_resource_pool.deallocate(reinterpret_cast<size_t>(res));
@@ -37,12 +37,12 @@ void resource_manager::destroy<RES_TYPE_MAT_OPAQUE>(base_resource* res)
 			vkDestroyImageView(m_base.device, mat->texs[i].view, m_vk_alloc);
 			vkDestroyImage(m_base.device, mat->texs[i].image, m_vk_alloc);
 			vkDestroySampler(m_base.device, mat->texs[i].sampler, m_vk_alloc);
-			m_device_memory.deallocate(mat->texs[i].offset);
+			m_dl1_memory.deallocate(mat->texs[i].offset);
 		}
 	}
 
 	vkDestroyBuffer(m_base.device, mat->data_buffer, m_vk_alloc);
-	m_device_memory.deallocate(mat->data_offset);
+	m_dl0_memory.deallocate(mat->data_offset);
 
 	m_resource_pool.deallocate(reinterpret_cast<size_t>(res));
 }
@@ -54,7 +54,7 @@ void resource_manager::destroy<RES_TYPE_TR>(base_resource* res)
 
 	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_TR].stop_using_dp(tr->dp_index), 1, &tr->ds);
 	vkDestroyBuffer(m_base.device, tr->data_buffer, m_vk_alloc);
-	m_device_memory.deallocate(tr->data_offset);
+	m_dl0_memory.deallocate(tr->data_offset);
 
 	m_resource_pool.deallocate(reinterpret_cast<size_t>(res));
 }
@@ -70,7 +70,7 @@ void resource_manager::destroy<RES_TYPE_SKY>(base_resource* res)
 	{
 		vkDestroyImageView(m_base.device, s->tex[i].view, m_vk_alloc);
 		vkDestroyImage(m_base.device, s->tex[i].image, m_vk_alloc);
-		m_device_memory.deallocate(s->tex[i].offset);
+		m_dl1_memory.deallocate(s->tex[i].offset);
 	}
 	vkDestroySampler(m_base.device, s->sampler, m_vk_alloc);
 
@@ -91,14 +91,14 @@ void resource_manager::destroy<RES_TYPE_TERRAIN>(base_resource* res)
 	vkDestroyImageView(m_base.device, t->tex.view, m_vk_alloc);
 	vkDestroyImage(m_base.device, t->tex.image, m_vk_alloc);
 	vkDestroySampler(m_base.device, t->tex.sampler, m_vk_alloc);
-	m_device_memory.deallocate(t->tex.dummy_page_offset);
-	m_device_memory.deallocate(t->tex.mip_tail_offset);
+	m_dl1_memory.deallocate(t->tex.dummy_page_offset);
+	m_dl1_memory.deallocate(t->tex.mip_tail_offset);
 
 	vkDestroyBuffer(m_base.device, t->data_buffer, m_vk_alloc);
-	m_device_memory.deallocate(t->data_offset);
+	m_dl0_memory.deallocate(t->data_offset);
 
 	vkDestroyBuffer(m_base.device, t->request_data_buffer, m_vk_alloc);
-	m_device_memory.deallocate(t->request_data_offset);
+	m_dl0_memory.deallocate(t->request_data_offset);
 
 	/*vkDestroyBufferView(m_base.device, t.current_mip_levels_view, m_alloc);
 	vkDestroyBuffer(m_base.device, t.current_mip_levels_buffer, m_alloc);
@@ -120,15 +120,15 @@ void resource_manager::destroy<RES_TYPE_WATER>(base_resource* res)
 	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_WATER].stop_using_dp(w->dp_index), 2, dss);
 
 	vkDestroyBuffer(m_base.device, w->fft_params_buffer, m_vk_alloc);
-	m_device_memory.deallocate(w->fft_params_offset);
+	m_dl0_memory.deallocate(w->fft_params_offset);
 
 	vkDestroyImageView(m_base.device, w->noise.view, m_vk_alloc);
 	vkDestroyImageView(m_base.device, w->tex.view, m_vk_alloc);
 	vkDestroyImage(m_base.device, w->noise.image, m_vk_alloc);
 	vkDestroyImage(m_base.device, w->tex.image, m_vk_alloc);
 	vkDestroySampler(m_base.device, w->sampler, m_vk_alloc);
-	m_device_memory.deallocate(w->noise.offset);
-	m_device_memory.deallocate(w->tex.offset);
+	m_dl1_memory.deallocate(w->noise.offset);
+	m_dl1_memory.deallocate(w->tex.offset);
 
 	m_resource_pool.deallocate(reinterpret_cast<size_t>(res));
 }

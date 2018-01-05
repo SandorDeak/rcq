@@ -25,8 +25,8 @@ void resource_manager::build<RES_TYPE_TR>(base_resource* res, const char* build_
 		VkMemoryRequirements mr;
 		vkGetBufferMemoryRequirements(m_base.device, tr.data_buffer, &mr);
 
-		tr.data_offset = m_device_memory.allocate(mr.size, mr.alignment);
-		vkBindBufferMemory(m_base.device, tr.data_buffer, m_device_memory.handle(), tr.data_offset);
+		tr.data_offset = m_dl0_memory.allocate(mr.size, mr.alignment);
+		vkBindBufferMemory(m_base.device, tr.data_buffer, m_dl0_memory.handle(), tr.data_offset);
 	}
 
 	//allocate and fill staging memory

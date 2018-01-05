@@ -85,8 +85,7 @@ namespace rcq
 			m_end->free = false;
 		}
 
-
-		~freelist_device_memory()
+		void reset()
 		{
 			m_upstream->deallocate(m_begin->next->begin);
 			while (m_begin->next != m_end)
@@ -103,6 +102,9 @@ namespace rcq
 			}
 			m_metadata_memory->deallocate(reinterpret_cast<size_t>(m_begin));
 		}
+
+		~freelist_device_memory()
+		{}
 
 		VkDeviceSize allocate(VkDeviceSize size, VkDeviceSize alignment) override
 		{

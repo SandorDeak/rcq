@@ -71,9 +71,9 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 			VkMemoryRequirements mr;
 			vkGetImageMemoryRequirements(m_base.device, tex.image, &mr);
 
-			tex.offset = m_device_memory.allocate(mr.size, mr.alignment);
+			tex.offset = m_dl1_memory.allocate(mr.size, mr.alignment);
 
-			vkBindImageMemory(m_base.device, tex.image, m_device_memory.handle(), tex.offset);
+			vkBindImageMemory(m_base.device, tex.image, m_dl1_memory.handle(), tex.offset);
 
 			//transition level0 layout to transfer dst optimal
 			{
@@ -251,8 +251,8 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 	{
 		VkMemoryRequirements mr;
 		vkGetBufferMemoryRequirements(m_base.device, mat.data_buffer, &mr);
-		mat.data_offset = m_device_memory.allocate(mr.size, mr.alignment);
-		vkBindBufferMemory(m_base.device, mat.data_buffer, m_device_memory.handle(), mat.data_offset);
+		mat.data_offset = m_dl0_memory.allocate(mr.size, mr.alignment);
+		vkBindBufferMemory(m_base.device, mat.data_buffer, m_dl0_memory.handle(), mat.data_offset);
 	}
 
 	//copy to staging buffer
