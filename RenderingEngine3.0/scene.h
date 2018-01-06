@@ -52,12 +52,22 @@ private:
 		count
 	};
 
+	struct camera
+	{
+		glm::vec3 pos;
+		glm::vec3 look_dir;
+		glm::mat4 proj;
+		glm::mat4 view;
+
+	};
+
 	void build();
 	void update_settings(float dt);
 
 	glm::vec2 m_window_size;
 
 	rcq_user::render_settings m_render_settings;
+	camera m_camera;
 
 	std::vector<rcq_user::resource_handle> m_resources;
 	std::vector<rcq_user::renderable_handle> m_opaque_objects;

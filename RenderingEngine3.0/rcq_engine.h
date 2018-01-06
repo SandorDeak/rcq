@@ -7,6 +7,8 @@
 
 #include "enum_tex_type_flag.h"
 
+#include "const_swap_chain_image_extent.h"
+
 namespace rcq_user
 {
 	enum class resource : uint32_t
@@ -128,11 +130,16 @@ namespace rcq_user
 		friend void destroy_opaque_object(renderable_handle);
 	};
 
-	void set_render_settings(const render_settings& rs)
+	inline void set_render_settings(const render_settings& rs)
 	{
 		rcq::engine::instance()->set_render_settings(rs);
 	}
 	
+	inline void render()
+	{
+		rcq::engine::instance()->render();
+	}
+
 	template<resource res>
 	inline void build_resource(resource_handle* handle, build_info<res>** build_info)
 	{
@@ -187,5 +194,10 @@ namespace rcq_user
 	inline GLFWwindow* get_window()
 	{
 		return rcq::base::instance()->get_info().window;
+	}
+
+	inline glm::vec2 get_window_size()
+	{
+		return { rcq::SWAP_CHAIN_IMAGE_EXTENT.width, rcq::SWAP_CHAIN_IMAGE_EXTENT.height };
 	}
 }
