@@ -10,9 +10,11 @@ resource_manager::resource_manager(const base_info& info) : m_base(info)
 {
 	create_memory_resources_and_containers();
 	//create_samplers();
-	create_command_pool();
+	create_cp_and_allocate_cb();
 	create_dsls();
 	create_dp_pools();
+	create_staging_buffer();
+	create_build_fence();
 
 	m_should_end_build = false;
 	m_should_end_destroy = false;
@@ -233,15 +235,43 @@ void resource_manager::wait_for_build_fence()
 	}
 }*/
 
-void resource_manager::create_command_pool()
+void resource_manager::create_cp_and_allocate_cb()
 {
 	VkCommandPoolCreateInfo cp = {};
 	cp.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	cp.queueFamilyIndex = m_base.queue_family_index;
-	cp.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+	cp.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
 	assert(vkCreateCommandPool(m_base.device, &cp, m_vk_alloc, &m_build_cp) == VK_SUCCESS);
+
+	VkCommandBufferAllocateInfo cb = {};
+	cb.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	cb.commandBufferCount = 1;
+	cb.commandPool = m_build_cp;
+	cb.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	
+	assert(vkAllocateCommandBuffers(m_base.device, &cb, &m_build_cb) == VK_SUCCESS);
 }
 
+void resource_manager::create_staging_buffer()
+{
+	VkBufferCreateInfo b = {};
+	b.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	b.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	b.size = 256 * 1024 * 1024;
+	b.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
+	assert(vkCreateBuffer(m_base.device, &b, m_vk_alloc, &m_staging_buffer) == VK_SUCCESS);
+
+	VkMemoryRequirements mr;
+	vkGetBufferMemoryRequirements(m_base.device, m_staging_buffer, &mr);
+	m_mappable_memory.init(mr.size, mr.alignment, &m_vk_mappable_memory, &m_host_memory);
+	vkBindBufferMemory(m_base.device, m_staging_buffer, m_mappable_memory.handle(), 0);
+}
+void resource_manager::create_build_fence()
+{
+	VkFenceCreateInfo f = {};
+	f.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	assert(vkCreateFence(m_base.device, &f, m_vk_alloc, &m_build_f) == VK_SUCCESS);
+}
 

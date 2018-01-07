@@ -64,8 +64,11 @@ namespace rcq::dp
 	constexpr uint32_t cis_count = count_descriptor_type(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 	constexpr uint32_t ia_count = count_descriptor_type(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT);
 	constexpr uint32_t si_count = count_descriptor_type(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE);
+	constexpr uint32_t sb_count = count_descriptor_type(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	constexpr uint32_t stb_count = count_descriptor_type(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER);
+	constexpr uint32_t utb_count = count_descriptor_type(VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER);
 
-	constexpr std::array<VkDescriptorPoolSize, 4> sizes =
+	constexpr std::array<VkDescriptorPoolSize, 7> sizes =
 	{
 		VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 		ub_count,
@@ -77,7 +80,16 @@ namespace rcq::dp
 		ia_count,
 
 		VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		si_count
+		si_count,
+
+		VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+		sb_count,
+
+		VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
+		stb_count,
+
+		VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+		utb_count
 	};
 	constexpr VkDescriptorPoolCreateInfo create_info =
 	{

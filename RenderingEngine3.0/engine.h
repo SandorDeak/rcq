@@ -56,6 +56,11 @@ namespace rcq
 
 		void add_opaque_object(base_resource* mesh, base_resource* opaque_material, base_resource* transform, slot* s)
 		{
+			assert(mesh->res_type == RES_TYPE_MESH && opaque_material->res_type == RES_TYPE_MAT_OPAQUE && transform->res_type == RES_TYPE_TR);
+			while (!mesh->ready_bit.load());
+			while (!opaque_material->ready_bit.load());
+			while (!transform->ready_bit.load());
+
 			renderable<REND_TYPE_OPAQUE_OBJECT>* new_obj = m_opaque_objects.push(*s);
 			new_obj->mesh_vb = reinterpret_cast<resource<RES_TYPE_MESH>*>(mesh->data)->vb;
 			new_obj->mesh_ib = reinterpret_cast<resource<RES_TYPE_MESH>*>(mesh->data)->ib;
@@ -73,11 +78,14 @@ namespace rcq
 
 		void set_sky(base_resource* sky)
 		{
+			assert(sky->res_type == RES_TYPE_SKY);
+			while (!sky->ready_bit.load());
+
 			m_sky.ds = reinterpret_cast<resource<RES_TYPE_SKY>*>(sky->data)->ds;
 			m_sky_valid = true;
 		}
 
-		void set_terrain(base_resource* terrain);
+		void set_terrain(base_resource* terrain, base_resource** opaque_materials);
 		void set_water(base_resource* water);
 
 		void destroy_sky()
@@ -85,10 +93,7 @@ namespace rcq
 			m_sky_valid = false;
 		}
 
-		void destroy_terrain()
-		{
-			m_terrain_valid = false;
-		}
+		void destroy_terrain();
 
 		void destroy_water()
 		{

@@ -26,10 +26,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 			int width, height, channels;
 			stbi_uc* pixels = stbi_load(build->texfiles[i], &width, &height, &channels, STBI_rgb_alpha);
 
-			if (!pixels)
-			{
-				throw std::runtime_error("failed to load texture image");
-			}
+			assert(pixels);
 
 			size_t im_size = width*height * 4;
 
@@ -288,7 +285,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 		alloc_info.descriptorSetCount = 1;
 		alloc_info.pSetLayouts = &m_dsls[DSL_TYPE_MAT_OPAQUE];
-		alloc_info.descriptorPool = m_dp_pools[DSL_TYPE_MAT_OPAQUE].use_dp(mat.dp_index);
+ 		alloc_info.descriptorPool = m_dp_pools[DSL_TYPE_MAT_OPAQUE].use_dp(mat.dp_index); 
 
 		assert(vkAllocateDescriptorSets(m_base.device, &alloc_info, &mat.ds) == VK_SUCCESS);
 	}

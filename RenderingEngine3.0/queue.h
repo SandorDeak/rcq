@@ -33,9 +33,8 @@ namespace rcq
 			m_memory(other.m_memory),
 			m_first(other.m_first),
 			m_first_back(other.m_first_back),
-			m_first_free(other.m_first_free),
+			m_first_free(other.m_first_free)
 		{
-			other.m_size.store(0, std::memory_order_relaxed);
 			other.m_first.store(nullptr, std::memory_order_relaxed);
 		}
 
@@ -50,7 +49,7 @@ namespace rcq
 				while (first != nullptr)
 				{
 					node* next = first->next;
-					m_memory->deallocate(reinterpret_cast<uint64_t>(first));
+					m_memory->deallocate(reinterpret_cast<size_t>(first));
 					first = next;
 				}
 			}
@@ -69,7 +68,7 @@ namespace rcq
 				while (first != nullptr)
 				{
 					node* next = first->next;
-					m_memory->deallocate(reinterpret_cast<uint64_t>(first));
+					m_memory->deallocate(reinterpret_cast<size_t>(first));
 					first = next;
 				}
 			}
@@ -78,10 +77,7 @@ namespace rcq
 			m_first = other.m_first;
 			m_first_back = other.m_first_back;
 			m_first_free = other.m_first_free;
-			m_size = other.m_size;
 
-			other.m_size = 0;
-			other.m_size_back = 0;
 			other.m_frist = nullptr;	
 
 			return *this;
@@ -89,10 +85,13 @@ namespace rcq
 
 		void init_buffer()
 		{
-			m_first = reinterpret_cast<node*>(m_memory->allocate(sizeof(node), alignof(node)));
-			m_first.load()->next = m_first.load();
-			m_first_back.store(m_first.load());
-			m_first_free = m_first.load();
+			auto n = reinterpret_cast<node*>(m_memory->allocate(sizeof(node), alignof(node)));
+			auto m = reinterpret_cast<node*>(m_memory->allocate(sizeof(node), alignof(node)));
+			n->next = m;
+			m->next = n;	
+			m_first_free = n;
+			m_first.store(n);
+			m_first_back.store(n);
 		}
 
 		void reset()
@@ -119,8 +118,6 @@ namespace rcq
 			node* first_free = m_first_free.load(std::memory_order_relaxed);
 			m_first.store(first_free, std::memory_order_relaxed);
 			m_first_back.store(first_free, std::memory_order_relaxed);
-			m_size.store(0, std::memory_order_relaxed);
-			m_size_back = 0;
 		}
 
 
@@ -128,7 +125,7 @@ namespace rcq
 		T* create_back()
 		{
 			
-			if (m_first_free!=m_first)
+			if (m_first_free->next!=m_first.load())
 			{
 				T* ret = &m_first_free->data;
 				m_first_free = m_first_free->next;

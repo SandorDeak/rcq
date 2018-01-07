@@ -10,13 +10,22 @@
 
 using namespace rcq;
 
-void engine::set_terrain(base_resource* terrain)
+void engine::set_terrain(base_resource* terrain, base_resource** opaque_materials)
 {
+	bool types_valid = terrain->res_type == RES_TYPE_TERRAIN;
+	for (uint32_t i = 0; i < 4; ++i)
+		types_valid = types_valid && ((*(opaque_materials++))->res_type == RES_TYPE_MAT_OPAQUE);
+	assert(types_valid);
+	opaque_materials -= 4;
+	while (!terrain->ready_bit.load());
+	
+
 	auto t = reinterpret_cast<resource<RES_TYPE_TERRAIN>*>(terrain->data);
 
 	m_terrain.ds = t->ds;
 	m_terrain.request_ds = t->request_ds;
-	terrain_manager::instance()->set_terrain(t);
+	for (auto& mat_ds : m_terrain.opaque_material_dss)
+		mat_ds = reinterpret_cast<resource<RES_TYPE_MAT_OPAQUE>*>((*(opaque_materials++))->data)->ds;
 
 	//record terrain request cb
 	{
@@ -66,4 +75,13 @@ void engine::set_terrain(base_resource* terrain)
 	}
 
 	m_terrain_valid = true;
+
+	terrain_manager::instance()->set_terrain(t);
+	terrain_manager::instance()->init_resources(t->tile_count, t->level0_tile_size, t->mip_level_count);
+}
+
+void engine::destroy_terrain()
+{
+	m_terrain_valid = false;
+	terrain_manager::instance()->destroy_resources();
 }

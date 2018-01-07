@@ -5,6 +5,8 @@
 #include "engine.h"
 #include "terrain_manager.h"
 
+#include "timer.h"
+
 #include "enum_tex_type_flag.h"
 
 #include "const_swap_chain_image_extent.h"
@@ -29,27 +31,34 @@ namespace rcq_user
 		terrain = rcq::REND_TYPE_TERRAIN
 	};
 
-	enum tex_flag : uint32_t
+	struct tex_flag
 	{
-		metal=rcq::TEX_TYPE_FLAG_METAL,
-		color=rcq::TEX_TYPE_FLAG_COLOR,
-		roughness=rcq::TEX_TYPE_FLAG_ROUGHNESS,
-		ao=rcq::TEX_TYPE_FLAG_AO,
-		height=rcq::TEX_TYPE_FLAG_HEIGHT,
-		normal=rcq::TEX_TYPE_FLAG_NORMAL
+		enum : uint32_t
+		{
+			metal = rcq::TEX_TYPE_FLAG_METAL,
+			color = rcq::TEX_TYPE_FLAG_COLOR,
+			roughness = rcq::TEX_TYPE_FLAG_ROUGHNESS,
+			ao = rcq::TEX_TYPE_FLAG_AO,
+			height = rcq::TEX_TYPE_FLAG_HEIGHT,
+			normal = rcq::TEX_TYPE_FLAG_NORMAL
+		};
 	};
 
-	enum tex_type : uint32_t
+	struct tex_type
 	{
-		metal = rcq::TEX_TYPE_METAL,
-		color = rcq::TEX_TYPE_COLOR,
-		roughness = rcq::TEX_TYPE_ROUGHNESS,
-		ao = rcq::TEX_TYPE_AO,
-		height = rcq::TEX_TYPE_HEIGHT,
-		normal = rcq::TEX_TYPE_NORMAL
+		enum : uint32_t
+		{
+			metal = rcq::TEX_TYPE_METAL,
+			color = rcq::TEX_TYPE_COLOR,
+			roughness = rcq::TEX_TYPE_ROUGHNESS,
+			ao = rcq::TEX_TYPE_AO,
+			height = rcq::TEX_TYPE_HEIGHT,
+			normal = rcq::TEX_TYPE_NORMAL
+		};
 	};
 
 	typedef rcq::render_settings render_settings;
+	typedef rcq::timer timer;
 
 	inline void init()
 	{
@@ -104,7 +113,8 @@ namespace rcq_user
 	struct renderable_handle;
 
 	template<resource res>
-	struct build_info : public rcq::resource<static_cast<uint32_t>(res)>::build_info {};
+	//struct build_info : public rcq::resource<static_cast<uint32_t>(res)>::build_info {};
+	using build_info = typename rcq::resource<static_cast<uint32_t>(res)>::build_info;
 
 	struct resource_handle 
 	{ 
@@ -116,7 +126,7 @@ namespace rcq_user
 		friend void add_opaque_object(resource_handle, resource_handle, resource_handle, renderable_handle*);
 		friend void set_sky(resource_handle);
 		friend void set_water(resource_handle);
-		friend void set_terrain(resource_handle);
+		friend void set_terrain(resource_handle, const resource_handle*);
 	};
 
 	struct renderable_handle
@@ -170,9 +180,12 @@ namespace rcq_user
 	{
 		rcq::engine::instance()->set_sky(sky_resource_handle.value);
 	}
-	inline void set_terrain(resource_handle terrain_resource_handle)
+	inline void set_terrain(resource_handle terrain_resource_handle, const resource_handle* opaque_material_resource_handles)
 	{
-		rcq::engine::instance()->set_terrain(terrain_resource_handle.value);
+		rcq::base_resource* mats[4];
+		for (uint32_t i = 0; i < 4; ++i)
+			mats[i] = opaque_material_resource_handles[i].value;
+		rcq::engine::instance()->set_terrain(terrain_resource_handle.value, mats);
 	}
 	inline void set_water(resource_handle water_resource_handle)
 	{

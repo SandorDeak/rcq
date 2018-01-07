@@ -72,7 +72,7 @@ void resource_manager::create_dsls()
 
 	//create terrain dsl
 	{
-		VkDescriptorSetLayoutBinding bindings[3] = {};
+		VkDescriptorSetLayoutBinding bindings[2] = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
 		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -84,14 +84,14 @@ void resource_manager::create_dsls()
 		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 		bindings[1].stageFlags = VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
 
-		bindings[2].binding = 2;
+		/*bindings[2].binding = 2;
 		bindings[2].descriptorCount = 1;
 		bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
-		bindings[2].stageFlags = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+		bindings[2].stageFlags = VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;*/
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		dsl.bindingCount = 3;
+		dsl.bindingCount = 2;
 		dsl.pBindings = bindings;
 
 		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, &m_dsls[DSL_TYPE_TERRAIN]) == VK_SUCCESS);
@@ -99,20 +99,20 @@ void resource_manager::create_dsls()
 
 	//create terrain compute dsl
 	{
-		VkDescriptorSetLayoutBinding bindings[2] = {};
+		VkDescriptorSetLayoutBinding bindings[1] = {};
 		bindings[0].binding = 0;
 		bindings[0].descriptorCount = 1;
-		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 		bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-		bindings[1].binding = 1;
+		/*bindings[1].binding = 1;
 		bindings[1].descriptorCount = 1;
 		bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
-		bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+		bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;*/
 
 		VkDescriptorSetLayoutCreateInfo dsl = {};
 		dsl.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		dsl.bindingCount = 2;
+		dsl.bindingCount = 1;
 		dsl.pBindings = bindings;
 
 		assert(vkCreateDescriptorSetLayout(m_base.device, &dsl, m_vk_alloc, &m_dsls[DSL_TYPE_TERRAIN_COMPUTE]) == VK_SUCCESS);

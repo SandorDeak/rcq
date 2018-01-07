@@ -15,7 +15,7 @@ void resource_manager::build<RES_TYPE_TR>(base_resource* res, const char* build_
 		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		buffer.size = sizeof(resource<RES_TYPE_TR>::data);
-		buffer.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+		buffer.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 		assert(vkCreateBuffer(m_base.device, &buffer, m_vk_alloc, &tr.data_buffer) == VK_SUCCESS);
 	}

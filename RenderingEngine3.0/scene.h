@@ -1,6 +1,5 @@
 #pragma once
 
-#include "entity.h"
 #include "rcq_engine.h"
 
 class scene
@@ -16,40 +15,46 @@ public:
 	void update(float dt);
 private:
 
-	enum resource
+	struct resource
 	{
-		mesh_buddha,
-		mesh_plane,
-		mesh_shelf,
-		mesh_sphere,
-		mat_gold,
-		mat_bamboo_wood,
-		mat_oak_floor,
-		mat_rusted_iron,
-		mat_scuffed_aluminum,
-		mat_sand,
-		mat_rocksand,
-		mat_grass,
-		mat_rock,
-		sky,
-		terrain,
-		water,
-		tr_buddha,
-		tr_floor,
-		tr_shelf,
-		tr_rusted_iron_sphere,
-		tr_scuffed_alu_sphere,
-		count
+		enum
+		{
+			mesh_buddha,
+			mesh_plane,
+			mesh_shelf,
+			mesh_sphere,
+			mat_gold,
+			mat_bamboo_wood,
+			mat_oak_floor,
+			mat_rusted_iron,
+			mat_scuffed_aluminum,
+			mat_sand,
+			mat_rocksand,
+			mat_grass,
+			mat_rock,
+			sky,
+			terrain,
+			water,
+			tr_buddha,
+			tr_floor,
+			tr_shelf,
+			tr_rusted_iron_sphere,
+			tr_scuffed_alu_sphere,
+			count
+		};
 	};
 
-	enum opaque_object
+	struct opaque_object
 	{
-		buddha,
-		shelf,
-		floor,
-		rusted_iron_sphere,
-		scuffed_alu_sphere,
-		count
+		enum
+		{
+			buddha,
+			shelf,
+			floor,
+			rusted_iron_sphere,
+			scuffed_alu_sphere,
+			count
+		};
 	};
 
 	struct camera

@@ -18,14 +18,12 @@ void resource_manager::create_memory_resources_and_containers()
 
 	m_vk_mappable_memory.init(m_base.device, MEMORY_TYPE_HVC, &m_vk_alloc);
 
-	m_mappable_memory.init(256 * 1024 * 1024, 256, &m_vk_mappable_memory, &m_host_memory);
-
 	m_vk_dl0_memory.init(m_base.device, MEMORY_TYPE_DL0, &m_vk_alloc);
 	constexpr VkDeviceSize SIZE = VkDeviceSize(1)*VkDeviceSize(1024)*VkDeviceSize(1024)*VkDeviceSize(1024);
-	m_dl0_memory.init(SIZE, 1024, &m_vk_dl0_memory, &m_host_memory);
+	m_dl0_memory.init(SIZE, m_vk_dl0_memory.max_alignment(), &m_vk_dl0_memory, &m_host_memory);
 
 	m_vk_dl1_memory.init(m_base.device, MEMORY_TYPE_DL1, &m_vk_alloc);
-	m_dl1_memory.init(SIZE, 1024, &m_vk_dl1_memory, &m_host_memory);
+	m_dl1_memory.init(SIZE, m_vk_dl1_memory.max_alignment(), &m_vk_dl1_memory, &m_host_memory);
 
 	m_build_queue.init(&m_host_memory);
 	m_build_queue.init_buffer();

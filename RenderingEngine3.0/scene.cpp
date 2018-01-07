@@ -29,16 +29,12 @@ void scene::build()
 	m_resources.resize(resource::count);
 
 	//create meshes
-
-	//buddha
 	rcq_user::build_info<rcq_user::resource::mesh>* mesh_build;
-	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_buddha], &mesh_build);
-	mesh_build->calc_tb = false;
-	mesh_build->filename= "meshes/buddha/buddha.obj";
 	//plane
 	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_plane], &mesh_build);
 	mesh_build->calc_tb = true;
 	mesh_build->filename = "meshes/plane_with_tex_coords/plane_with_tex_coords.obj";
+	
 	//shelf
 	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_shelf], &mesh_build);
 	mesh_build->calc_tb = true;
@@ -47,6 +43,11 @@ void scene::build()
 	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_sphere], &mesh_build);
 	mesh_build->calc_tb = true;
 	mesh_build->filename = "meshes/sphere/sphere.obj";
+	//buddha
+	//rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_buddha], &mesh_build);
+	//mesh_build->calc_tb = false;
+	//mesh_build->filename = "meshes/buddha/buddha.obj";
+
 
 	//create opaque materials
 	rcq_user::build_info<rcq_user::resource::opaque_material>* mat_build_info;
@@ -114,7 +115,7 @@ void scene::build()
 	mat_build_info->texfiles[rcq_user::tex_type::color] = "textures/roughrock1-Unreal-Engine/roughrock1albedo3.png";
 	mat_build_info->texfiles[rcq_user::tex_type::normal] = "textures/roughrock1-Unreal-Engine/roughrock1-normal4.png";
 	mat_build_info->texfiles[rcq_user::tex_type::roughness] = "textures/roughrock1-Unreal-Engine/roughrock1roughness3.png";
-	mat_build_info->texfiles[rcq_user::tex_type::ao] = "textures/roughrock1-Unreal-Engine/roughrock1_ao.png";
+	mat_build_info->texfiles[rcq_user::tex_type::ao] = "textures/roughrock1-Unreal-Engine/roughrock1-ao.png";
 	mat_build_info->texfiles[rcq_user::tex_type::height] = "textures/roughrock1-Unreal-Engine/roughrock1-height.png";
 
 	//grass
@@ -130,7 +131,7 @@ void scene::build()
 	mat_build_info->texfiles[rcq_user::tex_type::height] = "textures/grass1-Unreal-Engine2/grass1-height.png";
 
 	//rock
-	rcq_user::build_resource<rcq_user::resource::opaque_material>(&m_resources[resource::mat_grass], &mat_build_info);
+	rcq_user::build_resource<rcq_user::resource::opaque_material>(&m_resources[resource::mat_rock], &mat_build_info);
 	mat_build_info->tex_flags = rcq_user::tex_flag::color | rcq_user::tex_flag::roughness | rcq_user::tex_flag::normal |
 		rcq_user::tex_flag::ao | rcq_user::tex_flag::height;
 	mat_build_info->metal = 0.f;
@@ -205,26 +206,33 @@ void scene::build()
 	//create opaque objects
 	m_opaque_objects.resize(opaque_object::count);
 	//buddha
-	rcq_user::add_opaque_object(m_resources[resource::mesh_buddha], m_resources[resource::mat_gold], m_resources[tr_buddha],
+	rcq_user::add_opaque_object(m_resources[resource::mesh_sphere], m_resources[resource::mat_gold], m_resources[resource::tr_buddha],
 		&m_opaque_objects[opaque_object::buddha]);
 	//self
-	rcq_user::add_opaque_object(m_resources[resource::mesh_shelf], m_resources[resource::mat_bamboo_wood], m_resources[tr_shelf],
+	rcq_user::add_opaque_object(m_resources[resource::mesh_shelf], m_resources[resource::mat_bamboo_wood], m_resources[resource::tr_shelf],
 		&m_opaque_objects[opaque_object::shelf]);
 	//floor
-	rcq_user::add_opaque_object(m_resources[resource::mesh_plane], m_resources[resource::mat_oak_floor], m_resources[tr_floor],
+	rcq_user::add_opaque_object(m_resources[resource::mesh_plane], m_resources[resource::mat_oak_floor], m_resources[resource::tr_floor],
 		&m_opaque_objects[opaque_object::floor]);
 	//rusted iron sphere
 	rcq_user::add_opaque_object(m_resources[resource::mesh_sphere], m_resources[resource::mat_rusted_iron], 
-		m_resources[tr_rusted_iron_sphere],&m_opaque_objects[opaque_object::rusted_iron_sphere]);
+		m_resources[resource::tr_rusted_iron_sphere],&m_opaque_objects[opaque_object::rusted_iron_sphere]);
 	//scuffed aluminium sphere
 	rcq_user::add_opaque_object(m_resources[resource::mesh_sphere], m_resources[resource::mat_scuffed_aluminum], 
-		m_resources[tr_scuffed_alu_sphere], &m_opaque_objects[opaque_object::scuffed_alu_sphere]);
+		m_resources[resource::tr_scuffed_alu_sphere], &m_opaque_objects[opaque_object::scuffed_alu_sphere]);
 
 	//sky
 	rcq_user::set_sky(m_resources[resource::sky]);
 
 	//terrain
-	rcq_user::set_terrain(m_resources[resource::terrain]); //should add materials!!!
+	rcq_user::resource_handle terrain_mats[4] =
+	{
+		m_resources[resource::mat_sand],
+		m_resources[resource::mat_rocksand],
+		m_resources[resource::mat_grass],
+		m_resources[resource::mat_rock]
+	};
+	rcq_user::set_terrain(m_resources[resource::terrain], terrain_mats);
 
 	//water
 	rcq_user::set_water(m_resources[resource::water]);	

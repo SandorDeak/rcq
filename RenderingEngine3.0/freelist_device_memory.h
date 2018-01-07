@@ -147,7 +147,7 @@ namespace rcq
 			choosen_block->prev_res->next_res = choosen_block;
 			choosen_block->next_res->prev_res = choosen_block;
 
-			if (remaining > m_max_alignment)
+			if (remaining > 2*sizeof(block))
 			{
 				block* new_block;
 				if (m_end->next == m_begin)

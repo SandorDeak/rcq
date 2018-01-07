@@ -19,14 +19,15 @@ namespace rcq
 	public:
 		dp_pool() : m_create_info{}  {}
 
-		dp_pool(uint32_t pool_sizes_count, uint32_t dp_capacity, VkDevice device, host_memory* memory) :
+		dp_pool(uint32_t pool_sizes_count, uint32_t dp_capacity, uint32_t max_set_count, VkDevice device, host_memory* memory) :
 			m_pool_sizes(memory, pool_sizes_count),
 			m_dps(memory),
 			m_create_info{},
-			m_device(device)
+			m_device(device),
+			m_dp_capacity(dp_capacity)
 		{
 			m_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-			m_create_info.maxSets = dp_capacity;
+			m_create_info.maxSets = max_set_count;
 			m_create_info.pPoolSizes = m_pool_sizes.data();
 			m_create_info.poolSizeCount = pool_sizes_count;
 		}
@@ -37,11 +38,17 @@ namespace rcq
 				vkDestroyDescriptorPool(m_device, dp.pool, m_vk_alloc);
 		}
 
-		void init(uint32_t pool_sizes_count, uint32_t dp_capacity, VkDevice device, host_memory* memory)
+		void init(uint32_t pool_sizes_count, uint32_t dp_capacity, uint32_t max_set_count, VkDevice device, host_memory* memory)
 		{
 			m_pool_sizes.init(memory, pool_sizes_count);
 			m_dps.init(memory);
 			m_device = device;
+			m_dp_capacity = dp_capacity;
+
+			m_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+			m_create_info.maxSets = max_set_count;
+			m_create_info.pPoolSizes = m_pool_sizes.data();
+			m_create_info.poolSizeCount = pool_sizes_count;
 		}
 
 		void reset()
@@ -73,7 +80,7 @@ namespace rcq
 			}
 
 			auto new_dp = m_dps.push_back();
-			new_dp->free_count = m_create_info.maxSets - 1;
+			new_dp->free_count = m_dp_capacity - 1;
 
 			assert(vkCreateDescriptorPool(m_device, &m_create_info, m_vk_alloc, &new_dp->pool) == VK_SUCCESS);
 
@@ -92,5 +99,6 @@ namespace rcq
 		vector<dp> m_dps;
 		vector<VkDescriptorPoolSize> m_pool_sizes;
 		VkDescriptorPoolCreateInfo m_create_info;
+		uint32_t m_dp_capacity;
 	};
 }

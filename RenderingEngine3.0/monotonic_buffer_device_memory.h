@@ -42,6 +42,17 @@ namespace rcq
 			m_chunks.reset();
 		}
 
+		void clear()
+		{
+			if (!m_chunks.empty())
+			{
+				for (size_t i = 1; i < m_chunks.size(); ++i)
+					m_upstream->deallocate(m_chunks[i]);
+				m_chunks.resize(1);
+				m_next = *m_chunks.last();
+			}
+		}
+
 		~monotonic_buffer_device_memory()
 		{}
 

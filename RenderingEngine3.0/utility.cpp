@@ -168,10 +168,10 @@ void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vec
 
 	while (it1 != vertices.end())
 	{
-		it1->pos = v[(*it2)[0]];
+		it1->pos = v[(*it2)[0]-1];
 		if (!vt.empty())
-			it1->tex_coord = vt[(*it2)[1]];
-		it1->normal = vn[(*it2)[2]];
+			it1->tex_coord = vt[(*it2)[1]-1];
+		it1->normal = vn[(*it2)[2]-1];
 
 		++it1;
 		++it2;
@@ -186,7 +186,7 @@ void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vec
 
 		for (uint32_t i=0; i<indices.size(); i+=3)
 		{
-			glm::vec2 t0 = vertices[indices[i+2]].tex_coord;
+			glm::vec2 t0 = vertices[indices[i + 2]].tex_coord;
 			glm::vec3 p0 = vertices[indices[i + 2]].pos;
 			glm::vec2 t1 = vertices[indices[i + 1]].tex_coord;
 			glm::vec3 p1 = vertices[indices[i + 1]].pos;
@@ -208,6 +208,9 @@ void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vec
 			assert(it2->tangent != glm::vec3(0.f));
 			it2->tangent = glm::normalize(it2->tangent);
 			it2->bitangent = glm::cross(it2->tangent, it1->normal);
+
+			++it1;
+			++it2;
 		}
 	}
 }

@@ -185,12 +185,18 @@ namespace rcq
 
 		struct dsl
 		{
-			static constexpr std::array<VkDescriptorSetLayoutBinding, 1> bindings =
+			static constexpr std::array<VkDescriptorSetLayoutBinding, 2> bindings =
 			{
 				0,
 				VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
 				1,
 				VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
+				nullptr,
+
+				1,
+				VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+				1,
+				VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT,
 				nullptr
 			};
 			static constexpr VkDescriptorSetLayoutCreateInfo create_info =

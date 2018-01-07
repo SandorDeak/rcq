@@ -294,5 +294,5 @@ void resource_manager::build<RES_TYPE_WATER>(base_resource* res, const char* bui
 	m_mappable_memory.deallocate(noise_staging_buffer_offset);
 	m_mappable_memory.deallocate(params_staging_buffer_offset);
 
-	res->ready_bit = true;
+	res->ready_bit.store(true, std::memory_order_release);
 }

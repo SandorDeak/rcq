@@ -24,7 +24,7 @@ namespace rcq
 		static void init(const base_info& base);
 		static void destroy();
 
-		void init_resources(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count, VkCommandPool cp);
+		void init_resources(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count);
 		void destroy_resources();
 
 		void set_terrain(resource<RES_TYPE_TERRAIN>* t)
@@ -47,11 +47,14 @@ namespace rcq
 		terrain_manager& operator=(terrain_manager&&) = delete;
 		static terrain_manager* m_instance;
 
+		//create functions
+		void create_memory_resources_and_containers();
+		void create_cp_allocate_cb();
 
+		//request managing
 		void loop();
 		void decrease_min_mip_level(const glm::uvec2& tile_id);
 		void increase_min_mip_level(const glm::uvec2& tile_id);
-		void create_memory_resources_and_containers();
 
 		struct request_data
 		{
@@ -63,8 +66,10 @@ namespace rcq
 
 		const base_info& m_base;
 
+		//terrain resource
 		resource<RES_TYPE_TERRAIN>* m_terrain;
 
+		//buffers, offsets, pointers
 		VkBuffer m_mapped_buffer;
 		uint64_t m_mapped_offset;
 		request_data* m_request_data;
@@ -84,24 +89,27 @@ namespace rcq
 		vk_memory m_vk_page_pool;
 		pool_device_memory m_page_pool;
 		
-
+		//queues
 		queue<uint32_t> m_request_queue;
 		queue<uint32_t> m_result_queue;
 
-
+		//thread
 		std::thread m_thread;
 		bool m_should_end;
 
-		VkCommandBuffer m_cb;
-		VkCommandPool m_cp;
+		//synchronization objects
 		VkSemaphore m_binding_finished_s;
 		VkFence m_copy_finished_f;
-		vector<vector<vector<vector<uint64_t>>>> m_pages; //mip_level, tile_id.x // tile_id.y
 
+		//cp, cb
+		VkCommandBuffer m_cb;
+		VkCommandPool m_cp;
+		
+		//data
+		vector<vector<vector<vector<uint64_t>>>> m_pages; //mip_level, tile_id.x // tile_id.y
 		glm::uvec2 m_tile_count;
 		glm::uvec2 m_tile_size;
 		glm::uvec2 m_tile_size_in_pages;
 		uint32_t m_page_size;
 	};
 }
-

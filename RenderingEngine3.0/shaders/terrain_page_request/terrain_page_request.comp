@@ -15,52 +15,56 @@ layout(set=0, binding=0) uniform terrain_tile_request_data
 	float far;
 } data;
 
-layout(set=1, binding=0) buffer terrain_buffer
+layout(set=0, binding=1) buffer request_buffer
+{
+	
+	uint request_count;
+	uint requests[MAX_REQUEST_COUNT];	
+} req;
+
+layout(set=0, binding=2, r32f) uniform imageBuffer requested_mip_levels;
+
+
+layout(set=1, binding=0) uniform terrain_request_data
 {
 	vec2 tile_size_in_meter;
 	float mip_level_count;
-	uint request_count;
-	uint requests[MAX_REQUEST_COUNT];
-	
-} terr;
-
-layout(set=1, binding=1, r32f) uniform imageBuffer requested_mip_levels;
-
+} terr_req;
 
 void main()
 {
 	int tile_index=int(gl_GlobalInvocationID.x+gl_GlobalInvocationID.y*gl_NumWorkGroups.x);
 
-	vec2 tile_center=(vec2(gl_GlobalInvocationID.xy)+0.5f)*terr.tile_size_in_meter;
+	vec2 tile_center=(vec2(gl_GlobalInvocationID.xy)+0.5f)*terr_req.tile_size_in_meter;
 	float d=distance(tile_center, data.view_pos.xz);
 	float current_level=imageLoad(requested_mip_levels, tile_index).x;
-	float required_level=terr.mip_level_count*(d-data.near)/(data.far-data.near);
+	float required_level=terr_req.mip_level_count*(d-data.near)/(data.far-data.near);
 	//required_level=min(required_level, terr.mip_level_count-1);
 	
 	float tolerance=0.5f;
 	
-	if (current_level<required_level-tolerance && current_level<terr.mip_level_count-1.5f)
+	if (current_level<required_level-tolerance && current_level<terr_req.mip_level_count-1.5f)
 	{
-		uint request_index=atomicAdd(terr.request_count, 1);
+		uint request_index=atomicAdd(req.request_count, 1);
 		if (request_index>=MAX_REQUEST_COUNT)
 		{
-			atomicAdd(terr.request_count, -1);
+			atomicAdd(req.request_count, -1);
 			return;
 		}
 		uint request=gl_GlobalInvocationID.x | (gl_GlobalInvocationID.y<<MAX_TILE_COUNT_LOG2);
-		terr.requests[request_index]=request;
+		req.requests[request_index]=request;
 		imageStore(requested_mip_levels, tile_index, vec4(current_level+1.f));
 	}
 	else if (current_level>required_level+tolerance && current_level>0.5f)
 	{
-		uint request_index=atomicAdd(terr.request_count, 1);
+		uint request_index=atomicAdd(req.request_count, 1);
 		if (request_index>=MAX_REQUEST_COUNT)
 		{
-			atomicAdd(terr.request_count, -1);
+			atomicAdd(req.request_count, -1);
 			return;
 		}
 		uint request=gl_GlobalInvocationID.x | (gl_GlobalInvocationID.y<<MAX_TILE_COUNT_LOG2) | REQUEST_TYPE_DECREASE_MIN_MIP_LEVEL;
 		imageStore(requested_mip_levels, tile_index, vec4(current_level-1.f));
-		terr.requests[request_index]=request;
+		req.requests[request_index]=request;
 	}
 }

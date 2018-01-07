@@ -10,9 +10,9 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 	const resource<RES_TYPE_MESH>::build_info* build = reinterpret_cast<const resource<RES_TYPE_MESH>::build_info*>(build_info);
 	auto& mesh = *reinterpret_cast<resource<RES_TYPE_MESH>*>(res);
 
-	vector<vertex> vertices;
-	vector<uint32_t> indices;
-	vector<vertex_ext> vertices_ext;
+	vector<vertex> vertices(&m_host_memory);
+	vector<uint32_t> indices(&m_host_memory);
+	vector<vertex_ext> vertices_ext(&m_host_memory);
 	utility::load_mesh(vertices, indices, vertices_ext, build->calc_tb, build->filename, &m_host_memory);
 
 	mesh.size = indices.size();
@@ -35,10 +35,7 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 	vb_info.size = vb_size;
 	vb_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-	if (vkCreateBuffer(m_base.device, &vb_info, m_vk_alloc, &mesh.vb) != VK_SUCCESS)
-	{
-		throw std::runtime_error("failed to create vertex buffer!");
-	}
+	assert(vkCreateBuffer(m_base.device, &vb_info, m_vk_alloc, &mesh.vb) == VK_SUCCESS);
 
 	VkMemoryRequirements vb_mr;
 	vkGetBufferMemoryRequirements(m_base.device, mesh.vb, &vb_mr);
@@ -50,10 +47,7 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 	ib_info.size = ib_size;
 	ib_info.usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-	if (vkCreateBuffer(m_base.device, &ib_info, m_vk_alloc, &mesh.ib) != VK_SUCCESS)
-	{
-		throw std::runtime_error("failed to create index buffer!");
-	}
+	assert(vkCreateBuffer(m_base.device, &ib_info, m_vk_alloc, &mesh.ib) == VK_SUCCESS);
 
 	VkMemoryRequirements ib_mr;;
 	vkGetBufferMemoryRequirements(m_base.device, mesh.ib, &ib_mr);
@@ -71,10 +65,7 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 		veb_info.size = veb_size;
 		veb_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-		if (vkCreateBuffer(m_base.device, &veb_info, m_vk_alloc, &mesh.veb) != VK_SUCCESS)
-		{
-			throw std::runtime_error("failed to create vertex ext buffer!");
-		}
+		assert(vkCreateBuffer(m_base.device, &veb_info, m_vk_alloc, &mesh.veb) == VK_SUCCESS);
 
 		vkGetBufferMemoryRequirements(m_base.device, mesh.veb, &veb_mr);
 
@@ -155,6 +146,8 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 
 	end_build_cb();
 	wait_for_build_fence();
+
+	res->ready_bit.store(true, std::memory_order_release);
 
 	m_mappable_memory.deallocate(vb_staging);
 	m_mappable_memory.deallocate(ib_staging);

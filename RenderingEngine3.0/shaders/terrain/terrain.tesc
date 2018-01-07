@@ -6,6 +6,8 @@ const uint MAX_TILE_COUNT_LOG2=11;
 
 layout(vertices=4) out;
 
+layout(set=0, binding=1) uniform samplerBuffer current_mip_levels;
+
 layout(set=1, binding=0) uniform terrain_buffer
 {
 	vec2 terrain_size_in_meters;
@@ -14,8 +16,6 @@ layout(set=1, binding=0) uniform terrain_buffer
 	float mip_level_count;
 	float height_scale;
 } terr;
-
-layout(set=1, binding=2) uniform samplerBuffer current_mip_levels;
 
 
 layout(location=0) in ivec2 tile_id_in[];

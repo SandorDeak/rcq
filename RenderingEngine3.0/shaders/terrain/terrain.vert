@@ -16,11 +16,11 @@ layout(location=0) out ivec2 tile_id_out;
 
 void main()
 {	
-	uint vertex_id=gl_VertexIndex & vertex_id_bitmask;
+	uint vertex_id=gl_VertexIndex & 3;
 	
 	int x=int((gl_VertexIndex>>2) + (vertex_id >> 1));
 	int y=int(gl_InstanceIndex + (vertex_id & 1));
-	
+	 
 	tile_id_out=ivec2(int(gl_VertexIndex>>2), int(gl_InstanceIndex));
 	//tile_id_out=x+y*terr.tile_count.x;
 	//mip_level_out=texelFetch(current_mip_levels, tile_id).x;

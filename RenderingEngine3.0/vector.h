@@ -1,5 +1,7 @@
 #pragma once
 
+#include <assert.h>
+
 #include "host_memory.h"
 
 namespace rcq
@@ -132,6 +134,7 @@ namespace rcq
 
 		T& operator[](size_t i)
 		{
+			assert(i < m_size);
 			return *(m_data + i);
 		}
 
@@ -182,11 +185,14 @@ namespace rcq
 			}
 			else
 			{
+				if (m_capacity == 0)
+					m_capacity = 1;
+				else
+					m_memory->deallocate(reinterpret_cast<size_t>(m_data));
 				while (m_capacity < size)
 					m_capacity <<= 1;
 
-				m_memory->deallocate(reinterpret_cast<size_t>(m_data));
-				m_memory->allocate(m_capacity * sizeof(T), alignof(T));
+				m_data=reinterpret_cast<T*>(m_memory->allocate(m_capacity * sizeof(T), alignof(T)));
 				m_size = size;
 			}
 		}

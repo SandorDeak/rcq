@@ -62,9 +62,6 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="entity.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="scene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -181,13 +178,7 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="entity.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="scene.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="structs.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="base.h">
@@ -516,6 +507,9 @@
     </ClInclude>
     <ClInclude Include="enum_memory_type.h">
       <Filter>Header Files\enums</Filter>
+    </ClInclude>
+    <ClInclude Include="timer.h">
+      <Filter>Header Files\structs</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

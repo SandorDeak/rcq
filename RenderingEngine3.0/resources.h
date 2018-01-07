@@ -164,6 +164,7 @@ namespace rcq
 		uint32_t dp_index;
 		glm::uvec2 level0_tile_size;
 		glm::uvec2 tile_count;
+		uint32_t mip_level_count;
 
 		VkBuffer data_buffer;
 		VkDeviceSize data_offset;

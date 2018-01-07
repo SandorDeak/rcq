@@ -14,6 +14,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 	new(&t->tex.files) vector<std::ifstream>(&m_host_memory, build->mip_level_count);
 
 	t->level0_tile_size = build->level0_tile_size;
+	t->mip_level_count = build->mip_level_count;
 
 	//open files
 	for (uint32_t i = 0; i < build->mip_level_count; ++i)
@@ -82,14 +83,19 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 
 
 		glm::vec2 tile_count = build->level0_image_size / build->level0_tile_size;
+		t->tile_count = tile_count;
 		glm::uvec2 page_size(sparse_mr.formatProperties.imageGranularity.width,
 			sparse_mr.formatProperties.imageGranularity.height);
 		glm::uvec2 page_count_in_level0_image = build->level0_image_size / page_size;
 
-		uint32_t page_count = page_count_in_level0_image.x*page_count_in_level0_image.y;
-
-		page_count *= static_cast<uint32_t>((1.f - powf(0.25f, static_cast<float>(build->mip_level_count))) / 0.75f);
-
+		uint32_t page_count0 = page_count_in_level0_image.x*page_count_in_level0_image.y;
+		uint32_t page_count = page_count0;
+		for (uint32_t i = 1; i < build->mip_level_count; ++i)
+		{
+			page_count0 /= 4;
+			page_count += page_count0;
+		}
+		//page_count *= static_cast<uint32_t>((1.f - powf(0.25f, static_cast<float>(build->mip_level_count))) / 0.75f);
 
 		vector<VkSparseImageMemoryBind> page_binds(&m_host_memory, page_count);
 
@@ -137,6 +143,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 							page_binds[page_index].subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 							page_binds[page_index].subresource.arrayLayer = 0;
 							page_binds[page_index].subresource.mipLevel = mip_level;
+							page_binds[page_index].flags = 0;
 
 							++page_index;
 						}
@@ -207,7 +214,7 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		buffer.size = sizeof(resource<RES_TYPE_TERRAIN>::request_data);
-		buffer.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		buffer.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
 		assert(vkCreateBuffer(m_base.device, &buffer, m_vk_alloc, &t->request_data_buffer) == VK_SUCCESS);
 
@@ -403,4 +410,6 @@ void resource_manager::build<RES_TYPE_TERRAIN>(base_resource* res, const char* b
 
 		vkUpdateDescriptorSets(m_base.device, 3, w, 0, nullptr);
 	}
+
+	res->ready_bit.store(true, std::memory_order_release);
 }

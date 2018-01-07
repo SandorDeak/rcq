@@ -78,8 +78,10 @@ namespace rcq
 		//create functions
 		void create_dsls();
 		void create_dp_pools();
-		void create_command_pool();
+		void create_cp_and_allocate_cb();
 		void create_memory_resources_and_containers();
+		void create_staging_buffer();
+		void create_build_fence();
 
 		//thread loops
 		void build_loop();

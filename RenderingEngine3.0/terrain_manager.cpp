@@ -54,6 +54,27 @@ void terrain_manager::create_memory_resources_and_containers()
 	m_result_queue.init_buffer();
 }
 
+void terrain_manager::create_cp_allocate_cb()
+{
+	//create cp
+	{
+		VkCommandPoolCreateInfo cp = {};
+		cp.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		cp.queueFamilyIndex = m_base.queue_family_index;
+		assert(vkCreateCommandPool(m_base.device, &cp, m_vk_alloc, &m_cp) == VK_SUCCESS);
+	}
+	//allocate cb
+	{
+		VkCommandBufferAllocateInfo cb = {};
+		cb.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+		cb.commandBufferCount = 1;
+		cb.commandPool = m_cp;
+		cb.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		assert(vkAllocateCommandBuffers(m_base.device, &cb, &m_cb) == VK_SUCCESS);
+	}
+}
+
+
 void terrain_manager::poll_requests()
 {
 	//std::lock_guard<std::mutex> lock(m_request_queue_mutex);
@@ -255,9 +276,10 @@ void terrain_manager::increase_min_mip_level(const glm::uvec2& tile_id)
 }
 
 void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uvec2& tile_size,
-	uint32_t mip_level_count, VkCommandPool cp)
+	uint32_t mip_level_count)
 {
 	create_memory_resources_and_containers();
+	create_cp_allocate_cb();
 
 	m_tile_count = tile_count;
 	m_tile_size = tile_size;
@@ -322,8 +344,6 @@ void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uv
 		assert(vkCreateBufferView(m_base.device, &view, m_vk_alloc, &m_current_mip_levels_view) == VK_SUCCESS);
 	}
 
-	m_cp = cp;
-
 	VkSemaphoreCreateInfo s = {};
 	s.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 	assert(vkCreateSemaphore(m_base.device, &s, m_vk_alloc, &m_binding_finished_s) == VK_SUCCESS);
@@ -340,12 +360,12 @@ void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uv
 
 	assert(vkAllocateCommandBuffers(m_base.device, &alloc, &m_cb) == VK_SUCCESS);
 
-	m_pages.resize(mip_level_count);
+	m_pages.init(&m_host_memory, mip_level_count);
 	for (auto& v : m_pages)
 	{
-		v.resize(tile_count.x);
+		v.init(&m_host_memory, tile_count.x);
 		for (auto& w : v)
-			w.resize(tile_count.y);
+			w.init(&m_host_memory, tile_count.y);
 	}
 
 	m_should_end = false;
@@ -361,8 +381,7 @@ void terrain_manager::destroy_resources()
 	m_thread.join();
 	vkDestroyFence(m_base.device, m_copy_finished_f, m_vk_alloc);
 	vkDestroySemaphore(m_base.device, m_binding_finished_s, m_vk_alloc);
-	vkFreeCommandBuffers(m_base.device, m_cp, 1, &m_cb);
-
+	vkDestroyCommandPool(m_base.device, m_cp, m_vk_alloc);
 	m_result_queue.reset();
 	m_request_queue.reset();
 	m_page_pool.reset();

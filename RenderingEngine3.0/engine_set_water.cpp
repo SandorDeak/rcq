@@ -7,7 +7,11 @@ using namespace rcq;
 
 void engine::set_water(base_resource* water)
 {
+	assert(water->res_type == RES_TYPE_WATER);
+	while (!water->ready_bit.load());
+
 	auto w = reinterpret_cast<resource<RES_TYPE_WATER>*>(water->data);
+
 	m_water.ds = w->ds;
 	m_water.fft_ds = w->fft_ds;
 	m_water.grid_size_in_meters = w->grid_size_in_meters;

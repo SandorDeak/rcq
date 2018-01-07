@@ -8,18 +8,19 @@ int main()
 
 	GLFWwindow* window = rcq_user::get_window();
 	auto sc = new scene(window, rcq_user::get_window_size());
-	//rcq::timer t;
-	//t.start();
+	rcq_user::timer t;
+	t.start();
 	while (!glfwWindowShouldClose(window))
 	{
-		//t.stop();
+		t.stop();
 		float dt = t.get();
 		//std::cout << dt << std::endl; 
-		//t.start();
+		t.start();
 		glfwPollEvents();
-		//sc->update(dt);
+		sc->update(dt);
 	}
-	//delete sc;
+	delete sc;
+
 	rcq_user::destroy();
 	return 0;
 }

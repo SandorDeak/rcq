@@ -22,7 +22,8 @@ namespace rcq
 			m_memory(memory),
 			m_chunks(memory),
 			m_size(0),
-			m_capacity(0)
+			m_capacity(0),
+			m_chunk_size(chunk_size)
 		{}
 
 		void init(uint32_t chunk_size, host_memory* memory)
@@ -31,6 +32,7 @@ namespace rcq
 			m_chunks.init(memory);
 			m_size = 0;
 			m_capacity = 0;
+			m_chunk_size = chunk_size;
 		}
 		slot_map(slot_map&& other) :
 			m_memory(other.m_memory),
@@ -135,7 +137,6 @@ namespace rcq
 		{
 			uint32_t remaining = m_size;
 			auto current_chunk = m_chunks.data();
-			uint32_t counter = 0;
 			while (remaining>0)
 			{
 				auto data = current_chunk->data;
@@ -143,6 +144,7 @@ namespace rcq
 				remaining -= steps;
 				while (steps-- > 0)
 					f(*data++);
+				++current_chunk;
 			}
 		}
 	private:

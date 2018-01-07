@@ -33,11 +33,13 @@ void resource_manager::build_loop()
 			break;
 		case 4:
 			build<4>(info->base_res, info->data);
+			break;
 		case 5:
 			build<5>(info->base_res, info->data);
 			break;
 		}
 		static_assert(6 == RES_TYPE_COUNT);
+		m_mappable_memory.clear();
 
 		m_build_queue.pop();
 

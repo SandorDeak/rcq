@@ -33,7 +33,6 @@
     <ClCompile Include="engine_create_resources.cpp" />
     <ClCompile Include="engine_create_samplers.cpp" />
     <ClCompile Include="engine_create_sync_objects.cpp" />
-    <ClCompile Include="entity.cpp" />
     <ClCompile Include="foundation.cpp" />
     <ClCompile Include="engine.cpp" />
     <ClCompile Include="omni_light_shadow_pass.cpp" />
@@ -116,6 +115,7 @@
     <ClInclude Include="rp_ssao_gen.h" />
     <ClInclude Include="rp_water_drawer.h" />
     <ClInclude Include="stbimage.h" />
+    <ClInclude Include="timer.h" />
     <ClInclude Include="tinyobjloader.h" />
     <ClInclude Include="utility.h" />
     <ClInclude Include="dp_pool.h" />
@@ -138,7 +138,6 @@
     <ClInclude Include="base.h" />
     <ClInclude Include="basic_pass.h" />
     <ClInclude Include="foundation.h" />
-    <ClInclude Include="entity.h" />
     <ClInclude Include="foundation2.h" />
     <ClInclude Include="gta5_infos_impl.h" />
     <ClInclude Include="gta5_foundation.h" />
@@ -159,7 +158,6 @@
     <ClInclude Include="gp_ss_dir_shadow_map_blur.h" />
     <ClInclude Include="gp_ss_dir_shadow_map_gen.h" />
     <ClInclude Include="stack.h" />
-    <ClInclude Include="structs.h" />
     <ClInclude Include="scene.h" />
     <ClInclude Include="gp_sun_drawer.h" />
     <ClInclude Include="gp_terrain_drawer.h" />
