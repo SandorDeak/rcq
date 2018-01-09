@@ -206,14 +206,14 @@ uint32_t base::find_queue_family_index()
 	int i = 0;
 	for (const auto& family : queue_families)
 	{
-		if (family.queueCount < 4)
+		if (family.queueCount < 5)
 		{
 			++i;
 			continue;
 		}
 
 		if (!((family.queueFlags & VK_QUEUE_GRAPHICS_BIT) && (family.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) &&
-			family.queueFlags & VK_QUEUE_COMPUTE_BIT))
+			(family.queueFlags & VK_QUEUE_COMPUTE_BIT) && family.queueFlags))
 		{
 			++i;
 			continue;

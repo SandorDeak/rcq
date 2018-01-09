@@ -21,7 +21,7 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 	size_t ib_size = sizeof(uint32_t)*indices.size();
 	size_t veb_size = build->calc_tb ? sizeof(vertex_ext)*vertices_ext.size() : 0;
 
-	size_t sb_size = vb_size + ib_size + veb_size; //staging buffer size
+	//size_t sb_size = vb_size + ib_size + veb_size; //staging buffer size
 
 	VkDeviceSize vb_staging = m_mappable_memory.allocate(vb_size, 1);
 	VkDeviceSize ib_staging = m_mappable_memory.allocate(ib_size, 1);
@@ -76,9 +76,9 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 	}
 
 	//allocate buffer memory
-	VkDeviceSize vb_offset = m_dl0_memory.allocate(vb_size, vb_mr.alignment);
-	VkDeviceSize ib_offset = m_dl0_memory.allocate(ib_size, ib_mr.alignment);
-	VkDeviceSize veb_offset = build->calc_tb ? m_dl0_memory.allocate(veb_size, veb_mr.alignment) : 0;
+	VkDeviceSize vb_offset = m_dl0_memory.allocate(vb_mr.size, vb_mr.alignment);
+	VkDeviceSize ib_offset = m_dl0_memory.allocate(ib_mr.size, ib_mr.alignment);
+	VkDeviceSize veb_offset = build->calc_tb ? m_dl0_memory.allocate(veb_mr.size, veb_mr.alignment) : 0;
 
 	/*VkDeviceSize ib_offset = calc_offset(ib_mr.alignment, vb_mr.size);
 	VkDeviceSize veb_offset = calc_offset(veb_mr.alignment, ib_offset + ib_mr.size);
@@ -103,22 +103,18 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 
 	//fill staging buffer
 
-	void* raw_data;
-	vkMapMemory(m_base.device, m_mappable_memory.handle(), vb_staging, sb_size, 0, &raw_data);
-	char* data = static_cast<char*>(raw_data);
+	void* data=reinterpret_cast<void*>(m_mappable_memory.map(vb_staging, vb_size));
 	memcpy(data, vertices.data(), vb_size);
-	vkUnmapMemory(m_base.device, m_mappable_memory.handle());
+	m_mappable_memory.unmap();
 
-	vkMapMemory(m_base.device, m_mappable_memory.handle(), ib_staging, ib_size, 0, &raw_data);
-	data = static_cast<char*>(raw_data);
+	data = reinterpret_cast<void*>(m_mappable_memory.map(ib_staging, ib_size));
 	memcpy(data, indices.data(), ib_size);
-	vkUnmapMemory(m_base.device, m_mappable_memory.handle());
+	m_mappable_memory.unmap();
 	if (build->calc_tb)
 	{
-		vkMapMemory(m_base.device, m_mappable_memory.handle(), veb_staging, veb_size, 0, &raw_data);
-		data = static_cast<char*>(raw_data);
+		data = reinterpret_cast<void*>(m_mappable_memory.map(veb_staging, veb_size));
 		memcpy(data, vertices_ext.data(), veb_size);
-		vkUnmapMemory(m_base.device, m_mappable_memory.handle());
+		m_mappable_memory.unmap();
 	}
 
 	//transfer from staging buffer
@@ -138,7 +134,7 @@ void resource_manager::build<RES_TYPE_MESH>(base_resource* res, const char* buil
 
 	if (build->calc_tb)
 	{
-		copy_region.dstOffset = veb_offset;
+		copy_region.dstOffset = 0;
 		copy_region.size = veb_size;
 		copy_region.srcOffset = veb_staging;
 		vkCmdCopyBuffer(m_build_cb, m_staging_buffer, mesh.veb, 1, &copy_region);

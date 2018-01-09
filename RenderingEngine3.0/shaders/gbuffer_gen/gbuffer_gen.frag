@@ -16,6 +16,7 @@ const uint AO_TEX_FLAG_BIT=32;
 layout (set=2, binding=0) uniform material_data
 {
 	vec3 color;
+	uint padding0;
 	float roughness;
 	float metal;
 	float height_scale;

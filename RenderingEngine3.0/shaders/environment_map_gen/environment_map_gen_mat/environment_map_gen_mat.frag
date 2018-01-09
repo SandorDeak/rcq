@@ -14,7 +14,7 @@ layout(set=0, binding=0) uniform em_gen_mat
 	uint padding2;	
 } data;
 
-layout(set=2, binding=0) uniform sampler2D diffuse_tex;
+//layout(set=2, binding=0) uniform sampler2D diffuse_tex;
 
 layout(location=0) in vec3 normal_in;
 layout(location=1) in vec2 tex_coord_in;
@@ -23,8 +23,9 @@ layout(location=0) out vec4 color_out;
 
 void main()
 {
-	vec3 n=normalize(normal_in);
+	/*vec3 n=normalize(normal_in);
 	float n_dot_l=max(dot(n, -data.dir), 0.f);
 	vec3 color=texture(diffuse_tex, tex_coord_in).xyz*(data.ambient_irradiance+n_dot_l*data.irradiance);
-	color_out=vec4(color, 1.f);
+	color_out=vec4(color, 1.f);*/
+	color_out=vec4(0.f);
 }

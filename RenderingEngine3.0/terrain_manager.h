@@ -24,7 +24,8 @@ namespace rcq
 		static void init(const base_info& base);
 		static void destroy();
 
-		void init_resources(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count);
+		void init_resources(const glm::uvec2& tile_count, const glm::uvec2& tile_size, uint32_t mip_level_count, 
+			VkDescriptorSet request_ds, VkDescriptorSet draw_ds);
 		void destroy_resources();
 
 		void set_terrain(resource<RES_TYPE_TERRAIN>* t)
@@ -71,13 +72,13 @@ namespace rcq
 
 		//buffers, offsets, pointers
 		VkBuffer m_mapped_buffer;
-		uint64_t m_mapped_offset;
+		VkDeviceSize m_mapped_offset;
 		request_data* m_request_data;
 		VkBufferView m_requested_mip_levels_view;
 		float* m_requested_mip_levels;
 		VkBufferView m_current_mip_levels_view;
 		float* m_current_mip_levels;
-		uint64_t m_pages_staging_offset;
+		VkDeviceSize m_pages_staging_offset;
 		char* m_pages_staging;
 
 		//memory resources

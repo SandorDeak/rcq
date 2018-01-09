@@ -152,14 +152,5 @@ namespace rcq
 		void end_build_cb(const VkSemaphore* wait_semaphores=nullptr, const VkPipelineStageFlags* wait_flags=nullptr, 
 			uint32_t wait_count=0);
 		void wait_for_build_fence();
-
-		freelist_device_memory* find_device_local_memory(uint32_t mem_type_index)
-		{
-			if (((1 << MEMORY_TYPE_DL0) & mem_type_index) != 0)
-				return &m_dl0_memory;
-			if (((1 << MEMORY_TYPE_DL1) & mem_type_index) != 0)
-				return &m_dl1_memory;
-			assert(false);
-		}
 	};
 }

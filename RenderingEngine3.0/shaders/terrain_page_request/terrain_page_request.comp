@@ -17,9 +17,8 @@ layout(set=0, binding=0) uniform terrain_tile_request_data
 
 layout(set=0, binding=1) buffer request_buffer
 {
-	
-	uint request_count;
-	uint requests[MAX_REQUEST_COUNT];	
+	uint requests[MAX_REQUEST_COUNT];
+	uint request_count;	
 } req;
 
 layout(set=0, binding=2, r32f) uniform imageBuffer requested_mip_levels;

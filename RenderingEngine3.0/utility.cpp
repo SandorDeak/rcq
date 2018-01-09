@@ -213,4 +213,6 @@ void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vec
 			++it2;
 		}
 	}
+
+
 }

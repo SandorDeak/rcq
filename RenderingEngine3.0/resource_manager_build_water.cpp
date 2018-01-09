@@ -79,7 +79,7 @@ void resource_manager::build<RES_TYPE_WATER>(base_resource* res, const char* bui
 		VkMemoryRequirements mr;
 		vkGetImageMemoryRequirements(m_base.device, w->tex.image, &mr);
 		w->tex.offset = m_dl1_memory.allocate(mr.size, mr.alignment);
-		vkBindImageMemory(m_base.device, w->tex.image, m_dl1_memory.handle(), 0);
+		vkBindImageMemory(m_base.device, w->tex.image, m_dl1_memory.handle(), w->tex.offset);
 
 		VkImageViewCreateInfo view = {};
 		view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -119,7 +119,7 @@ void resource_manager::build<RES_TYPE_WATER>(base_resource* res, const char* bui
 		VkMemoryRequirements mr;
 		vkGetBufferMemoryRequirements(m_base.device, w->fft_params_buffer, &mr);
 		w->fft_params_offset = m_dl0_memory.allocate(mr.size, mr.alignment);
-		vkBindBufferMemory(m_base.device, w->fft_params_buffer, m_dl0_memory.handle(), 0);
+		vkBindBufferMemory(m_base.device, w->fft_params_buffer, m_dl0_memory.handle(), w->fft_params_offset);
 	}
 
 	//transition layouts and copy from staging buffers

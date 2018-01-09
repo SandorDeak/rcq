@@ -8,6 +8,7 @@
 #include "const_dir_shadow_map_size.h"
 #include "const_swap_chain_image_extent.h"
 #include "const_bloom_image_size_factor.h"
+#include "const_environment_map_size.h"
 
 using namespace rcq;
 
@@ -177,7 +178,7 @@ void engine::record_and_submit()
 		vkResetFences(m_base.device, 1, &m_fences[FENCE_COMPUTE_FINISHED]);
 		terrain_manager::instance()->poll_requests();
 
-		VkCommandBuffer cbs[2] = { m_cbs[CP_TERRAIN_TILE_REQUEST], m_cbs[CB_WATER_FFT] };
+		VkCommandBuffer cbs[2] = { m_cbs[CB_TERRAIN_REQUEST], m_cbs[CB_WATER_FFT] };
 		VkSubmitInfo submit = {};
 		submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submit.commandBufferCount = 2;
@@ -221,47 +222,47 @@ void engine::record_and_submit()
 		}
 
 		//environment map gen
-		/*if(!m_renderables[RENDERABLE_TYPE_MAT_EM].empty() && !m_renderables[RENDERABLE_TYPE_SKYBOX].empty())
 		{
-		using namespace render_pass_environment_map_gen;
+			using ATT = rp_create_info<RP_ENVIRONMENT_MAP_GEN>::ATT;
 
-		VkRenderPassBeginInfo begin = {};
-		begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		begin.framebuffer = m_fbs.environment_map_gen;
-		begin.renderPass = m_passes[RENDER_PASS_ENVIRONMENT_MAP_GEN];
 
-		std::array<VkClearValue, ATT_COUNT> clears = {};
-		clears[ATT_DEPTH].depthStencil = { 1.f, 0 };
+			VkRenderPassBeginInfo begin = {};
+			begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+			begin.framebuffer = m_fbs[FB_ENVIRONMENT_MAP_GEN];
+			begin.renderPass = m_rps[RP_ENVIRONMENT_MAP_GEN];
 
-		begin.clearValueCount = ATT_COUNT;
-		begin.pClearValues = clears.data();
-		begin.renderArea.extent.width = ENVIRONMENT_MAP_SIZE;
-		begin.renderArea.extent.height = ENVIRONMENT_MAP_SIZE;
-		begin.renderArea.offset = { 0,0 };
+			VkClearValue clears[ATT::ATT_COUNT] = {};
+			clears[ATT::ATT_DEPTH].depthStencil = { 1.f, 0 };
 
-		vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
-		//vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_MAT_EM]);
-		//vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_SKYBOX_EM]);
-		//vkCmdEndRenderPass(cb);
+			begin.clearValueCount = ATT::ATT_COUNT;
+			begin.pClearValues = clears;
+			begin.renderArea.extent.width = ENVIRONMENT_MAP_SIZE;
+			begin.renderArea.extent.height = ENVIRONMENT_MAP_SIZE;
+			begin.renderArea.offset = { 0,0 };
 
-		VkImageMemoryBarrier b = {};
-		b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		b.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image;
-		b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-		b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		b.subresourceRange.baseArrayLayer = 0;
-		b.subresourceRange.baseMipLevel = 0;
-		b.subresourceRange.layerCount = 6;
-		b.subresourceRange.levelCount = 1;
+			vkCmdBeginRenderPass(cb, &begin, VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+			vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_MAT_EM]);
+			//vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_SKYBOX_EM]);
+			vkCmdEndRenderPass(cb);
 
-		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-		0, 0, nullptr, 0, nullptr, 1, &b);
-		}*/
+			VkImageMemoryBarrier b = {};
+			b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			b.image = m_res_image[RES_IMAGE_ENVIRONMENT_MAP].image;
+			b.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			b.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+			b.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+			b.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			b.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+			b.subresourceRange.baseArrayLayer = 0;
+			b.subresourceRange.baseMipLevel = 0;
+			b.subresourceRange.layerCount = 6;
+			b.subresourceRange.levelCount = 1;
+
+			vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+				0, 0, nullptr, 0, nullptr, 1, &b);
+		}
 
 		//dir shadow map gen
 		if (m_opaque_objects.size() != 0)
@@ -328,7 +329,7 @@ void engine::record_and_submit()
 
 			if (m_terrain_valid)
 			{
-				vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_TERRAIN_DRAWER]);
+				//vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_TERRAIN_DRAWER]);
 			}
 
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
@@ -518,7 +519,7 @@ void engine::record_and_submit()
 			vkCmdEndRenderPass(cb);
 		}
 
-		/*//barrier for preimage
+		//barrier for preimage
 		{
 		VkImageMemoryBarrier b = {};
 		b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -537,7 +538,7 @@ void engine::record_and_submit()
 
 		vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
 		0, 0, nullptr, 0, nullptr, 1, &b);
-		}*/
+		}
 
 		//refraction image gen
 		{
@@ -607,8 +608,8 @@ void engine::record_and_submit()
 			vkCmdEndRenderPass(cb);
 		}
 
-		/*//barrier for preimage
-		{
+		//barrier for preimage
+		/*{
 		VkImageMemoryBarrier b = {};
 		b.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		b.image = m_res_image[RES_IMAGE_PREIMAGE].image;
@@ -760,14 +761,20 @@ void engine::record_and_submit()
 		submit.commandBufferCount = 1;
 		submit.pCommandBuffers = &m_present_cbs[image_index];
 
-		VkSemaphore wait_ss[3] = { 
+		VkSemaphore wait_ss[3] =
+		{ 
 			m_semaphores[SEMAPHORE_IMAGE_AVAILABLE], 
 			m_semaphores[SEMAPHORE_RENDER_FINISHED], 
-			m_semaphores[SEMAPHORE_BLOOM_READY] };
+			m_semaphores[SEMAPHORE_BLOOM_READY] 
+		};
 		submit.pWaitSemaphores = wait_ss;
 		submit.waitSemaphoreCount = 3;
-		VkPipelineStageFlags waits[3] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT };
+		VkPipelineStageFlags waits[3] = 
+		{
+			VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+			VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+		};
 		submit.pWaitDstStageMask = waits;
 		submit.pSignalSemaphores = &m_present_ready_ss[image_index];
 		submit.signalSemaphoreCount = 1;

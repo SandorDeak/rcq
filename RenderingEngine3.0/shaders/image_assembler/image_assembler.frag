@@ -24,6 +24,7 @@ layout(set=0, binding=5) uniform image_assembler_data
 {
 	mat4 previous_proj_x_view;
 	vec3 previous_view_pos;
+	uint padding0;
 	vec3 dir;
 	float height_bias;
 	vec3 irradiance;
@@ -31,6 +32,7 @@ layout(set=0, binding=5) uniform image_assembler_data
 	vec3 ambient_irradiance;
 	uint padding2;
 	vec3 cam_pos;
+	uint padding3;
 } data;
 
 layout(set=0, binding=6) uniform sampler2D prev_image_tex;

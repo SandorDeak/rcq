@@ -39,6 +39,7 @@ namespace rcq
 		struct data
 		{
 			glm::vec3 color;
+			uint32_t padding0;
 			float roughness;
 			float metal;
 			float height_scale;

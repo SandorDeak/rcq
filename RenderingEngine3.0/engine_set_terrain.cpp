@@ -22,6 +22,10 @@ void engine::set_terrain(base_resource* terrain, base_resource** opaque_material
 
 	auto t = reinterpret_cast<resource<RES_TYPE_TERRAIN>*>(terrain->data);
 
+	terrain_manager::instance()->set_terrain(t);
+	terrain_manager::instance()->init_resources(t->tile_count, t->level0_tile_size, t->mip_level_count,
+		m_cps[CP_TERRAIN_TILE_REQUEST].ds, m_gps[GP_TERRAIN_DRAWER].ds);
+
 	m_terrain.ds = t->ds;
 	m_terrain.request_ds = t->request_ds;
 	for (auto& mat_ds : m_terrain.opaque_material_dss)
@@ -75,9 +79,6 @@ void engine::set_terrain(base_resource* terrain, base_resource** opaque_material
 	}
 
 	m_terrain_valid = true;
-
-	terrain_manager::instance()->set_terrain(t);
-	terrain_manager::instance()->init_resources(t->tile_count, t->level0_tile_size, t->mip_level_count);
 }
 
 void engine::destroy_terrain()

@@ -34,20 +34,18 @@ void scene::build()
 	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_plane], &mesh_build);
 	mesh_build->calc_tb = true;
 	mesh_build->filename = "meshes/plane_with_tex_coords/plane_with_tex_coords.obj";
-	
-	//shelf
-	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_shelf], &mesh_build);
-	mesh_build->calc_tb = true;
-	mesh_build->filename = "meshes/shelf/CAB.obj";
 	//sphere
 	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_sphere], &mesh_build);
 	mesh_build->calc_tb = true;
 	mesh_build->filename = "meshes/sphere/sphere.obj";
+	//shelf
+	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_shelf], &mesh_build);
+	mesh_build->calc_tb = true;
+	mesh_build->filename = "meshes/shelf/CAB.obj";
 	//buddha
 	//rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_buddha], &mesh_build);
 	//mesh_build->calc_tb = false;
 	//mesh_build->filename = "meshes/buddha/buddha.obj";
-
 
 	//create opaque materials
 	rcq_user::build_info<rcq_user::resource::opaque_material>* mat_build_info;
@@ -56,18 +54,7 @@ void scene::build()
 	mat_build_info->color = { 1.f, 0.86f, 0.57f };
 	mat_build_info->metal = 1.f;
 	mat_build_info->roughness = 0.1f;
-	mat_build_info->tex_flags = 0;
-
-	//bamboo wood
-	rcq_user::build_resource<rcq_user::resource::opaque_material>(&m_resources[resource::mat_bamboo_wood], &mat_build_info);
-	mat_build_info->metal = 0.f;
-	mat_build_info->tex_flags = rcq_user::tex_flag::color | rcq_user::tex_flag::roughness | rcq_user::tex_flag::normal |
-		rcq_user::tex_flag::ao;
-	mat_build_info->texfiles[rcq_user::tex_type::color] = "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-albedo.png";
-	mat_build_info->texfiles[rcq_user::tex_type::roughness] = "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-roughness.png";
-	mat_build_info->texfiles[rcq_user::tex_type::normal] = "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-normal.png";
-	mat_build_info->texfiles[rcq_user::tex_type::ao] = "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-ao.png";
-	
+	mat_build_info->tex_flags = 0;	
 
 	//oakfloor
 	rcq_user::build_resource<rcq_user::resource::opaque_material>(&m_resources[resource::mat_oak_floor], &mat_build_info);
@@ -97,6 +84,16 @@ void scene::build()
 	mat_build_info->metal = 1.f;
 	mat_build_info->tex_flags = rcq_user::tex_flag::roughness;
 	mat_build_info->texfiles[rcq_user::tex_type::roughness] = "textures/scuffed_aluminium/Aluminum-Scuffed_roughness.png";
+
+	//bamboo wood
+	rcq_user::build_resource<rcq_user::resource::opaque_material>(&m_resources[resource::mat_bamboo_wood], &mat_build_info);
+	mat_build_info->metal = 0.f;
+	mat_build_info->tex_flags = rcq_user::tex_flag::color | rcq_user::tex_flag::roughness | rcq_user::tex_flag::normal |
+		rcq_user::tex_flag::ao;
+	mat_build_info->texfiles[rcq_user::tex_type::color] = "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-albedo.png";
+	mat_build_info->texfiles[rcq_user::tex_type::roughness] = "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-roughness.png";
+	mat_build_info->texfiles[rcq_user::tex_type::normal] = "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-normal.png";
+	mat_build_info->texfiles[rcq_user::tex_type::ao] = "textures/bamboo-wood-semigloss/bamboo-wood-semigloss-ao.png";
 
 	//sand
 	rcq_user::build_resource<rcq_user::resource::opaque_material>(&m_resources[resource::mat_sand], &mat_build_info);
@@ -179,7 +176,7 @@ void scene::build()
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_floor], &tr_build_info);
 	tr_build_info->model = glm::translate(glm::mat4(1.f), { 0.f, -1.f + 10.f, 0.f });
 	tr_build_info->scale = glm::vec3(6.f);
-	tr_build_info->tex_scale = glm::vec2(1.f);
+	tr_build_info->tex_scale = glm::vec2(12.f);
 
 	//self
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_shelf], &tr_build_info);
@@ -191,13 +188,13 @@ void scene::build()
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_rusted_iron_sphere], &tr_build_info);
 	tr_build_info->model = glm::translate(glm::mat4(1.f), { -1., -0.75f + 10.f, -1.f });
 	tr_build_info->scale = glm::vec3(0.2f);
-	tr_build_info->scale = glm::vec3(1.f);
+	tr_build_info->tex_scale = glm::vec2(1.f);
 
 	//scuffed aluminium sphere
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_scuffed_alu_sphere], &tr_build_info);
 	tr_build_info->model = glm::translate(glm::mat4(1.f), { -3., -0.75f + 10.f, -3.f });
 	tr_build_info->scale = glm::vec3(0.2f);
-	tr_build_info->scale = glm::vec3(1.f);
+	tr_build_info->tex_scale = glm::vec2(1.f);
 
 	//dispatch resource builds
 	rcq_user::dispatch_resource_builds();

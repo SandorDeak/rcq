@@ -99,5 +99,5 @@ void engine::set_water(base_resource* water)
 
 	assert(vkEndCommandBuffer(cb) == VK_SUCCESS);
 
-	bool m_water_valid = true;
+	m_water_valid = true;
 }

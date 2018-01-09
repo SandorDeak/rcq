@@ -63,7 +63,7 @@ namespace rcq
 
 
 			VkDeviceSize data = m_upstream->allocate(size, alignment);
-			block* b = reinterpret_cast<block*>(m_metadata_memory->allocate(2 * sizeof(block), alignof(block)));;
+			block* b = reinterpret_cast<block*>(m_metadata_memory->allocate(sizeof(block), alignof(block)));;
 			b->begin = data;
 			b->end = data + size;
 			b->prev = m_begin;

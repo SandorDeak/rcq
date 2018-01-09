@@ -276,7 +276,7 @@ void terrain_manager::increase_min_mip_level(const glm::uvec2& tile_id)
 }
 
 void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uvec2& tile_size,
-	uint32_t mip_level_count)
+	uint32_t mip_level_count, VkDescriptorSet request_ds, VkDescriptorSet draw_ds)
 {
 	create_memory_resources_and_containers();
 	create_cp_allocate_cb();
@@ -288,11 +288,12 @@ void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uv
 	uint64_t size = sizeof(request_data) + 2 * 4 * tile_count.x*tile_count.y+
 		m_tile_size_in_pages.x*m_tile_size_in_pages.y*64*64*sizeof(glm::vec4);
 
-	uint64_t requested_mip_levels_offset;
-	uint64_t current_mip_levels_offset;
 	m_page_size = 64 * 64 * sizeof(glm::vec4);
 
 	//create mapped buffer
+	VkDeviceSize request_buffer_offset;
+	VkDeviceSize requested_mip_levels_offset;
+	VkDeviceSize current_mip_levels_offset;
 	{
 		VkBufferCreateInfo buffer = {};
 		buffer.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -305,8 +306,9 @@ void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uv
 
 		VkMemoryRequirements mr;
 		vkGetBufferMemoryRequirements(m_base.device, m_mapped_buffer, &mr);
-		uint64_t alignment = 256; // mr.alignment < alignof(request_data) ? alignof(request_data) : mr.alignment;
+		VkDeviceSize alignment = 1024; // mr.alignment < alignof(request_data) ? alignof(request_data) : mr.alignment;
 		m_mapped_offset = m_mappable_memory.allocate(mr.size, alignment);
+		request_buffer_offset = m_mapped_offset;
 		requested_mip_levels_offset = m_mapped_offset + sizeof(request_data);
 		current_mip_levels_offset = requested_mip_levels_offset + 4 * tile_count.x*tile_count.y;
 		vkBindBufferMemory(m_base.device, m_mapped_buffer, m_mappable_memory.handle(), m_mapped_offset);
@@ -366,6 +368,41 @@ void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uv
 		v.init(&m_host_memory, tile_count.x);
 		for (auto& w : v)
 			w.init(&m_host_memory, tile_count.y);
+	}
+
+	//update request ds and draw ds
+	{
+		VkDescriptorBufferInfo request_b;
+		request_b.buffer = m_mapped_buffer;
+		request_b.offset = request_buffer_offset;
+		request_b.range = sizeof(request_data);
+
+		VkWriteDescriptorSet w[3] = {};
+		w[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[0].descriptorCount = 1;
+		w[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+		w[0].dstArrayElement = 0;
+		w[0].dstBinding = 1;
+		w[0].dstSet = request_ds;
+		w[0].pBufferInfo = &request_b;
+
+		w[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[1].descriptorCount = 1;
+		w[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+		w[1].dstArrayElement = 0;
+		w[1].dstBinding = 2;
+		w[1].dstSet=request_ds;
+		w[1].pTexelBufferView = &m_requested_mip_levels_view;
+
+		w[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		w[2].descriptorCount = 1;
+		w[2].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+		w[2].dstArrayElement = 0;
+		w[2].dstBinding = 1;
+		w[2].dstSet = draw_ds;
+		w[2].pTexelBufferView = &m_current_mip_levels_view;
+
+		vkUpdateDescriptorSets(m_base.device, 3, w, 0, nullptr);
 	}
 
 	m_should_end = false;

@@ -19,7 +19,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 	uint32_t flag = 1;
 	for (uint32_t i = 0; i<TEX_TYPE_COUNT; ++i)
 	{
-		if ((flag & build->tex_flags) && build->texfiles[i] != "empty")
+		if (flag & build->tex_flags)
 		{
 			auto& tex = mat.texs[i];
 
@@ -104,7 +104,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 				VkBufferImageCopy region = {};
 				region.bufferImageHeight = 0;
 				region.bufferRowLength = 0;
-				region.bufferOffset = staging_buffer_offsets[0];
+				region.bufferOffset = staging_buffer_offsets[i];
 				region.imageExtent.depth = 1;
 				region.imageExtent.width = width;
 				region.imageExtent.height = height;
@@ -119,7 +119,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 			//fill mip levels
 			for (uint32_t i = 0; i < mip_level_count - 1; ++i)
 			{
-				std::vector<VkImageMemoryBarrier> barriers(2);
+				VkImageMemoryBarrier barriers[2] = {};
 				for (uint32_t j = 0; j < 2; ++j)
 				{
 					barriers[j].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -137,7 +137,7 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 					barriers[j].subresourceRange.levelCount = 1;
 				}
 				vkCmdPipelineBarrier(m_build_cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-					0, nullptr, 0, nullptr, 2, barriers.data());
+					0, nullptr, 0, nullptr, 2, barriers);
 
 				VkImageBlit blit = {};
 				blit.srcOffsets[0] = { 0, 0, 0 };
@@ -228,8 +228,8 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 		}
 		else
 		{
-			staging_buffer_offsets[i] = 0;
-			mat.texs[i].offset = 0;
+			//staging_buffer_offsets[i] = 0;
+			mat.texs[i].image = VK_NULL_HANDLE;
 		}
 		flag = flag << 1;
 	}
@@ -250,22 +250,49 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 		vkGetBufferMemoryRequirements(m_base.device, mat.data_buffer, &mr);
 		mat.data_offset = m_dl0_memory.allocate(mr.size, mr.alignment);
 		vkBindBufferMemory(m_base.device, mat.data_buffer, m_dl0_memory.handle(), mat.data_offset);
+		/*VkMemoryAllocateInfo alloc = {};
+		alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+		alloc.allocationSize = mr.size;
+		alloc.memoryTypeIndex = MEMORY_TYPE_DL0;
+		VkDeviceMemory m;
+		assert(vkAllocateMemory(m_base.device, &alloc, m_vk_alloc, &m) == VK_SUCCESS);
+		vkBindBufferMemory(m_base.device, mat.data_buffer, m, 0);*/
 	}
 
 	//copy to staging buffer
-	uint64_t staging_buffer_offset = m_mappable_memory.allocate(sizeof(resource<RES_TYPE_MAT_OPAQUE>::data),
+	VkDeviceSize staging_buffer_offset = m_mappable_memory.allocate(sizeof(resource<RES_TYPE_MAT_OPAQUE>::data),
 		alignof(resource<RES_TYPE_MAT_OPAQUE>::data));
-	resource<RES_TYPE_MAT_OPAQUE>::data* data = reinterpret_cast<resource<RES_TYPE_MAT_OPAQUE>::data*>(
+	auto p_data = reinterpret_cast<resource<RES_TYPE_MAT_OPAQUE>::data*>(
 		m_mappable_memory.map(staging_buffer_offset, sizeof(resource<RES_TYPE_MAT_OPAQUE>::data)));
 
-	data->color = build->color;
-	data->flags = build->tex_flags;
-	data->height_scale = build->height_scale;
-	data->metal = build->metal;
-	data->roughness = build->roughness;
+	/*VkBufferCreateInfo sb = {};
+	sb.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	sb.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	sb.size = sizeof(resource<RES_TYPE_MAT_OPAQUE>::data);
+	sb.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+	VkBuffer staging_b;
+	assert(vkCreateBuffer(m_base.device, &sb, m_vk_alloc, &staging_b) == VK_SUCCESS);
+	VkMemoryRequirements mr;
+	vkGetBufferMemoryRequirements(m_base.device, staging_b, &mr);
+	VkMemoryAllocateInfo alloc = {};
+	alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	alloc.allocationSize = mr.size;
+	alloc.memoryTypeIndex = MEMORY_TYPE_HVC;
+	VkDeviceMemory m;
+	assert(vkAllocateMemory(m_base.device, &alloc, m_vk_alloc, &m) == VK_SUCCESS);
+	vkBindBufferMemory(m_base.device, staging_b, m, 0);
+	void* raw_data;
+	vkMapMemory(m_base.device, m, 0, sizeof(resource<RES_TYPE_MAT_OPAQUE>::data), 0, &raw_data);
+	auto data = reinterpret_cast<resource<RES_TYPE_MAT_OPAQUE>::data*>(raw_data);*/
 
+	resource<RES_TYPE_MAT_OPAQUE>::data data;
+	data.color = build->color;
+	data.flags = build->tex_flags;
+	data.height_scale = build->height_scale;
+	data.metal = build->metal;
+	data.roughness = build->roughness;
+	memcpy(p_data, &data, sizeof(data));
 	m_mappable_memory.unmap();
-
 
 	//copy to material data buffer
 	{
@@ -340,10 +367,10 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 
 	res->ready_bit.store(true, std::memory_order_release);
 
-	m_mappable_memory.deallocate(staging_buffer_offset);
+	/*m_mappable_memory.deallocate(staging_buffer_offset);
 	for (uint32_t i = 0; i < TEX_TYPE_COUNT; ++i)
 	{
 		if (staging_buffer_offsets[i] != 0)
 			m_mappable_memory.deallocate(staging_buffer_offsets[i]);
-	}
+	}*/
 }

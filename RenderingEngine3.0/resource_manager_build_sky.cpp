@@ -10,7 +10,7 @@ void resource_manager::build<RES_TYPE_SKY>(base_resource* res, const char* build
 	resource<RES_TYPE_SKY>* s = reinterpret_cast<resource<RES_TYPE_SKY>*>(res->data);
 	const auto build = reinterpret_cast<const resource<RES_TYPE_SKY>::build_info*>(build_info);
 
-	const char* postfix[3] = { "_Rayleigh.sky", "_Mie.sky", "_transmittance.sky" };
+	const char* suffix[3] = { "_Rayleigh.sky", "_Mie.sky", "_transmittance.sky" };
 
 	uint64_t sky_im_size = build->sky_image_size.x*build->sky_image_size.y*build->sky_image_size.z * sizeof(glm::vec4);
 	uint64_t transmittance_im_size = build->transmittance_image_size.x*build->transmittance_image_size.y * sizeof(glm::vec4);
@@ -25,7 +25,7 @@ void resource_manager::build<RES_TYPE_SKY>(base_resource* res, const char* build
 		//load image from file to staging buffer;
 		char filename[256];
 		strcpy_s(filename, build->filename);
-		strcat_s(filename, postfix[i]);
+		strcat_s(filename, suffix[i]);
 
 		uint64_t size = i == 2 ? transmittance_im_size : sky_im_size;
 
@@ -219,6 +219,6 @@ void resource_manager::build<RES_TYPE_SKY>(base_resource* res, const char* build
 	wait_for_build_fence();
 	res->ready_bit.store(true, std::memory_order_release);
 
-	for (uint32_t i = 0; i < 3; ++i)
-		m_mappable_memory.deallocate(staging_buffer_offsets[i]);
+	/*for (uint32_t i = 0; i < 3; ++i)
+		m_mappable_memory.deallocate(staging_buffer_offsets[i]);*/
 }

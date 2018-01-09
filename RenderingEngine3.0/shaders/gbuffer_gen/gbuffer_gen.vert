@@ -5,6 +5,7 @@ layout(set=0, binding=0) uniform gbuffer_gen_data
 {
 	mat4 proj_x_view;
 	vec3 cam_pos;
+	uint padding0;
 } data;
 
 layout(set=1, binding=0) uniform transform_data
@@ -13,6 +14,7 @@ layout(set=1, binding=0) uniform transform_data
 	vec3 scale;
 	uint padding0;
 	vec2 tex_scale;
+	uint padding1[2];
 } tr;
 
 layout(location=0) in vec3 pos_in;
