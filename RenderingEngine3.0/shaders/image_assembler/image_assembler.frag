@@ -241,7 +241,7 @@ void main()
 	vec3 fresnel_refl_sky=fresnel_schlick(n_dot_r, F0);
 	float ndf_refl_sky=1.f/(PI*roughness*roughness+0.005f);//NDF(1.f, roughness);
 	float geometry_refl_sky=pow(shlick_geometry_term_IBL(n_dot_r, roughness), 2.f);
-	vec3 specular_refl_sky=fresnel_refl_sky*geometry_refl_sky*ndf_refl_sky/(4.f+pow(n_dot_r, 2.f)+0.001f);
+	vec3 specular_refl_sky=fresnel_refl_sky*geometry_refl_sky*ndf_refl_sky/(4.f*pow(n_dot_r, 2.f)+0.001f);
 	
 	vec3 lambert_refl_sky=(1.f-fresnel_refl_sky)*albedo/PI;
 	

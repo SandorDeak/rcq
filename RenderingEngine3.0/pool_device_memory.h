@@ -15,7 +15,9 @@ namespace rcq
 			device_memory(block_alignment, upstream->device(), upstream->handle_ptr(), upstream),
 			m_chunks(metadata_memory_resource),
 			m_free_blocks(metadata_memory_resource),
-			m_next_chunk_size(block_size*first_chunk_size)
+			m_next_chunk_size(block_size*first_chunk_size),
+			m_block_size(block_size),
+			m_block_alignment(block_alignment)
 		{
 			assert(block_size%block_alignment == 0);
 		}
@@ -28,6 +30,8 @@ namespace rcq
 			m_chunks.init(metadata_memory_resource);
 			m_free_blocks.init(metadata_memory_resource);
 			m_next_chunk_size = block_size*first_chunk_size;
+			m_block_size = block_size;
+			m_block_alignment = block_alignment;
 
 			assert(block_size%block_alignment == 0);
 		}
@@ -39,6 +43,8 @@ namespace rcq
 				m_upstream->deallocate(*m_chunks.top());
 				m_chunks.pop();
 			}
+			m_chunks.reset();
+			m_free_blocks.reset();
 		}
 
 		~pool_device_memory()

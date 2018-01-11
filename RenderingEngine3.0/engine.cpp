@@ -68,7 +68,7 @@ engine::~engine()
 
 	vkDestroyDescriptorPool(m_base.device, m_dp, m_vk_alloc);
 
-	//m_opaque_objects.reset();
+	m_opaque_objects.reset();
 	m_mappable_memory.reset();
 	m_dl1_memory.reset();
 	m_dl0_memory.reset();

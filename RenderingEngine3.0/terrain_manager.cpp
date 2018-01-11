@@ -60,6 +60,7 @@ void terrain_manager::create_cp_allocate_cb()
 	{
 		VkCommandPoolCreateInfo cp = {};
 		cp.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+		cp.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 		cp.queueFamilyIndex = m_base.queue_family_index;
 		assert(vkCreateCommandPool(m_base.device, &cp, m_vk_alloc, &m_cp) == VK_SUCCESS);
 	}
@@ -110,7 +111,7 @@ void terrain_manager::loop()
 {
 	while (!m_should_end)
 	{
-		while (m_request_queue.empty());
+		if (m_request_queue.empty()) continue;
 		uint32_t request;
 		{
 			//std::lock_guard<std::mutex> lock(m_request_queue_mutex);
@@ -143,7 +144,9 @@ void terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 	std::cout << "decrease request received: " << tile_id.x << ' ' << tile_id.y << '\n';
 	uint32_t new_mip_level = static_cast<uint32_t>(m_current_mip_levels[tile_id.x + tile_id.y*m_tile_count.x]) - 1u;
 	auto& file = m_terrain->tex.files[new_mip_level];
-	glm::uvec2 tile_size_in_pages = m_tile_size_in_pages*static_cast<uint32_t>(powf(0.5f, static_cast<float>(new_mip_level)));
+	glm::uvec2 tile_size_in_pages = m_tile_size_in_pages;
+	for (uint32_t i = 0; i < new_mip_level; ++i)
+		tile_size_in_pages /= 2u;
 	glm::uvec2 page_size = { 64, 64 };
 	glm::uvec2 file_size = m_tile_count*tile_size_in_pages*page_size;
 	glm::uvec2 tile_offset2D_in_file = tile_id*tile_size_in_pages*page_size;
@@ -185,6 +188,7 @@ void terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
 		{
 			auto& b = image_binds[page_index];
+			b.flags = 0;
 			b.extent = { page_size.x, page_size.y, 1 };
 			b.offset = {
 				static_cast<int32_t>(tile_offset2D_in_file.x + i*page_size.x),
@@ -224,6 +228,8 @@ void terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 		for (uint32_t j = 0; j < tile_size_in_pages.y; ++j)
 		{
 			auto& r = regions[page_index];
+			r.bufferImageHeight = 0;
+			r.bufferRowLength = 0;
 			r.bufferOffset = page_index*m_page_size+m_pages_staging_offset;
 			r.imageOffset = {
 				static_cast<int32_t>(tile_offset2D_in_file.x + i*page_size.x),
@@ -235,7 +241,7 @@ void terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 			r.imageSubresource.layerCount = 1;
 			r.imageSubresource.mipLevel = new_mip_level;
 
-			++page_index;
+			++page_index; 
 		}
 	}
 
@@ -300,7 +306,7 @@ void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uv
 		buffer.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 		buffer.size = size;
 		buffer.usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT |
-			VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT;
+			VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 
 		assert(vkCreateBuffer(m_base.device, &buffer, m_vk_alloc, &m_mapped_buffer) == VK_SUCCESS);
 
@@ -320,6 +326,13 @@ void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uv
 		m_pages_staging = data + sizeof(request_data) + 2 * 4 * tile_count.x*tile_count.y;
 		m_pages_staging_offset=m_mapped_offset+ sizeof(request_data) + 2 * 4 * tile_count.x*tile_count.y;
 		m_request_data->request_count = 0;
+		auto requested_mip_level = m_requested_mip_levels;
+		auto current_mip_level = m_current_mip_levels;
+		for (uint32_t i = 0; i < tile_count.x*tile_count.y; ++i)
+		{
+			*requested_mip_level++ = static_cast<float>(mip_level_count);
+			*current_mip_level++ = static_cast<float>(mip_level_count);
+		}
 	}
 
 	//create requested mip levels view
@@ -367,7 +380,11 @@ void terrain_manager::init_resources(const glm::uvec2& tile_count, const glm::uv
 	{
 		v.init(&m_host_memory, tile_count.x);
 		for (auto& w : v)
+		{
 			w.init(&m_host_memory, tile_count.y);
+			for (auto& u : w)
+				u.init(&m_host_memory);
+		}
 	}
 
 	//update request ds and draw ds
@@ -416,11 +433,34 @@ void terrain_manager::destroy_resources()
 {
 	m_should_end = true;
 	m_thread.join();
+
+	vkQueueWaitIdle(m_base.queues[QUEUE_TERRAIN_LOADER]);
+
 	vkDestroyFence(m_base.device, m_copy_finished_f, m_vk_alloc);
 	vkDestroySemaphore(m_base.device, m_binding_finished_s, m_vk_alloc);
 	vkDestroyCommandPool(m_base.device, m_cp, m_vk_alloc);
+
+	vkDestroyBufferView(m_base.device, m_current_mip_levels_view, m_vk_alloc);
+	vkDestroyBufferView(m_base.device, m_requested_mip_levels_view, m_vk_alloc);
+	vkDestroyBuffer(m_base.device, m_mapped_buffer, m_vk_alloc);
+	
+	m_mappable_memory.deallocate(0);
+
 	m_result_queue.reset();
 	m_request_queue.reset();
 	m_page_pool.reset();
+	for(auto& u : m_pages)
+	{
+		for (auto& v : u)
+		{
+			for (auto& w : v)
+			{
+				w.reset();
+			}
+			v.reset();
+		}
+		u.reset();
+	}
+	m_pages.reset();
 	m_host_memory.reset();
 }

@@ -17,7 +17,8 @@ namespace rcq
 		vector(host_memory* memory, size_t size = 0) :
 			m_memory(memory),
 			m_size(size),
-			m_data(nullptr)
+			m_data(nullptr),
+			m_capacity(0)
 		{
 			if (m_size != 0)
 			{
@@ -35,6 +36,7 @@ namespace rcq
 			m_memory = memory;
 			m_size = size;
 			m_data = nullptr;
+			m_capacity = 0;
 
 			if (m_size != 0)
 			{
@@ -65,7 +67,6 @@ namespace rcq
 
 		void clear()
 		{
-			m_data = nullptr;
 			m_size = 0;
 		}
 

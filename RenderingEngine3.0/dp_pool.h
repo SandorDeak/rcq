@@ -27,6 +27,7 @@ namespace rcq
 			m_dp_capacity(dp_capacity)
 		{
 			m_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+			m_create_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 			m_create_info.maxSets = max_set_count;
 			m_create_info.pPoolSizes = m_pool_sizes.data();
 			m_create_info.poolSizeCount = pool_sizes_count;
@@ -46,6 +47,7 @@ namespace rcq
 			m_dp_capacity = dp_capacity;
 
 			m_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+			m_create_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
 			m_create_info.maxSets = max_set_count;
 			m_create_info.pPoolSizes = m_pool_sizes.data();
 			m_create_info.poolSizeCount = pool_sizes_count;

@@ -24,4 +24,5 @@ void engine::create_memory_resources_and_containers()
 	m_mappable_memory.init(1024 * 1024, /*MAX_ALIGNMENT*/1024, &m_vk_mappable_memory, &m_host_memory);
 
 	m_opaque_objects.init(64, &m_host_memory);
+	m_opaque_objects_changed = true;
 }

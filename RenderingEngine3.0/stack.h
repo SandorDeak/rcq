@@ -148,7 +148,7 @@ namespace rcq
 				m_first_available_node = m_first_available_node->next;
 				return ret;
 			}
-			return reinterpret_cast<node*>(m_memory->allocate(sizeof(T), alignof(T)));
+			return reinterpret_cast<node*>(m_memory->allocate(sizeof(node), alignof(node)));
 		}
 
 		void copy(const stack& other)

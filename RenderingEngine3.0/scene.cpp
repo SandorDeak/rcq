@@ -130,7 +130,7 @@ void scene::build()
 	//rock
 	rcq_user::build_resource<rcq_user::resource::opaque_material>(&m_resources[resource::mat_rock], &mat_build_info);
 	mat_build_info->tex_flags = rcq_user::tex_flag::color | rcq_user::tex_flag::roughness | rcq_user::tex_flag::normal |
-		rcq_user::tex_flag::ao | rcq_user::tex_flag::height;
+		rcq_user::tex_flag::ao;// | rcq_user::tex_flag::height;
 	mat_build_info->metal = 0.f;
 	mat_build_info->height_scale = 0.5f;
 	mat_build_info->texfiles[rcq_user::tex_type::color] = "textures/slate-cliff-rock-ue4/slatecliffrock-albedo.png";
@@ -162,7 +162,7 @@ void scene::build()
 	water_build_info->filename = "textures/water/w.wat";
 	water_build_info->A = 1e-4f;
 	water_build_info->base_frequency = 2.f*PI / m_wave_period;
-	water_build_info->grid_size_in_meters = glm::vec2(1024.f*0.04f);
+	water_build_info->grid_size_in_meters = glm::vec2(1024.f*0.02f);
 
 	//create transforms
 	rcq_user::build_info<rcq_user::resource::transform>* tr_build_info;
@@ -212,7 +212,7 @@ void scene::build()
 	rcq_user::add_opaque_object(m_resources[resource::mesh_plane], m_resources[resource::mat_oak_floor], m_resources[resource::tr_floor],
 		&m_opaque_objects[opaque_object::floor]);
 	//rusted iron sphere
-	rcq_user::add_opaque_object(m_resources[resource::mesh_sphere], m_resources[resource::mat_rusted_iron], 
+	rcq_user::add_opaque_object(m_resources[resource::mesh_sphere], m_resources[resource::mat_rusted_iron],
 		m_resources[resource::tr_rusted_iron_sphere],&m_opaque_objects[opaque_object::rusted_iron_sphere]);
 	//scuffed aluminium sphere
 	rcq_user::add_opaque_object(m_resources[resource::mesh_sphere], m_resources[resource::mat_scuffed_aluminum], 

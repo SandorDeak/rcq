@@ -69,11 +69,13 @@ namespace rcq
 
 			new_obj->mat_opaque_ds = reinterpret_cast<resource<RES_TYPE_MAT_OPAQUE>*>(opaque_material->data)->ds;
 			new_obj->tr_ds = reinterpret_cast<resource<RES_TYPE_TR>*>(transform->data)->ds;
+			m_opaque_objects_changed = true;
 		}
 
 		bool destroy_opaque_object(slot s)
 		{
 			return m_opaque_objects.destroy(s);
+			m_opaque_objects_changed = true;
 		}
 
 		void set_sky(base_resource* sky)
@@ -178,6 +180,7 @@ namespace rcq
 
 		//renderables
 		slot_map<renderable<REND_TYPE_OPAQUE_OBJECT>> m_opaque_objects;
+		bool m_opaque_objects_changed;
 		renderable<REND_TYPE_SKY> m_sky;
 		bool m_sky_valid;
 		renderable<REND_TYPE_TERRAIN> m_terrain;

@@ -26,8 +26,11 @@ layout(set=0, binding=0) uniform water_drawer_data
 	vec3 view_pos;
 	float height_bias;
 	vec3 light_dir;
+	uint padding0;
 	vec3 irradiance;
+	uint padding1;
 	vec3 ambient_irradiance;
+	uint padding2;
 	vec2 tile_offset;
 	vec2 tile_size_in_meter;
 	vec2 half_resolution;
@@ -214,7 +217,7 @@ void main()
 	if (refl_color.w==0.f) //data is invalid, sample from sky
 	{
 		//calculate reflected specular sky color
-		vec3 params_refl=vec3(data.height_bias+pos_in.y, refl.y, l.y);
+		vec3 params_refl=vec3(data.height_bias+pos_in.y, max(refl.y, 0.5f), l.y);
 		vec3 tex_coords_refl=params_to_tex_coords(params_refl);
 		float cos_refl_light=dot(refl, l);
 		refl_color.xyz=ad_hoc_Rayleigh_phase(cos_refl_light)*texture(Rayleigh_tex, tex_coords_refl).xyz+Mie_phase_Henyey_Greenstein(cos_refl_light, 0.75f)*texture(Mie_tex, tex_coords_refl).xyz;
@@ -283,11 +286,11 @@ void main()
 
 	
 	//calculate specular term for reflected sky
-	float n_dot_r=max(0.f, dot(n, refl));
+	float n_dot_r=max(0.5f, dot(n, refl));
 	vec3 fresnel_refl_sky=fresnel_schlick(n_dot_r, water_F0);
 	float ndf_refl_sky=1.f/(PI*water_roughness*water_roughness+0.005f);//NDF(1.f, roughness);
 	float geometry_refl_sky=pow(shlick_geometry_term_IBL(n_dot_r, water_roughness), 2.f);
-	vec3 specular_refl_sky=fresnel_refl_sky*geometry_refl_sky*ndf_refl_sky/(4.f+pow(n_dot_r, 2.f)+0.001f);
+	vec3 specular_refl_sky=fresnel_refl_sky*geometry_refl_sky*ndf_refl_sky/(4.f*pow(n_dot_r, 2.f)+0.001f);
 	
 	//vec3 lambert_refl_sky=(1.f-fresnel_refl_sky)*water_albedo/PI;
 	
@@ -314,6 +317,5 @@ void main()
 	
 	vec3 color_with_areal=transm*color+sky_scattering*data.irradiance;
 	
-	color_out=vec4(color_with_areal, 1.f);
-	
+	color_out=vec4(color_with_areal, 1.f);	
 }

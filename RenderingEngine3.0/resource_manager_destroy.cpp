@@ -13,10 +13,10 @@ void resource_manager::destroy<RES_TYPE_MESH>(base_resource* res)
 	vkDestroyBuffer(m_base.device, m->ib, m_vk_alloc);
 	m_dl0_memory.deallocate(m->ib_offset);
 
-	if (m->veb_offset != 0)
+	if (m->veb != VK_NULL_HANDLE)
 	{
 		vkDestroyBuffer(m_base.device, m->veb, m_vk_alloc);
-		m_dl0_memory.deallocate(m->veb);
+		m_dl0_memory.deallocate(m->veb_offset);
 	}
 
 	m_resource_pool.deallocate(reinterpret_cast<size_t>(res));
@@ -32,7 +32,7 @@ void resource_manager::destroy<RES_TYPE_MAT_OPAQUE>(base_resource* res)
 
 	for (size_t i = 0; i < TEX_TYPE_COUNT; ++i)
 	{
-		if (mat->texs[i].offset != 0)
+		if (mat->texs[i].image != VK_NULL_HANDLE)
 		{
 			vkDestroyImageView(m_base.device, mat->texs[i].view, m_vk_alloc);
 			vkDestroyImage(m_base.device, mat->texs[i].image, m_vk_alloc);
@@ -63,7 +63,6 @@ template<>
 void resource_manager::destroy<RES_TYPE_SKY>(base_resource* res)
 {
 	auto s = reinterpret_cast<resource<RES_TYPE_SKY>*>(res->data);
-
 	vkFreeDescriptorSets(m_base.device, m_dp_pools[DSL_TYPE_SKY].stop_using_dp(s->dp_index), 1, &s->ds);
 
 	for (uint32_t i = 0; i<3; ++i)
@@ -99,14 +98,6 @@ void resource_manager::destroy<RES_TYPE_TERRAIN>(base_resource* res)
 
 	vkDestroyBuffer(m_base.device, t->request_data_buffer, m_vk_alloc);
 	m_dl0_memory.deallocate(t->request_data_offset);
-
-	/*vkDestroyBufferView(m_base.device, t.current_mip_levels_view, m_alloc);
-	vkDestroyBuffer(m_base.device, t.current_mip_levels_buffer, m_alloc);
-	vkFreeMemory(m_base.device, t.current_mip_levels_memory, m_alloc);
-
-	vkDestroyBufferView(m_base.device, t.requested_mip_levels_view, m_alloc);
-	vkDestroyBuffer(m_base.device, t.requested_mip_levels_buffer, m_alloc);
-	vkFreeMemory(m_base.device, t.requested_mip_levels_memory, m_alloc);*/
 
 	m_resource_pool.deallocate(reinterpret_cast<size_t>(res));
 }

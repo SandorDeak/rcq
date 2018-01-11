@@ -10,8 +10,11 @@ layout(set=0, binding=0) uniform water_drawer_data
 	vec3 view_pos;
 	float height_bias;
 	vec3 light_dir;
+	uint padding0;
 	vec3 irradiance;
+	uint padding1;
 	vec3 ambient_irradiance;
+	uint padding2;
 	vec2 tile_offset;
 	vec2 tile_size_in_meter;
 	vec2 half_resolution;
@@ -32,7 +35,7 @@ void main()
 	vec4 pos = mix(mid1, mid2, gl_TessCoord.y);
 	
 	float height=texture(water_tex, vec3(gl_TessCoord.xy, 0.f)).x;
-	vec2 grad=texture(water_tex, vec3(gl_TessCoord.xy, 1.f)).xz;
+	vec2 grad=texture(water_tex, vec3(gl_TessCoord.xy, 1.f)).xz/data.tile_size_in_meter;
 	
 	pos.y=height;
 	

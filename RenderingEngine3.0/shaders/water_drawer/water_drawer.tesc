@@ -10,8 +10,11 @@ layout(set=0, binding=0) uniform water_drawer_data
 	vec3 view_pos;
 	float height_bias;
 	vec3 light_dir;
+	uint padding0;
 	vec3 irradiance;
+	uint padding1;
 	vec3 ambient_irradiance;
+	uint padding2;
 	vec2 tile_offset;
 	vec2 tile_size_in_meter;
 	vec2 half_resolution;

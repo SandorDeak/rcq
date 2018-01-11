@@ -36,16 +36,14 @@ void main()
 		mip_levels_out[4]=mip_level;
 	}
 	
-	int x_offset=(gl_InvocationID & 1) == 1 ? int(gl_InvocationID>>1)*2-1 : 0;
-	int y_offset=(gl_InvocationID & 1) == 0 ? int(gl_InvocationID>>1)*2-1 : 0;
-	//int x_offset=int(gl_InvocationID & 1)*(int(gl_InvocationID>>1)*2-1);
-	//int y_offset=(1-int(gl_InvocationID & 1))*(int(gl_InvocationID>>1)*2-1);
-	
-	ivec2 neighbour_tile_id=ivec2
+	ivec2 offset=ivec2
 	(
-		clamp(tile_id_in[0].x+x_offset, 0, terr.tile_count.x-1),
-		clamp(tile_id_in[0].y+y_offset, 0, terr.tile_count.y-1)
+		int(gl_InvocationID & 1)*2-1,
+		int(gl_InvocationID >> 1)*2-1
 	);
+	
+	ivec2 neighbour_tile_id = clamp(offset+tile_id_in[0], ivec2(0), terr.tile_count-ivec2(1));
+	
 	
 	float neighbour_mip_level=mip_levels_out[gl_InvocationID]=texelFetch(current_mip_levels, neighbour_tile_id.x+terr.tile_count.x*neighbour_tile_id.y).x;
 	mip_levels_out[gl_InvocationID]=neighbour_mip_level;

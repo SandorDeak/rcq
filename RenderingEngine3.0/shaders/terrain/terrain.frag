@@ -14,6 +14,7 @@ const uint AO_TEX_FLAG_BIT=32;
 layout (set=2, binding=0) uniform material_data0
 {
 	vec3 color;
+	uint padding0;
 	float roughness;
 	float metal;
 	float height_scale;
@@ -30,6 +31,7 @@ layout (set=2, binding=6) uniform sampler2D ao_tex0;
 layout (set=3, binding=0) uniform material_data1
 {
 	vec3 color;
+	uint padding0;
 	float roughness;
 	float metal;
 	float height_scale;
@@ -46,6 +48,7 @@ layout (set=3, binding=6) uniform sampler2D ao_tex1;
 layout (set=4, binding=0) uniform material_data2
 {
 	vec3 color;
+	uint padding0;
 	float roughness;
 	float metal;
 	float height_scale;
@@ -62,6 +65,7 @@ layout (set=4, binding=6) uniform sampler2D ao_tex2;
 layout (set=5, binding=0) uniform material_data3
 {
 	vec3 color;
+	uint padding0;
 	float roughness;
 	float metal;
 	float height_scale;

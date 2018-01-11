@@ -228,7 +228,6 @@ void resource_manager::build<RES_TYPE_MAT_OPAQUE>(base_resource* res, const char
 		}
 		else
 		{
-			//staging_buffer_offsets[i] = 0;
 			mat.texs[i].image = VK_NULL_HANDLE;
 		}
 		flag = flag << 1;

@@ -18,8 +18,8 @@ void main()
 {	
 	uint vertex_id=gl_VertexIndex & 3;
 	
-	int x=int((gl_VertexIndex>>2) + (vertex_id >> 1));
-	int y=int(gl_InstanceIndex + (vertex_id & 1));
+	int x=int((gl_VertexIndex>>2) + (vertex_id & 1));
+	int y=int(gl_InstanceIndex + (vertex_id >> 1));
 	 
 	tile_id_out=ivec2(int(gl_VertexIndex>>2), int(gl_InstanceIndex));
 	//tile_id_out=x+y*terr.tile_count.x;

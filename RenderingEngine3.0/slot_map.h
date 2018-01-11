@@ -47,10 +47,16 @@ namespace rcq
 
 		~slot_map()
 		{
-			for (auto it=m_chunks.begin(); it!=m_chunks.end(); ++it)
+			reset();
+		}
+
+		void reset()
+		{
+			for (auto it = m_chunks.begin(); it != m_chunks.end(); ++it)
 			{
 				m_memory->deallocate(reinterpret_cast<uint64_t>(it->data));
 			}
+			m_chunks.reset();
 		}
 
 		slot_map& operator=(slot_map&& other)

@@ -14,7 +14,11 @@ void engine::set_terrain(base_resource* terrain, base_resource** opaque_material
 {
 	bool types_valid = terrain->res_type == RES_TYPE_TERRAIN;
 	for (uint32_t i = 0; i < 4; ++i)
-		types_valid = types_valid && ((*(opaque_materials++))->res_type == RES_TYPE_MAT_OPAQUE);
+	{
+		types_valid = types_valid && ((*opaque_materials)->res_type == RES_TYPE_MAT_OPAQUE);
+		while (!(*opaque_materials)->ready_bit.load());
+		++opaque_materials;
+	}
 	assert(types_valid);
 	opaque_materials -= 4;
 	while (!terrain->ready_bit.load());
@@ -84,5 +88,7 @@ void engine::set_terrain(base_resource* terrain, base_resource** opaque_material
 void engine::destroy_terrain()
 {
 	m_terrain_valid = false;
+	VkFence fences[2] = { m_fences[FENCE_COMPUTE_FINISHED], m_fences[FENCE_RENDER_FINISHED] };
+	vkWaitForFences(m_base.device, 2, fences, VK_TRUE, std::numeric_limits<uint64_t>::max());
 	terrain_manager::instance()->destroy_resources();
 }

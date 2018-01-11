@@ -10,6 +10,7 @@ layout(set=0, binding=0) uniform terrain_data
 {
 	mat4 proj_x_view;
 	vec3 view_pos;
+	uint padding0;
 } data;
 
 layout(set=1, binding=0) uniform terrain_buffer
@@ -40,13 +41,13 @@ void main()
 	vec2 tex_coords=pos.xz/terr.terrain_size_in_meters;
 	
 	float mip_level=mip_level_in[4];
-	if (gl_TessCoord.x<0.05f)
+	if (gl_TessCoord.x<0.3f)
 		mip_level=max(mip_level, mip_level_in[0]);
-	if (gl_TessCoord.x>0.95f)
+	if (gl_TessCoord.x>0.7f)
 		mip_level=max(mip_level, mip_level_in[2]);
-	if (gl_TessCoord.y<0.05f)
+	if (gl_TessCoord.y<0.3f)
 		mip_level=max(mip_level, mip_level_in[1]);
-	if (gl_TessCoord.y>0.95f)
+	if (gl_TessCoord.y>0.7f)
 		mip_level=max(mip_level, mip_level_in[3]);	
 	
 	vec4 tex_val=textureLod(terrain_tex, tex_coords, mip_level);
@@ -56,18 +57,6 @@ void main()
 	vec2 grad=terr.height_scale*tex_val.xy/terr.terrain_size_in_meters;
 	pos.y=height;
 	
-	/*vec3 c=vec3(0.f);
-	if (mip_level==0.f)
-		c.x=1.f;
-	if (mip_level==1.f)
-		c.y=1.f;
-	if (mip_level==2.f)
-		c.z=1.f;
-	if (mip_level==3.f)
-		c.xy=vec2(1.f);*/
-		
-	//color_out=vec3(max(dot(n, -data.light_dir), 0.f));
-	
 	uint mask=floatBitsToUint(tex_val.w);	
 	tex_mask_out=vec4(
 		float(mask & 255),
@@ -76,20 +65,10 @@ void main()
 		float((mask>>24) & 255)
 	)/255.f;
 	
-	/*tex_mask_out=vec4(
-		float((mask>>24) & 255),
-		float((mask>>16) & 255),
-		float((mask>>8) & 255),
-		float(mask & 255)
-	)/255.f;*/
-	
-	//tex_mask_out=vec4(0.f, 0.f, 0.f, 1.f);
-	
-	
 	tex_coords_out=pos.xz;
 	
 	vec3 tangent=normalize(vec3(1.f, grad.x, 0.f));
-	vec3 normal=normalize(vec3(-grad.x, 1.f, -grad.y));
+	vec3 normal=vec3(0.f, 1.f, 0.f);//normalize(vec3(-grad.x, 1.f, -grad.y));
 	vec3 bitangent=cross(tangent, normal);
 	
 	TBN_out=mat3(tangent, bitangent, normal);

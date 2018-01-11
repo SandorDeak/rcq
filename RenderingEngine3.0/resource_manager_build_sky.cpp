@@ -74,28 +74,6 @@ void resource_manager::build<RES_TYPE_SKY>(base_resource* res, const char* build
 			view.subresourceRange.levelCount = 1;
 
 			assert(vkCreateImageView(m_base.device, &view, m_vk_alloc, &s->tex[i].view) == VK_SUCCESS);
-
-			//s->tex[i].sampler = m_samplers[SAMPLER_TYPE_CLAMP];
-		}
-
-		//create sampler
-		{
-			VkSamplerCreateInfo sampler = {};
-			sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-			sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-			sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-			sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-			sampler.anisotropyEnable = VK_FALSE;
-			sampler.maxAnisotropy = 16.f;
-			sampler.compareEnable = VK_FALSE;
-			sampler.magFilter = VK_FILTER_LINEAR;
-			sampler.maxLod = 0.f;
-			sampler.minFilter = VK_FILTER_LINEAR;
-			sampler.minLod = 0.f;
-			sampler.mipLodBias = 0.f;
-			sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-
-			assert(vkCreateSampler(m_base.device, &sampler, m_vk_alloc, &s->sampler) == VK_SUCCESS);
 		}
 
 		//transition to transfer dst optimal
@@ -159,6 +137,26 @@ void resource_manager::build<RES_TYPE_SKY>(base_resource* res, const char* build
 	}
 
 	end_build_cb();
+
+	//create sampler
+	{
+		VkSamplerCreateInfo sampler = {};
+		sampler.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+		sampler.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler.anisotropyEnable = VK_FALSE;
+		sampler.maxAnisotropy = 16.f;
+		sampler.compareEnable = VK_FALSE;
+		sampler.magFilter = VK_FILTER_LINEAR;
+		sampler.maxLod = 0.f;
+		sampler.minFilter = VK_FILTER_LINEAR;
+		sampler.minLod = 0.f;
+		sampler.mipLodBias = 0.f;
+		sampler.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+
+		assert(vkCreateSampler(m_base.device, &sampler, m_vk_alloc, &s->sampler) == VK_SUCCESS);
+	}
 
 	//allocate descriptor set
 	{

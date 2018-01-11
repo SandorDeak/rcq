@@ -14,45 +14,6 @@ using namespace rcq;
 
 void engine::record_and_submit()
 {
-	if (m_opaque_objects.size() != 0)
-	{
-		auto cb = m_secondary_cbs[SECONDARY_CB_MAT_EM];
-
-		VkCommandBufferInheritanceInfo inharitance = {};
-		inharitance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-		inharitance.framebuffer = m_fbs[FB_ENVIRONMENT_MAP_GEN];
-		inharitance.occlusionQueryEnable = VK_FALSE;
-		inharitance.renderPass = m_rps[RP_ENVIRONMENT_MAP_GEN];
-		inharitance.subpass = 0;
-
-		VkCommandBufferBeginInfo begin = {};
-		begin.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
-		begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		begin.pInheritanceInfo = &inharitance;
-
-		assert(vkBeginCommandBuffer(cb, &begin) == VK_SUCCESS);
-
-		vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_BEGIN_RANGE, m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].ppl);
-		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].pl,
-			0, 1, &m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].ds, 0, nullptr);
-
-		/*m_opaque_objects.for_each([cb, pl=m_gps[GP_ENVIRONMENT_MAP_GEN_MAT]])
-
-
-		for (auto& r : m_renderables[RENDERABLE_TYPE_MAT_EM])
-		{
-		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].pl,
-		1, 1, &r.tr_ds, 0, nullptr);
-		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].pl,
-		2, 1, &r.mat_light_ds, 0, nullptr);
-		VkDeviceSize offset = 0;
-		vkCmdBindVertexBuffers(cb, 0, 1, &r.m.vb, &offset);
-		vkCmdBindIndexBuffer(cb, r.m.ib, 0, VK_INDEX_TYPE_UINT32);
-		vkCmdDrawIndexed(cb, r.m.size, 1, 0, 0, 0);
-		}*/
-
-		assert(vkEndCommandBuffer(cb) == VK_SUCCESS);
-	}
 	/*if (record_mask[RENDERABLE_TYPE_SKYBOX] && !m_renderables[RENDERABLE_TYPE_SKYBOX].empty())
 	{
 	auto cb = m_secondary_cbs[SECONDARY_CB_SKYBOX_EM];
@@ -86,6 +47,10 @@ void engine::record_and_submit()
 	if (vkEndCommandBuffer(cb) != VK_SUCCESS)
 	throw std::runtime_error("failed to record command buffer!");
 	}*/
+
+	vkWaitForFences(m_base.device, 1, &m_fences[FENCE_RENDER_FINISHED], VK_TRUE, std::numeric_limits<uint64_t>::max());
+	vkResetFences(m_base.device, 1, &m_fences[FENCE_RENDER_FINISHED]);
+	vkResetEvent(m_base.device, m_events[EVENT_WATER_READY]);
 
 	if (m_opaque_objects.size() != 0)
 	{
@@ -124,8 +89,11 @@ void engine::record_and_submit()
 			assert(vkEndCommandBuffer(cb) == VK_SUCCESS);
 		}
 
-		//gbuffer gen
+		//opaque object cb
+		if (m_opaque_objects_changed)
 		{
+			m_opaque_objects_changed = false;
+
 			auto cb = m_secondary_cbs[SECONDARY_CB_MAT_OPAQUE];
 
 			VkCommandBufferInheritanceInfo inharitance = {};
@@ -166,11 +134,7 @@ void engine::record_and_submit()
 		}
 	}
 
-	vkWaitForFences(m_base.device, 1, &m_fences[FENCE_RENDER_FINISHED], VK_TRUE, std::numeric_limits<uint64_t>::max());
-	vkResetFences(m_base.device, 1, &m_fences[FENCE_RENDER_FINISHED]);
-	vkResetEvent(m_base.device, m_events[EVENT_WATER_READY]);
-
-	//manage terrain request
+	//manage terrain request and water fft
 	if (m_terrain_valid)
 	{
 		terrain_manager::instance()->poll_results();
@@ -185,6 +149,46 @@ void engine::record_and_submit()
 		submit.pCommandBuffers = cbs;
 
 		vkQueueSubmit(m_base.queues[QUEUE_COMPUTE], 1, &submit, m_fences[FENCE_COMPUTE_FINISHED]);
+	}
+
+	if (m_opaque_objects.size() != 0)
+	{
+		auto cb = m_secondary_cbs[SECONDARY_CB_MAT_EM];
+
+		VkCommandBufferInheritanceInfo inharitance = {};
+		inharitance.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
+		inharitance.framebuffer = m_fbs[FB_ENVIRONMENT_MAP_GEN];
+		inharitance.occlusionQueryEnable = VK_FALSE;
+		inharitance.renderPass = m_rps[RP_ENVIRONMENT_MAP_GEN];
+		inharitance.subpass = 0;
+
+		VkCommandBufferBeginInfo begin = {};
+		begin.flags = VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT | VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+		begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		begin.pInheritanceInfo = &inharitance;
+
+		assert(vkBeginCommandBuffer(cb, &begin) == VK_SUCCESS);
+
+		vkCmdBindPipeline(cb, VK_PIPELINE_BIND_POINT_BEGIN_RANGE, m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].ppl);
+		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].pl,
+			0, 1, &m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].ds, 0, nullptr);
+
+		/*m_opaque_objects.for_each([cb, pl=m_gps[GP_ENVIRONMENT_MAP_GEN_MAT]])
+
+
+		for (auto& r : m_renderables[RENDERABLE_TYPE_MAT_EM])
+		{
+		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].pl,
+		1, 1, &r.tr_ds, 0, nullptr);
+		vkCmdBindDescriptorSets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, m_gps[GP_ENVIRONMENT_MAP_GEN_MAT].pl,
+		2, 1, &r.mat_light_ds, 0, nullptr);
+		VkDeviceSize offset = 0;
+		vkCmdBindVertexBuffers(cb, 0, 1, &r.m.vb, &offset);
+		vkCmdBindIndexBuffer(cb, r.m.ib, 0, VK_INDEX_TYPE_UINT32);
+		vkCmdDrawIndexed(cb, r.m.size, 1, 0, 0, 0);
+		}*/
+
+		assert(vkEndCommandBuffer(cb) == VK_SUCCESS);
 	}
 
 	//record primary cb
@@ -329,7 +333,7 @@ void engine::record_and_submit()
 
 			if (m_terrain_valid)
 			{
-				//vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_TERRAIN_DRAWER]);
+				vkCmdExecuteCommands(cb, 1, &m_secondary_cbs[SECONDARY_CB_TERRAIN_DRAWER]);
 			}
 
 			vkCmdNextSubpass(cb, VK_SUBPASS_CONTENTS_INLINE);
