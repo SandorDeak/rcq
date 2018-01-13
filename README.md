@@ -70,7 +70,7 @@ The engine uses PBR to render opaque materials mainly based on the PBR section a
 
 For sky rendering I use a precomputed 3D sky map (more precisely, two sky maps, one for Rayleigh and one for Mie scattering) and a 2D transmittance map. The precomputation is implemented based on the ideas in [this](https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/s2016-pbs-frostbite-sky-clouds-new.pdf), [this](http://old.cescg.org/CESCG-2009/papers/PragueCUNI-Elek-Oskar09.pdf), and [this](https://software.intel.com/sites/default/files/blog/473591/outdoor-light-scattering-update_1.pdf) document . For integration over the sphere I use the [Lebedev quadrature](https://en.wikipedia.org/wiki/Lebedev_quadrature) method, the file containing the grid points can be found [here](http://people.sc.fsu.edu/~jburkardt/datasets/sphere_lebedev_rule/sphere_lebedev_rule.html).
 
-### Cascade shadow mapping
+### Cascaded shadow mapping
 
 This is a well-known technique to implement shadows. I didn’t use any specific source for it.
 
