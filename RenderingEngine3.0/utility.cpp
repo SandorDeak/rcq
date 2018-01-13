@@ -63,6 +63,16 @@ void utility::create_shaders(VkDevice device, const char** files, const VkShader
 	}
 }
 
+//helper for mesh loader
+inline void load_id(char*& c, uint32_t& new_id, uint32_t current_v_id)
+{
+	auto id = strtol(c, &c, 10);
+	if (id < 0)
+		new_id = static_cast<uint32_t>(static_cast<decltype(id)>(current_v_id) + id);
+	else
+		new_id = static_cast<uint32_t>(id-1u);
+}
+
 void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vector<vertex_ext>& vertices_ext, bool calc_tb,
 	const char* filename, host_memory* memory)
 {
@@ -102,6 +112,7 @@ void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vec
 			coords.x = strtof(c, &c);
 			coords.y = strtof(c, &c);
 			coords.z = strtof(c, &c);
+			coords = glm::normalize(coords);
 		}
 
 		if (line[0] == 'f' && line[1] == ' ')
@@ -115,7 +126,8 @@ void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vec
 				uint32_t current_vertex_info[3];
 
 				//read v, vt and vn ids
-				current_vertex_info[0] = static_cast<uint32_t>(strtoul(c, &c, 10));
+				load_id(c, current_vertex_info[0], v.size());
+
 				if (*c == '/')
 				{
 					++c;
@@ -123,15 +135,15 @@ void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vec
 					{
 						++c;
 						current_vertex_info[1] = ~0;
-						current_vertex_info[2]= static_cast<uint32_t>(strtoul(c, &c, 10));
+						load_id(c, current_vertex_info[2], vn.size());
 					}
 					else
 					{
-						current_vertex_info[1]= static_cast<uint32_t>(strtoul(c, &c, 10));
+						load_id(c, current_vertex_info[1], vt.size());
 						if (*c == '/')
 						{
 							++c;
-							current_vertex_info[2] = static_cast<uint32_t>(strtoul(c, &c, 10));
+							load_id(c, current_vertex_info[2], vn.size());
 						}
 					}
 				}
@@ -168,10 +180,10 @@ void utility::load_mesh(vector<vertex>& vertices, vector<uint32_t>& indices, vec
 
 	while (it1 != vertices.end())
 	{
-		it1->pos = v[(*it2)[0]-1];
-		if (!vt.empty())
-			it1->tex_coord = vt[(*it2)[1]-1];
-		it1->normal = vn[(*it2)[2]-1];
+		it1->pos = v[(*it2)[0]];
+		if ((*it2)[1]<vt.size())
+			it1->tex_coord = vt[(*it2)[1]];
+		it1->normal = vn[(*it2)[2]];
 
 		++it1;
 		++it2;

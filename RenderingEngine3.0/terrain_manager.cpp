@@ -6,7 +6,6 @@
 #include "const_max_alignment.h"
 #include "const_max_tile_count.h"
 
-#include <iostream>
 #include <fstream>
 
 #include "enum_memory_type.h"
@@ -141,7 +140,6 @@ void terrain_manager::loop()
 
 void terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 {
-	std::cout << "decrease request received: " << tile_id.x << ' ' << tile_id.y << '\n';
 	uint32_t new_mip_level = static_cast<uint32_t>(m_current_mip_levels[tile_id.x + tile_id.y*m_tile_count.x]) - 1u;
 	auto& file = m_terrain->tex.files[new_mip_level];
 	glm::uvec2 tile_size_in_pages = m_tile_size_in_pages;
@@ -271,7 +269,6 @@ void terrain_manager::decrease_min_mip_level(const glm::uvec2& tile_id)
 
 void terrain_manager::increase_min_mip_level(const glm::uvec2& tile_id)
 {
-	std::cout << "increase request received: " << tile_id.x << ' ' << tile_id.y << '\n';
 	uint32_t destroy_mip_level = static_cast<uint32_t>(m_current_mip_levels[tile_id.x + tile_id.y*m_tile_count.x]);
 	auto& pages = m_pages[destroy_mip_level][tile_id.x][tile_id.y];
 

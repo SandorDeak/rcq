@@ -89,12 +89,12 @@ vec3 params_to_tex_coords(vec3 params)
 	float cos_horizon= -sqrt(params.x*(2.f * Earth_radius + params.x)) / (Earth_radius + params.x);
 	if (params.y > cos_horizon)
 	{
-		params.y=max(params.y, cos_horizon+0.0001f);
+		params.y=max(params.y, cos_horizon+0.00001f);
 		tex_coords.y = 0.5f*pow((params.y - cos_horizon) / (1.f - cos_horizon), 0.2f) + 0.5f;
 	}
 	else
 	{
-		params.y=min(params.y, cos_horizon-0.0001f);
+		params.y=min(params.y, cos_horizon-0.00001f);
 		tex_coords.y= 0.5f*pow((cos_horizon - params.y) / (1.f + cos_horizon), 0.2f);
 	}
 
@@ -250,7 +250,7 @@ void main()
 		+(specular_refl_sky+lambert_refl_sky)*refl_color*n_dot_r/10.f
 		+(basecolor/PI)*ao*data.ambient_irradiance;
 	
-	//adding areal perspective effect
+	//adding aerial perspective effect
 	vec3 transm=exp(-transmittance(pos, data.cam_pos));
 	vec3 params=vec3(data.height_bias+data.cam_pos.y, -v.y, l.y); 
 	vec3 tex_coords=params_to_tex_coords(params);
@@ -258,11 +258,9 @@ void main()
 	vec4 Rayleigh_sampled=texture(Rayleigh_tex, tex_coords);
 	vec4 Mie_sampled=texture(Mie_tex, tex_coords);
 	vec3 sky_color=ad_hoc_Rayleigh_phase(cos_view_sun)*Rayleigh_sampled.xyz+Mie_phase_Henyey_Greenstein(cos_view_sun, 0.75f)*Mie_sampled.xyz;
-	vec3 sky_scattering=sky_color*pow(min(length(pos-data.cam_pos), Rayleigh_sampled.w)/Rayleigh_sampled.w, 0.2f);
+	vec3 sky_scattering=sky_color*pow(min(length(pos-data.cam_pos), Rayleigh_sampled.w)/Rayleigh_sampled.w, 0.6f);
 	
-	vec3 color_with_areal=transm*color+sky_scattering*data.irradiance;
+	vec3 color_with_aerial=transm*color+sky_scattering*data.irradiance;
 	
-	color_out=vec4(color_with_areal, 1.f);
-	
-	//color_out=0.5f*vec4(color_with_areal, 1.f)+0.5f*texture(prev_image_tex, gl_FragCoord.xy/vec2(1360.f, 768.f));
+	color_out=vec4(color_with_aerial, 1.f);
 }

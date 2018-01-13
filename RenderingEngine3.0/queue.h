@@ -133,7 +133,7 @@ namespace rcq
 			}
 			else
 			{
-				node* last = m_first_back;
+				node* last = m_first_back.load();
 				while (last->next != m_first_free)
 					last = last->next;
 

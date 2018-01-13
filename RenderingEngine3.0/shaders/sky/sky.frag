@@ -30,12 +30,12 @@ vec3 params_to_tex_coords(vec3 params)
 	float cos_horizon= -sqrt(params.x*(2.f * Earth_radius + params.x)) / (Earth_radius + params.x);
 	if (params.y > cos_horizon)
 	{
-		params.y=max(params.y, cos_horizon+0.0001f);
+		params.y=max(params.y, cos_horizon+0.00001f);
 		tex_coords.y = 0.5f*pow((params.y - cos_horizon) / (1.f - cos_horizon), 0.2f) + 0.5f;
 	}
 	else
 	{
-		params.y=min(params.y, cos_horizon-0.0001f);
+		params.y=min(params.y, cos_horizon-0.00001f);
 		tex_coords.y= 0.5f*pow((cos_horizon - params.y) / (1.f + cos_horizon), 0.2f);
 	}
 
@@ -77,8 +77,6 @@ void main()
 	float cos_sun_zenit=-data.light_dir.y;
 	vec3 tex_coords=params_to_tex_coords(vec3(data.height, cos_view_zenit, cos_sun_zenit));	
 	float cos_view_sun=dot(v, -normalize(data.light_dir));
-	vec3 color=data.irradiance*(ad_hoc_Rayleigh_phase(cos_view_sun)*texture(Rayleigh_tex, tex_coords).xyz+Mie_phase_Henyey_Greenstein(cos_view_sun, 0.75f)*texture(Mie_tex, tex_coords).xyz);
-	color_out=vec4(color, 1.f);
-	//color_out=20.f*texture(transmittance_tex, tex_coords.xy);
-	
+	vec3 color=data.irradiance*(ad_hoc_Rayleigh_phase(cos_view_sun)*texture(Rayleigh_tex, tex_coords).xyz+Mie_phase/*_Henyey_Greenstein*/(cos_view_sun, 0.75f)*texture(Mie_tex, tex_coords).xyz);
+	color_out=vec4(color, 1.f);	
 }

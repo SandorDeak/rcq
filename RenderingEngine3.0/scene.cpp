@@ -45,7 +45,7 @@ void scene::build()
 	//buddha
 	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_buddha], &mesh_build);
 	mesh_build->calc_tb = false;
-	mesh_build->filename = "meshes/buddha/buddha.obj";
+	mesh_build->filename = "meshes/sculpture/sculpture-216K.obj";
 
 	//create opaque materials
 	rcq_user::build_info<rcq_user::resource::opaque_material>* mat_build_info;
@@ -149,7 +149,7 @@ void scene::build()
 	//terrain resource
 	rcq_user::build_info<rcq_user::resource::terrain>* terrain_build_info;
 	rcq_user::build_resource<rcq_user::resource::terrain>(&m_resources[resource::terrain], &terrain_build_info);
-	terrain_build_info->filename = "textures/terrain/t";
+	terrain_build_info->filename = "textures/terrain/t1";
 	terrain_build_info->level0_image_size = glm::uvec2(4096, 4096);
 	terrain_build_info->level0_tile_size = glm::uvec2(512, 512);
 	terrain_build_info->mip_level_count = 4;
@@ -162,39 +162,43 @@ void scene::build()
 	water_build_info->filename = "textures/water/w.wat";
 	water_build_info->A = 1e-4f;
 	water_build_info->base_frequency = 2.f*PI / m_wave_period;
-	water_build_info->grid_size_in_meters = glm::vec2(1024.f*0.02f);
+	water_build_info->grid_size_in_meters = glm::vec2(1024.f*0.03f);
 
 	//create transforms
 	rcq_user::build_info<rcq_user::resource::transform>* tr_build_info;
-
-	//buddha
-	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_buddha], &tr_build_info);
-	tr_build_info->model = glm::translate(glm::mat4(1.f), { 0.f, 10.f, 0.f });
-	tr_build_info->scale = glm::vec3(1.f);
+	glm::vec3 offset = { 279.f, 5.f, 435.f };
 
 	//floor
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_floor], &tr_build_info);
-	tr_build_info->model = glm::translate(glm::mat4(1.f), { 0.f, -1.f + 10.f, 0.f });
+	tr_build_info->model = glm::translate(glm::mat4(1.f), offset+glm::vec3(0.f, -1.f, 0.f ));
 	tr_build_info->scale = glm::vec3(6.f);
 	tr_build_info->tex_scale = glm::vec2(12.f);
 
 	//self
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_shelf], &tr_build_info);
-	tr_build_info->model = glm::translate(glm::mat4(1.f), { 0.f, -0.4f + 10.f, -4.f });
+	tr_build_info->model = glm::translate(glm::mat4(1.f), offset+glm::vec3(0.f, -0.4f, -4.f));
 	tr_build_info->scale = glm::vec3(0.015f);
 	tr_build_info->tex_scale = glm::vec2(5.f);
 
 	//rusted iron sphere
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_rusted_iron_sphere], &tr_build_info);
-	tr_build_info->model = glm::translate(glm::mat4(1.f), { -1., -0.75f + 10.f, -1.f });
+	tr_build_info->model = glm::translate(glm::mat4(1.f), offset+glm::vec3(-1., -0.75f, -1.f));
 	tr_build_info->scale = glm::vec3(0.2f);
+	tr_build_info->tex_scale = glm::vec2(1.f);
+
+	//buddha
+	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_buddha], &tr_build_info);
+	tr_build_info->model = glm::rotate(glm::translate(glm::mat4(1.f), offset + glm::vec3(0.f, -0.4f, 0.f)), 
+		PI*0.5f, glm::vec3(-1.f, 0.f, 0.f));
+	tr_build_info->scale = glm::vec3(0.000025f);
 	tr_build_info->tex_scale = glm::vec2(1.f);
 
 	//scuffed aluminium sphere
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_scuffed_alu_sphere], &tr_build_info);
-	tr_build_info->model = glm::translate(glm::mat4(1.f), { -3., -0.75f + 10.f, -3.f });
+	tr_build_info->model = glm::translate(glm::mat4(1.f), offset+glm::vec3(-3., -0.75f, -3.f));
 	tr_build_info->scale = glm::vec3(0.2f);
 	tr_build_info->tex_scale = glm::vec2(1.f);
+
 
 	//dispatch resource builds
 	rcq_user::dispatch_resource_builds();
@@ -203,7 +207,7 @@ void scene::build()
 	//create opaque objects
 	m_opaque_objects.resize(opaque_object::count);
 	//buddha
-	rcq_user::add_opaque_object(m_resources[resource::mesh_sphere], m_resources[resource::mat_gold], m_resources[resource::tr_buddha],
+	rcq_user::add_opaque_object(m_resources[resource::mesh_buddha], m_resources[resource::mat_gold], m_resources[resource::tr_buddha],
 		&m_opaque_objects[opaque_object::buddha]);
 	//self
 	rcq_user::add_opaque_object(m_resources[resource::mesh_shelf], m_resources[resource::mat_bamboo_wood], m_resources[resource::tr_shelf],
@@ -235,11 +239,11 @@ void scene::build()
 	rcq_user::set_water(m_resources[resource::water]);	
 
 	//set camera
-	m_camera.pos = glm::vec3(0.f, 10.f, 0.f);
-	m_camera.look_dir = glm::normalize(glm::vec3(-2.f));
+	m_camera.pos = offset;
+	m_camera.look_dir = { 1.f, 0.f, 0.f };
 	m_camera.proj = glm::perspective(glm::radians(45.f), m_window_size.x / m_window_size.y, 0.1f, 500.f);
 	m_camera.proj[1][1] *= (-1);
-	m_camera.view = glm::lookAt(glm::vec3(2.f), glm::vec3(0.f), glm::vec3(0.f, 1.f, 0.f));
+	m_camera.view = glm::lookAt(offset, offset+m_camera.look_dir, glm::vec3(0.f, 1.f, 0.f));
 
 	m_render_settings.ambient_irradiance = glm::vec3(0.2f);
 	m_render_settings.far = 500.f;
@@ -251,8 +255,6 @@ void scene::build()
 	m_render_settings.view = m_camera.view;
 	m_render_settings.wind = { 31.f, 0.f};
 	m_render_settings.time = 0.f;
-
-
 }
 
 void scene::update(float dt)
@@ -260,18 +262,13 @@ void scene::update(float dt)
 	static float elapsed_time = 0.f;
 	elapsed_time += dt;
 
-
-	/*for (int i = 0; i < buddha_count; ++i)
-	{
-		m_trs[i].data.model = glm::rotate(m_trs[i].data.model, glm::radians(90.f*dt), glm::vec3(0.f, 1.f, 0.f));
-		rcq::engine::instance()->cmd_update_transform(m_trs[i].id, m_trs[i].data);
-	}*/
 	update_settings(dt);
 
 	rcq_user::set_render_settings(m_render_settings);
 	rcq_user::render();
 
-	//std::cout << "wind: " << m_render_settings.wind.x << ' ' <<m_render_settings.wind.y << '\n';
+	std::cout << "time: " << dt << '\n';
+	std::cout << "view pos: " << m_render_settings.pos.x << ' ' <<m_render_settings.pos.y << ' ' << m_render_settings.pos.z << '\n';
 }
 
 void scene::update_settings(float dt)

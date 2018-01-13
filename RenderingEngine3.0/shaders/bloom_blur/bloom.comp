@@ -29,7 +29,7 @@ void main()
 	{
 		vec4 color=imageLoad(blur_im, ivec3(id, 0));
 	
-		if (dot(color.xyz, vec3(0.2126f, 0.7152f, 0.0722f))<2.f)
+		if (dot(color.xyz, vec3(0.2126f, 0.7152f, 0.0722f))<20.f)
 			color=vec4(0.f);
 			
 		imageStore(blur_im, ivec3(id, 1), color); 

@@ -1,7 +1,6 @@
 # RCQ Engine 
-______________________
 
-This real-time outdoor graphics engine uses the Vulkan API to render 
+This real-time outdoor graphics engine uses the [Vulkan API](https://vulkan.lunarg.com/) to render 
 
 * physically based materials,
 
@@ -11,12 +10,11 @@ This real-time outdoor graphics engine uses the Vulkan API to render
 
 * terrain with precomputed height map, gradient map and texture mask using virtual texturing. 
 
-The engine is written in C and low-level C++17 using Visual Studio 2017, has its own polymorphic memory resources and containers. The shaders are written in GLSL.
+The engine is written in C and low-level C++17 using Visual Studio 2017, has its own polymorphic memory resources and containers. The shaders are written in GLSL. Other libraries the engine uses are [stb\_image](https://github.com/nothings/stb/blob/master/stb_image.h) and [glm](https://glm.g-truc.net/0.9.8/index.html).
 
 ## Concepts, architecture
-_______________________________
 
-This engine is the result of a self-learning process I have started in August, 2017 in which I’ve learned (and still learning) the basics of real-time graphics programming, deepened my knowledge in low level programming in C/C++17 and learned to use the Vulkan API effectively. For performance reasons I tried to make the engine as low level as possible (within reasonable bounds).
+This engine is the result of a self-learning process I have started in August, 2017 in which I’ve learned (and still learning) the basics of real-time graphics programming, deepened my knowledge in low level programming in C/C++17 and learned to use the Vulkan API effectively. For learning reasons I tried to make the engine as low level as possible (within reasonable bounds).
 
 The engine is of course still under development, some parts have to be improved (e.g. the shaders), and new features have to be added. However, despite the limitations I think it is a good starting point for me to dive into graphics programming.
 
@@ -31,7 +29,6 @@ The interface of the engine is quite simple, the user is able to build, destroy 
 *(Note: beside the engine, I made another program for producing the necessary precomputed data for the engine, namely the sky map, the terrain map and the noise for the ocean.)*
 
 ## Rendering
-_______________________________
 
 For designing the rendering pipeline I used some idea from [this GTA V graphics study](http://www.adriancourreges.com/blog/2015/11/02/gta-v-graphics-study/). Of course, this part of the engine changes the most frequently, I add new features, try to improve existing ones. In the followings I will describe the process of rendering very briefly. I won’t include features that I’m currently working on since they are not entirely parts of the pipeline yet.
 
@@ -62,7 +59,6 @@ In each frame the rendering pipeline does the followings:
 12. Tone mapping is applied.
 
 ## Graphics features
-________________________________
 
 In the rest of this document I briefly describe some (the most interesting) features of the engine or still under development and indicate the relevant sources (web pages, articles, books). 
 
@@ -72,7 +68,7 @@ The engine uses PBR to render opaque materials mainly based on the PBR section a
 
 ### Physically based sky
 
-For sky rendering I use a precomputed 3D sky map and a 2D transmittance map. The precomputation is implemented based on the ideas in [this](https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/s2016-pbs-frostbite-sky-clouds-new.pdf), [this](http://old.cescg.org/CESCG-2009/papers/PragueCUNI-Elek-Oskar09.pdf), and [this](https://software.intel.com/sites/default/files/blog/473591/outdoor-light-scattering-update_1.pdf) document . For integration over the sphere I use the [Lebedev quadrature](https://en.wikipedia.org/wiki/Lebedev_quadrature) method, the file containing the grid points can be found [here](http://people.sc.fsu.edu/~jburkardt/datasets/sphere_lebedev_rule/sphere_lebedev_rule.html).
+For sky rendering I use a precomputed 3D sky map (more precisely, two sky maps, one for Rayleigh and one for Mie scattering) and a 2D transmittance map. The precomputation is implemented based on the ideas in [this](https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/s2016-pbs-frostbite-sky-clouds-new.pdf), [this](http://old.cescg.org/CESCG-2009/papers/PragueCUNI-Elek-Oskar09.pdf), and [this](https://software.intel.com/sites/default/files/blog/473591/outdoor-light-scattering-update_1.pdf) document . For integration over the sphere I use the [Lebedev quadrature](https://en.wikipedia.org/wiki/Lebedev_quadrature) method, the file containing the grid points can be found [here](http://people.sc.fsu.edu/~jburkardt/datasets/sphere_lebedev_rule/sphere_lebedev_rule.html).
 
 ### Cascade shadow mapping
 

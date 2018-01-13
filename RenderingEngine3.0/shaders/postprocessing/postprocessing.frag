@@ -31,7 +31,7 @@ void main()
 	vec3 bloom_color=texture(bloom_blur_tex, vec3(tex_coord, 1.f)).xyz;
 	
 	float ExposureBias =2.0f;
-	vec3 curr = Uncharted2Tonemap(ExposureBias*(preim_color+bloom_color));
+	vec3 curr = Uncharted2Tonemap(ExposureBias*(preim_color/*+bloom_color*/));
 
 	vec3 whiteScale = 1.0f/Uncharted2Tonemap(vec3(W));
 	vec3 color = curr*whiteScale;
