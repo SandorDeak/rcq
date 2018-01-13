@@ -1,4 +1,4 @@
-#RCQ Engine 
+# RCQ Engine 
 ______________________
 
 This real-time outdoor graphics engine uses the Vulkan API to render 
@@ -13,7 +13,7 @@ This real-time outdoor graphics engine uses the Vulkan API to render
 
 The engine is written in C and low-level C++17 using Visual Studio 2017, has its own polymorphic memory resources and containers. The shaders are written in GLSL.
 
-##Concepts, architecture
+## Concepts, architecture
 _______________________________
 
 This engine is the result of a self-learning process I have started in August, 2017 in which I’ve learned (and still learning) the basics of real-time graphics programming, deepened my knowledge in low level programming in C/C++17 and learned to use the Vulkan API effectively. For performance reasons I tried to make the engine as low level as possible (within reasonable bounds).
@@ -30,7 +30,7 @@ The interface of the engine is quite simple, the user is able to build, destroy 
 
 *(Note: beside the engine, I made another program for producing the necessary precomputed data for the engine, namely the sky map, the terrain map and the noise for the ocean.)*
 
-##Rendering
+## Rendering
 _______________________________
 
 For designing the rendering pipeline I used some idea from [this GTA V graphics study](http://www.adriancourreges.com/blog/2015/11/02/gta-v-graphics-study/). Of course, this part of the engine changes the most frequently, I add new features, try to improve existing ones. In the followings I will describe the process of rendering very briefly. I won’t include features that I’m currently working on since they are not entirely parts of the pipeline yet.
@@ -61,44 +61,44 @@ In each frame the rendering pipeline does the followings:
 
 12. Tone mapping is applied.
 
-##Graphics features
+## Graphics features
 ________________________________
 
 In the rest of this document I briefly describe some (the most interesting) features of the engine or still under development and indicate the relevant sources (web pages, articles, books). 
 
-###Physically based material
+### Physically based material
 
 The engine uses PBR to render opaque materials mainly based on the PBR section at [learnopengl](https://learnopengl.com/). Some parameters (base color, metalness, roughness) can be provided by scalars as well as by textures. Some keywords are normal mapping, Fresnel-Schlick approximation, Cook-Torrance BRDF, parallax occlusion mapping. I mainly learned the basic concepts of BRDF theory from the book [Real-Time Rendering](http://www.realtimerendering.com/).
 
-###Physically based sky
+### Physically based sky
 
 For sky rendering I use a precomputed 3D sky map and a 2D transmittance map. The precomputation is implemented based on the ideas in [this](https://media.contentapi.ea.com/content/dam/eacom/frostbite/files/s2016-pbs-frostbite-sky-clouds-new.pdf), [this](http://old.cescg.org/CESCG-2009/papers/PragueCUNI-Elek-Oskar09.pdf), and [this](https://software.intel.com/sites/default/files/blog/473591/outdoor-light-scattering-update_1.pdf) document . For integration over the sphere I use the [Lebedev quadrature](https://en.wikipedia.org/wiki/Lebedev_quadrature) method, the file containing the grid points can be found [here](http://people.sc.fsu.edu/~jburkardt/datasets/sphere_lebedev_rule/sphere_lebedev_rule.html).
 
-###Cascade shadow mapping
+### Cascade shadow mapping
 
 This is a well-known technique to implement shadows. I didn’t use any specific source for it.
 
-###Real-time ocean rendering with Fast-Fourier Transform
+### Real-time ocean rendering with Fast-Fourier Transform
 
 The water rendering system consist of two pipelines. The first one is compute pipeline based on [Tessendorf's work](http://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.161.9102&rep=rep1&type=pdf) which executes the FFT, i.e. computes the height and the gradient map from a noise texture. The second one is a graphics pipeline which executes the drawing using refraction map and single scattering method.
 
-###Terrain rendering with virtual texturing
+### Terrain rendering with virtual texturing
 
 Since the Vulkan API supports sparse images, virtual texturing can be implemented conveniently with it. The engine’s virtual texturing system uses a precomputed terrain map which contains information about the height, gradient and texture mask. It is generated using Perlin-noise. The terrain map also have (precomputed) mip levels. There is two pipeline associated with terrain rendering. The first one is a compute pipeline which requests the load or deletion of the appropriate mip level for a given tile (then the requests are processed by the terrain manager). The second pipeline is responsible for the drawing of the terrain. Beside the virtual texture of the terrain it also uses four opaque materials for texturing.
 
-###Aerial perspective effect
+### Aerial perspective effect
 
 This effect is added during the combination of the G-buffer and the shading of the ocean. The transmittance coefficient is computed in the same way as in the computation of the sky map, but in this case the give integral can be computed explicitly since because of the smaller scales we can assume that the height function is the *y coordinate*. The volume scattering part of the effect is computed from the sky map.
 
-###Environment cubemap rendering *(under development)*
+### Environment cubemap rendering *(under development)*
 
 For realistic reflections it’s good to use environment maps (possibly with distance maps). The engine has a graphics pipeline which can generate environment map centered at the viewpoint in real-time, but currently it’s not used and hasn’t been tested.
 
-###Screen space reflection *(under development)*
+### Screen space reflection *(under development)*
 
 For all pixel the SSR pipeline of the engine draws a ray starting from the appropriate position and uses the rasterizer to find the first intersection. It is being tested currently but it seems to have serious impact on the performance.
 
-###Planar reflection *(under development)*
+### Planar reflection *(under development)*
 
 One of the best ways for water reflection is using planar reflection. However rendering a screen two times can be performance heavy, so some "hacks" will probably be necessary.
 
