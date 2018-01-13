@@ -43,9 +43,9 @@ void scene::build()
 	mesh_build->calc_tb = true;
 	mesh_build->filename = "meshes/shelf/CAB.obj";
 	//buddha
-	//rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_buddha], &mesh_build);
-	//mesh_build->calc_tb = false;
-	//mesh_build->filename = "meshes/buddha/buddha.obj";
+	rcq_user::build_resource<rcq_user::resource::mesh>(&m_resources[resource::mesh_buddha], &mesh_build);
+	mesh_build->calc_tb = false;
+	mesh_build->filename = "meshes/buddha/buddha.obj";
 
 	//create opaque materials
 	rcq_user::build_info<rcq_user::resource::opaque_material>* mat_build_info;
@@ -158,7 +158,7 @@ void scene::build()
 	//water res
 	m_wave_period = 10000.f;
 	rcq_user::build_info<rcq_user::resource::water>* water_build_info;
-	rcq_user::build_resource<rcq_user::resource::water>(&m_resources[resource::water], &water_build_info);
+	rcq_user::build_resource<rcq_user::resource::water>(&m_resources[resource::water], &water_build_info);  
 	water_build_info->filename = "textures/water/w.wat";
 	water_build_info->A = 1e-4f;
 	water_build_info->base_frequency = 2.f*PI / m_wave_period;
@@ -169,7 +169,7 @@ void scene::build()
 
 	//buddha
 	rcq_user::build_resource<rcq_user::resource::transform>(&m_resources[resource::tr_buddha], &tr_build_info);
-	tr_build_info->model = glm::mat4(1.f);
+	tr_build_info->model = glm::translate(glm::mat4(1.f), { 0.f, 10.f, 0.f });
 	tr_build_info->scale = glm::vec3(1.f);
 
 	//floor

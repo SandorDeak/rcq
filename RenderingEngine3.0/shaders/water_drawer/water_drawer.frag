@@ -202,22 +202,21 @@ void main()
 	vec3 refl=reflect(v, n);
 	vec3 refr=refract(v, n, index_of_refr);
 	
-	vec4 refl_proj=data.mirrored_proj_x_view*vec4(pos_in+refl, 1.f);
+	/*vec4 refl_proj=data.mirrored_proj_x_view*vec4(pos_in+refl, 1.f);
 	refl_proj/=refl_proj.w;
 	
 	vec4 refr_proj=data.proj_x_view*vec4(pos_in+refr, 1.f);
 	refr_proj/=refr_proj.w;
 	
-	vec4 tex_coords=0.5f*vec4(refl_proj.xy, refr_proj.xy)+0.5f;
+	vec4 tex_coords=0.5f*vec4(refl_proj.xy, refr_proj.xy)+0.5f;*/
 	
 	//vec4 refl_color=texture(reflection_tex, tex_coords.xy);
 	vec4 refl_color=vec4(0.f);
 	
-	
 	if (refl_color.w==0.f) //data is invalid, sample from sky
 	{
 		//calculate reflected specular sky color
-		vec3 params_refl=vec3(data.height_bias+pos_in.y, max(refl.y, 0.5f), l.y);
+		vec3 params_refl=vec3(data.height_bias+pos_in.y, max(refl.y, 0.5f), l.y);    
 		vec3 tex_coords_refl=params_to_tex_coords(params_refl);
 		float cos_refl_light=dot(refl, l);
 		refl_color.xyz=ad_hoc_Rayleigh_phase(cos_refl_light)*texture(Rayleigh_tex, tex_coords_refl).xyz+Mie_phase_Henyey_Greenstein(cos_refl_light, 0.75f)*texture(Mie_tex, tex_coords_refl).xyz;
@@ -257,7 +256,6 @@ void main()
 	{
 		vec3 reference_pos=texture(pos_tex, reference_tex_coord.xy).xyz;
 		vec3 reference_normal=texture(normal_tex, reference_tex_coord.xy).xyz;
-		//refr=normalize(refr-max(dot(refr, reference_normal)+0.0001f, 0.f)*reference_normal);
 		
 		reference_pos=pos_in+refr*clamp(distance(reference_pos, pos_in), 0.1f, 1.f);//*dot(reference_pos-pos_in, reference_normal)/dot(refr, reference_normal);
 		
@@ -266,14 +264,14 @@ void main()
 		tex_coord=0.5f*tex_coord+0.5f;
 		vec4 bottom_color=texture(refraction_tex, tex_coord.xy);
 
-		vec3 bottom_pos=bottom_color.w==0.f ? pos_in+100.f*refr : texture(pos_tex, tex_coords.zw).xyz;
-		vec3 scattered=single_scattering_in_water(pos_in, /*reference_pos*/bottom_pos);
-		bottom_color.xyz=attenuate(bottom_color.xyz, max(distance(bottom_pos, pos_in), 0.00001f));
+		vec3 bottom_pos=bottom_color.w==0.f ? pos_in+refr : texture(pos_tex, tex_coord.xy).xyz;
+		vec3 scattered=single_scattering_in_water(pos_in, bottom_pos);
+		bottom_color.xyz=attenuate(bottom_color.xyz, max(distance(bottom_pos, pos_in), 0.0001f));
 		refr_color=bottom_color.xyz+scattered*irradiance;
 	}
 	else
 	{
-		refr_color=single_scattering_in_water(pos_in, pos_in+100.f*refr)*irradiance;
+		refr_color=single_scattering_in_water(pos_in, pos_in+refr)*irradiance;
 	}
 	
 	
@@ -305,7 +303,7 @@ void main()
 		+refracted_color;
 		
 		
-	//adding areal perspective effect
+	//adding aerial perspective effect
 	vec3 transm=exp(-transmittance(pos_in, data.view_pos));
 	vec3 params=vec3(data.height_bias+data.view_pos.y, -v.y, l.y); 
 	vec3 sky_tex_coords=params_to_tex_coords(params);
@@ -315,7 +313,7 @@ void main()
 	vec3 sky_color=ad_hoc_Rayleigh_phase(cos_view_sun)*Rayleigh_sampled.xyz+Mie_phase_Henyey_Greenstein(cos_view_sun, 0.75f)*Mie_sampled.xyz;
 	vec3 sky_scattering=sky_color*pow(min(length(pos_in-data.view_pos), Rayleigh_sampled.w)/Rayleigh_sampled.w, 0.2f);
 	
-	vec3 color_with_areal=transm*color+sky_scattering*data.irradiance;
+	vec3 color_with_aerial=transm*color+sky_scattering*data.irradiance;
 	
-	color_out=vec4(color_with_areal, 1.f);	
+	color_out=vec4(color_with_aerial, 1.f);	
 }

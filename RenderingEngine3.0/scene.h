@@ -19,7 +19,7 @@ private:
 	{
 		enum
 		{
-			//mesh_buddha,
+			mesh_buddha,
 			mesh_plane,
 			mesh_shelf,
 			mesh_sphere,
