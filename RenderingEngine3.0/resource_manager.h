@@ -121,7 +121,6 @@ namespace rcq
 		//atomic bits
 		std::atomic_bool m_should_end_build;
 		std::atomic_bool m_should_end_destroy;
-		std::atomic_bool m_resource_pool_sync_bit;
 
 		//queues
 		queue<base_resource_build_info> m_build_queue;

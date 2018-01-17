@@ -1,9 +1,6 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const uint MAX_TILE_COUNT=128;//2048;
-const uint MAX_TILE_COUNT_LOG2=11;
-
 layout(quads, equal_spacing) in;
 
 layout(set=0, binding=0) uniform terrain_data
@@ -51,8 +48,6 @@ void main()
 		mip_level=max(mip_level, mip_level_in[3]);	
 	
 	vec4 tex_val=textureLod(terrain_tex, tex_coords, mip_level);
-	/*ivec2 tex_size=textureSize(terrain_tex, int(mip_level));
-	vec4 tex_val=texelFetch(terrain_tex, ivec2(tex_coords*float(tex_size)), int(mip_level));*/
 	float height=tex_val.z*terr.height_scale;
 	vec2 grad=terr.height_scale*tex_val.xy/terr.terrain_size_in_meters;
 	pos.y=height;
@@ -68,7 +63,7 @@ void main()
 	tex_coords_out=pos.xz;
 	
 	vec3 tangent=normalize(vec3(1.f, grad.x, 0.f));
-	vec3 normal=vec3(0.f, 1.f, 0.f);//normalize(vec3(-grad.x, 1.f, -grad.y));
+	vec3 normal=normalize(vec3(-grad.x, 1.f, -grad.y));
 	vec3 bitangent=cross(tangent, normal);
 	
 	TBN_out=mat3(tangent, bitangent, normal);

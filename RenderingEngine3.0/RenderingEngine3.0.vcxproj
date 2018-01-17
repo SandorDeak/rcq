@@ -116,7 +116,6 @@
     <ClInclude Include="rp_water_drawer.h" />
     <ClInclude Include="stbimage.h" />
     <ClInclude Include="timer.h" />
-    <ClInclude Include="tinyobjloader.h" />
     <ClInclude Include="utility.h" />
     <ClInclude Include="dp_pool.h" />
     <ClInclude Include="gp_environment_map_gen_mat.h" />
@@ -136,15 +135,9 @@
     <ClInclude Include="list.h" />
     <ClInclude Include="pool_host_memory.h" />
     <ClInclude Include="base.h" />
-    <ClInclude Include="basic_pass.h" />
-    <ClInclude Include="foundation.h" />
-    <ClInclude Include="foundation2.h" />
-    <ClInclude Include="gta5_infos_impl.h" />
-    <ClInclude Include="gta5_foundation.h" />
     <ClInclude Include="engine.h" />
     <ClInclude Include="host_memory.h" />
     <ClInclude Include="monotonic_buffer_device_memory.h" />
-    <ClInclude Include="omni_light_shadow_pass.h" />
     <ClInclude Include="gp_refraction_map_gen.h" />
     <ClInclude Include="renderables.h" />
     <ClInclude Include="resources.h" />
@@ -252,7 +245,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <LanguageStandard>stdcpplatest</LanguageStandard>
+      <LanguageStandard>stdcpp17</LanguageStandard>
       <AdditionalIncludeDirectories>C:\stb;C:\tinyobj;C:\glm;C:\glfw-3.2.1.bin.WIN32\include;C:\VulkanSDK\1.0.65.1\Include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>

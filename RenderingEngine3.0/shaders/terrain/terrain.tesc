@@ -1,9 +1,6 @@
 #version 450
 #extension GL_ARB_separate_shader_objects : enable
 
-const uint MAX_TILE_COUNT=128;//2048;
-const uint MAX_TILE_COUNT_LOG2=11;
-
 layout(vertices=4) out;
 
 layout(set=0, binding=1) uniform samplerBuffer current_mip_levels;

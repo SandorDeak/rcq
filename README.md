@@ -10,7 +10,7 @@ This real-time outdoor graphics engine uses the [Vulkan API](https://vulkan.luna
 
 * terrain with precomputed height map, gradient map and texture mask using virtual texturing. 
 
-The engine is written in C and low-level C++17 using Visual Studio 2017, has its own polymorphic memory resources and containers. The shaders are written in GLSL. Other libraries the engine uses are [stb\_image](https://github.com/nothings/stb/blob/master/stb_image.h) and [glm](https://glm.g-truc.net/0.9.8/index.html).
+The engine is written in C and low-level C++17 using Visual Studio 2017, has its own polymorphic memory resources and containers. The shaders are written in GLSL. Other libraries the engine uses are [stb\_image](https://github.com/nothings/stb/blob/master/stb_image.h) and [glm](https://glm.g-truc.net/0.9.8/index.html). Some interesting code samples with brief description can be found [here](https://drive.google.com/open?id=1BJL7gDBM4u9TGJIL_5NFSpEhWWoWPH2K).
 
 ## Concepts, architecture
 
@@ -18,7 +18,7 @@ This engine is the result of a self-learning process I have started in August, 2
 
 The engine is of course still under development, some parts have to be improved (e.g. the shaders), and new features have to be added. However, despite the limitations I think it is a good starting point for me to dive into graphics programming.
 
-For consistent memory management I avoided the usage of STL containers, wrote my own polymorphic memory resources and containers. (During the development of the engine the std::pmr namespace was not available with the MSVC compiler.) There are memory resources for host and device memory separately, although the containers support only host memory resources. The containers are low level in a sense that they handle only the underlying memory of the object, they don’t call the constructors, destructor or operator= at all. The user can call the constructors and destructor manually of course, and internally the containers use memcpy for copying. The containers support move constructor and move assignment.
+For consistent memory management I avoided the usage of STL containers (except std::array for constexpr arrays), wrote my own polymorphic memory resources and containers. (During the development of the engine the std::pmr namespace was not available with the MSVC compiler.) There are memory resources for host and device memory separately, although the containers support only host memory resources. The containers are low level in a sense that they handle only the underlying memory of the object, they don’t call the constructors, destructor or operator= at all. The user can call the constructors and destructor manually of course, and internally the containers use memcpy for copying. The containers support move constructor and move assignment.
 
 The rendering involves two types of objects: *resources *and* renderables*. The *resources* contain the actual data (or rather the handles to them) used for rendering. For example meshes, opaque materials, transforms, precomputed sky maps are *resources*. The *renderables* are "abstract" objects which participate in the rendering. They contain handles for data available through *resources*; e.g. an opaque object renderable contains data handles available through a mesh, an opaque material and a transform resources, a sky renderable contains data handles available through a sky resource. For obvious reasons, the engine can have only one sky, ocean and terrain *renderables *at a time, but can have many sky, ocean and terrain *resources*.
 

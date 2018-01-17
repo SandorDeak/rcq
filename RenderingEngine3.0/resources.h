@@ -33,7 +33,7 @@ namespace rcq
 			VkImage image;
 			VkImageView view;
 			VkSampler sampler;
-			uint64_t offset;
+			VkDeviceSize offset;
 		};
 
 		struct data
@@ -111,7 +111,7 @@ namespace rcq
 		{
 			VkImage image;
 			VkImageView view;
-			uint64_t offset;
+			VkDeviceSize offset;
 		};
 
 		VkSampler sampler;
@@ -217,52 +217,65 @@ namespace rcq
 		uint32_t dp_index;
 	};
 
-
-	template<uint32_t res_type>
-	constexpr uint32_t max_resource_size(uint32_t val)
+	namespace resource_details
 	{
-		if constexpr (res_type == RES_TYPE_COUNT)
-			return val;
-		else
+		enum class info
 		{
-			val = val < sizeof(resource<res_type>) ? sizeof(resource<res_type>) : val;
-			val = max_resource_size<res_type + 1>(val);
-			return val;
-		}
-	}
+			resource_size,
+			build_info_size,
+			resource_alignment,
+			build_info_alignment
+		};
 
-	template<uint32_t res_type>
-	constexpr uint32_t max_build_info_size(uint32_t val)
-	{
-		if constexpr (res_type == RES_TYPE_COUNT)
-			return val;
-		else
+		template<uint32_t res_type>
+		constexpr uint32_t get_info(info i)
 		{
-			val = val < sizeof(resource<res_type>::build_info) ? sizeof(resource<res_type>::build_info) : val;
-			val = max_build_info_size<res_type + 1>(val);
-			return val;
+			using res = typename resource<res_type>;
+
+			switch (i)
+			{
+			case info::resource_size:
+				return sizeof(res);
+			case info::resource_alignment:
+				return alignof(res);
+			case info::build_info_size:
+				return sizeof(res::build_info);
+			case info::build_info_alignment:
+				return alignof(res::build_info);
+			}
 		}
-	}
 
-	constexpr uint32_t MAX_RESOURCE_SIZE = max_resource_size<0>(0);
-	constexpr uint32_t MAX_BUILD_INFO_SIZE = max_build_info_size<0>(0);
+		template<uint32_t res_type>
+		constexpr uint32_t calc_max(info i, uint32_t val)
+		{
+			if constexpr (res_type != RES_TYPE_COUNT)
+			{
+				uint32_t new_val = get_info<res_type>(i);
+				val = val < new_val ? new_val : val;
+				return calc_max<res_type + 1>(i, val);	
+			}
+			else
+			{
+				return val;
+			}
+		}
 
-	struct base_resource
+		constexpr uint32_t max_resource_size = calc_max<0>(info::resource_size, 0);
+		constexpr uint32_t max_resource_alignment = calc_max<0>(info::resource_alignment, 0);
+		constexpr uint32_t max_build_info_size = calc_max<0>(info::build_info_size, 0);
+		constexpr uint32_t max_build_info_alignment = calc_max<0>(info::build_info_alignment, 0);
+	}; //namespace resource_details
+
+	struct alignas(resource_details::max_resource_alignment)  base_resource
 	{
-		static const uint32_t data_size = 256;
-		static_assert(data_size >= MAX_RESOURCE_SIZE);
-
-		char data[data_size];
+		char data[resource_details::max_resource_size];
 		uint32_t res_type;
 		std::atomic_bool ready_bit;
 	};
 
-	struct base_resource_build_info
+	struct alignas(resource_details::max_build_info_alignment) base_resource_build_info
 	{
-		static const uint32_t data_size = 128;
-		static_assert(data_size >= MAX_BUILD_INFO_SIZE);
-
-		char data[data_size];
+		char data[resource_details::max_build_info_size];
 		uint32_t resource_type;
 		base_resource* base_res;
 	};

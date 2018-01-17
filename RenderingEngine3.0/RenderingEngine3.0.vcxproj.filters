@@ -15,9 +15,6 @@
     <Filter Include="Source Files\resource_manager">
       <UniqueIdentifier>{9492dcbe-c2db-4870-9c25-3efc164fa1a2}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Header Files\deprecated">
-      <UniqueIdentifier>{b08c14af-a07b-45c3-bd9e-530ced26ec48}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Source Files\deprecated">
       <UniqueIdentifier>{7df208a1-0c2c-4a56-9464-989d82cbf253}</UniqueIdentifier>
     </Filter>
@@ -424,32 +421,11 @@
     <ClInclude Include="stbimage.h">
       <Filter>Header Files\libraries</Filter>
     </ClInclude>
-    <ClInclude Include="tinyobjloader.h">
-      <Filter>Header Files\libraries</Filter>
-    </ClInclude>
     <ClInclude Include="queue.h">
       <Filter>Header Files\containers</Filter>
     </ClInclude>
-    <ClInclude Include="basic_pass.h">
-      <Filter>Header Files\deprecated</Filter>
-    </ClInclude>
     <ClInclude Include="enum_res_image.h">
       <Filter>Header Files\enums</Filter>
-    </ClInclude>
-    <ClInclude Include="foundation.h">
-      <Filter>Header Files\deprecated</Filter>
-    </ClInclude>
-    <ClInclude Include="foundation2.h">
-      <Filter>Header Files\deprecated</Filter>
-    </ClInclude>
-    <ClInclude Include="gta5_foundation.h">
-      <Filter>Header Files\deprecated</Filter>
-    </ClInclude>
-    <ClInclude Include="gta5_infos_impl.h">
-      <Filter>Header Files\deprecated</Filter>
-    </ClInclude>
-    <ClInclude Include="omni_light_shadow_pass.h">
-      <Filter>Header Files\deprecated</Filter>
     </ClInclude>
     <ClInclude Include="vertex.h">
       <Filter>Header Files\structs</Filter>

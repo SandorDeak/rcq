@@ -1,7 +1,5 @@
 #include "resource_manager.h"
 
-#include "tinyobjloader.h"
-
 using namespace rcq;
 
 resource_manager* resource_manager::m_instance = nullptr;
@@ -9,7 +7,6 @@ resource_manager* resource_manager::m_instance = nullptr;
 resource_manager::resource_manager(const base_info& info) : m_base(info)
 {
 	create_memory_resources_and_containers();
-	//create_samplers();
 	create_cp_and_allocate_cb();
 	create_dsls();
 	create_dp_pools();
@@ -68,35 +65,6 @@ resource_manager::~resource_manager()
 
 	m_mappable_memory.reset();
 	m_host_memory.reset();
-
-	/*m_should_end_build = true;
-	m_build_thread.join();
-
-	vkUnmapMemory(m_base.device, m_single_cell_sb_mem);
-	vkUnmapMemory(m_base.device, m_sb_mem);
-	vkDestroyBuffer(m_base.device, m_single_cell_sb, m_alloc);
-	vkDestroyBuffer(m_base.device, m_sb, m_alloc);
-	auto destroy = std::make_unique<destroy_package>();
-	destroy->ids[RESOURCE_TYPE_MEMORY].push_back(~0);
-	push_destroy_package(std::move(destroy));
-	
-	m_should_end_destroy = true;
-	m_destroy_thread.join();	
-
-	for (auto& sampler : m_samplers)
-		vkDestroySampler(m_base.device, sampler, m_alloc);
-	for (auto& dsl : m_dsls)
-		vkDestroyDescriptorSetLayout(m_base.device, dsl, m_alloc);
-	for (auto& dpp : m_dpps)
-	{
-		for (auto& dp : dpp.pools)
-			vkDestroyDescriptorPool(m_base.device, dp, m_alloc);
-	}
-	vkDestroyCommandPool(m_base.device, m_cp_build, m_alloc);
-	vkDestroyCommandPool(m_base.device, m_cp_update, m_alloc);
-
-	//checking that resources was destroyed properly
-	check_resource_leak(std::make_index_sequence<RESOURCE_TYPE_COUNT>());*/
 }
 
 void resource_manager::init(const base_info& info)
